@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Secure FPS Gaming Platform — Starter Implementation
 
 ## Stack
@@ -60,3 +61,6 @@ Then replace the launch button alert in frontend/js/dashboard.js with the URL/pa
 - The MFA secret/QR is returned only during local account setup for this student prototype. In production, complete MFA enrollment through a controlled setup flow and do not expose the secret after setup.
 - Use HTTPS and set SESSION_COOKIE_SECURE=True in production.
 - Add CSRF protection, rate limiting, email verification, audit logging, and secure secret management before production deployment.
+=======
+# Secure_Online_FPS_Game_Platform
+>>>>>>> 214354a6791730c0e1915ad995be5dad07a57a61
