@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SecureFPS | Dashboard</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="dashboard-page">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark">SF</div><div><strong>SecureFPS</strong><small>Gaming Security</small></div></div>
+    <nav>
+      <a class="active" href="dashboard.html">Overview</a>
+      <a href="#games">Game Hub</a>
+      <a href="#detections">Detections</a>
+      <a href="#security">Account Security</a>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="mini-profile"><div class="avatar" id="avatar">P</div><div><strong id="sideName">Player</strong><small id="sideEmail">player</small></div></div>
+      <button id="logoutBtn" class="ghost-btn">Sign out</button>
+    </div>
+  </aside>
+
+  <main class="dashboard-main">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">PLAYER CONSOLE</p>
+        <h1 id="welcome">Welcome back</h1>
+      </div>
+      <div class="status-pill"><span class="status-dot"></span> Platform protected</div>
+    </header>
+
+    <section class="stats-grid">
+      <article class="stat-card"><span>Matches analyzed</span><strong id="matches">0</strong><small>Gameplay telemetry</small></article>
+      <article class="stat-card"><span>Security alerts</span><strong id="alerts">0</strong><small>Requires attention</small></article>
+      <article class="stat-card"><span>Authentication</span><strong>2FA</strong><small>Authenticator enabled</small></article>
+      <article class="stat-card"><span>Account status</span><strong class="success-text">Protected</strong><small>Secure session active</small></article>
+    </section>
+
+    <section id="games" class="section">
+      <div class="section-title"><div><p class="eyebrow">GAME HUB</p><h2>Available FPS games</h2></div><span class="muted">Unity WebGL</span></div>
+      <div class="game-grid">
+        <article class="game-card featured">
+          <div class="game-art art-one"><span>FPS 01</span></div>
+          <div class="game-info"><span class="tag">AVAILABLE</span><h3>Secure Strike</h3><p>Competitive tactical FPS prototype with behavioural telemetry.</p><button class="play-btn" data-game="secure-strike">Launch game <span>→</span></button></div>
+        </article>
+        <article class="game-card">
+          <div class="game-art art-two"><span>FPS 02</span></div>
+          <div class="game-info"><span class="tag">PROTOTYPE</span><h3>Training Arena</h3><p>Controlled environment for testing aim and movement patterns.</p><button class="play-btn" data-game="training-arena">Launch game <span>→</span></button></div>
+        </article>
+        <article class="game-card">
+          <div class="game-art art-three"><span>FPS 03</span></div>
+          <div class="game-info"><span class="tag">COMING SOON</span><h3>Security Lab</h3><p>Experimental environment for anomaly-detection evaluation.</p><button class="play-btn disabled" disabled>Coming soon</button></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="content-grid">
+      <article id="detections" class="panel">
+        <div class="section-title"><div><p class="eyebrow">ML SECURITY</p><h2>Recent detections</h2></div><span class="model-badge">RF + IF</span></div>
+        <div id="detectionsList" class="list"><div class="empty">No gameplay detections yet.</div></div>
+      </article>
+      <article id="security" class="panel">
+        <div class="section-title"><div><p class="eyebrow">ACCOUNT SECURITY</p><h2>Security activity</h2></div></div>
+        <div id="alertsList" class="list"><div class="empty">No security alerts.</div></div>
+      </article>
+    </section>
+
+    <section class="panel telemetry-panel">
+      <div class="section-title"><div><p class="eyebrow">DEMO / TESTING</p><h2>Analyse gameplay sample</h2></div><span class="muted">7 behavioural features</span></div>
+      <form id="detectForm" class="telemetry-form">
+        <input name="reaction_time" type="number" step="0.01" placeholder="Reaction time" required>
+        <input name="accuracy" type="number" step="0.001" min="0" max="1" placeholder="Accuracy 0–1" required>
+        <input name="headshot_ratio" type="number" step="0.001" min="0" max="1" placeholder="Headshot ratio" required>
+        <input name="fire_rate" type="number" step="0.01" placeholder="Fire rate" required>
+        <input name="movement_speed" type="number" step="0.01" placeholder="Movement speed" required>
+        <input name="aim_smoothness" type="number" step="0.001" min="0" max="1" placeholder="Aim smoothness" required>
+        <input name="kdr" type="number" step="0.01" min="0" placeholder="KDR" required>
+        <button class="primary-btn" type="submit">Run security analysis</button>
+      </form>
+      <div id="detectResult" class="result-box hidden"></div>
+    </section>
+  </main>
+  <script src="js/api.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>

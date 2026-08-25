@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SecureFPS | Login</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="auth-page">
+  <main class="auth-shell">
+    <section class="auth-brand">
+      <div class="brand-mark">SF</div>
+      <p class="eyebrow">SECURE FPS PLATFORM</p>
+      <h1>Play with confidence.</h1>
+      <p>Secure authentication and behavioural protection for competitive FPS gaming.</p>
+      <div class="security-points">
+        <span>✓ Multi-factor authentication</span>
+        <span>✓ Behaviour-based cheat detection</span>
+        <span>✓ Secure session protection</span>
+      </div>
+    </section>
+
+    <section class="auth-card">
+      <div class="card-head">
+        <p class="eyebrow">WELCOME BACK</p>
+        <h2>Sign in</h2>
+        <p>Access your secure gaming dashboard.</p>
+      </div>
+      <form id="loginForm" class="form">
+        <label>Email<input id="email" type="email" autocomplete="email" required placeholder="player@example.com"></label>
+        <label>Password<input id="password" type="password" autocomplete="current-password" required placeholder="Enter your password"></label>
+        <button class="primary-btn" type="submit">Continue to MFA <span>→</span></button>
+      </form>
+      <div id="message" class="message"></div>
+      <p class="switch">New player? <a href="signup.html">Create an account</a></p>
+    </section>
+  </main>
+  <script src="js/api.js"></script>
+  <script src="js/login.js"></script>
+</body>
+</html>

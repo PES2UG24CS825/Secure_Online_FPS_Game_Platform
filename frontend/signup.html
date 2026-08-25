@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SecureFPS | Create Account</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="auth-page">
+  <main class="auth-shell">
+    <section class="auth-brand">
+      <div class="brand-mark">SF</div>
+      <p class="eyebrow">SECURE FPS PLATFORM</p>
+      <h1>Build your secure player identity.</h1>
+      <p>Create an account protected by multi-factor authentication.</p>
+      <div class="security-points">
+        <span>✓ Passwords stored as secure hashes</span>
+        <span>✓ TOTP authenticator support</span>
+        <span>✓ Protected game sessions</span>
+      </div>
+    </section>
+
+    <section class="auth-card">
+      <div class="card-head">
+        <p class="eyebrow">PLAYER REGISTRATION</p>
+        <h2>Create account</h2>
+        <p>Set up your identity before entering the game hub.</p>
+      </div>
+      <form id="signupForm" class="form">
+        <label>Full name<input id="name" type="text" autocomplete="name" required placeholder="Your name"></label>
+        <label>Email<input id="email" type="email" autocomplete="email" required placeholder="player@example.com"></label>
+        <label>Password<input id="password" type="password" autocomplete="new-password" minlength="8" required placeholder="Minimum 8 characters"></label>
+        <label>Confirm password<input id="confirmPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="Re-enter password"></label>
+        <button class="primary-btn" type="submit">Create secure account <span>→</span></button>
+      </form>
+      <div id="message" class="message"></div>
+      <div id="mfaSetup" class="mfa-setup hidden">
+        <h3>Set up your authenticator</h3>
+        <p>Scan this QR code using Google Authenticator, Microsoft Authenticator, or another TOTP app.</p>
+        <img id="qrImage" alt="MFA QR code">
+        <p class="manual-key">Manual key: <code id="manualKey"></code></p>
+        <a class="primary-btn link-btn" href="login.html">Continue to login</a>
+      </div>
+      <p class="switch">Already registered? <a href="login.html">Sign in</a></p>
+    </section>
+  </main>
+  <script src="js/api.js"></script>
+  <script src="js/signup.js"></script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SecureFPS | MFA Verification</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="auth-page">
+  <main class="auth-shell single">
+    <section class="auth-card mfa-card">
+      <div class="brand-mark">SF</div>
+      <p class="eyebrow">SECOND FACTOR</p>
+      <h2>Verify your identity</h2>
+      <p>Enter the 6-digit code from your authenticator app.</p>
+      <form id="mfaForm" class="form">
+        <label>Authentication code
+          <input id="code" class="otp-input" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required placeholder="000000">
+        </label>
+        <button class="primary-btn" type="submit">Verify & enter dashboard <span>→</span></button>
+      </form>
+      <div id="message" class="message"></div>
+      <a class="text-link" href="login.html">Back to login</a>
+    </section>
+  </main>
+  <script src="js/api.js"></script>
+  <script src="js/mfa.js"></script>
+</body>
+</html>
