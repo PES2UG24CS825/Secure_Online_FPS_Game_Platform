@@ -1,0 +1,37 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.env
+
+# Unity generated files
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+
+# Unity generated solution files
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+
+# IDE
+.vs/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+
+!frontend/public/games/FPS_Microgame/
+!frontend/public/games/FPS_Microgame/Build/
+!frontend/public/games/FPS_Microgame/Build/**
+!frontend/public/games/FPS_Microgame/TemplateData/
+!frontend/public/games/FPS_Microgame/TemplateData/**
+!frontend/public/games/FPS_Microgame/index.html
