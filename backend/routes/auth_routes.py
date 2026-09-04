@@ -68,9 +68,19 @@ def forgot_password():
     if not email:
         return jsonify({"message": "Enter your player email address."}), 400
 
-    # Keep the response identical for known and unknown addresses.
+    new_password = data.get("new_password", "")
+    confirm_password = data.get("confirm_password", "")
+    if not validate_password(new_password):
+        return jsonify({"message": PASSWORD_RULES_MESSAGE}), 400
+    if new_password != confirm_password:
+        return jsonify({"message": "Passwords do not match."}), 400
+
+    users.update_one(
+        {"email": email, "role": {"$ne": "admin"}},
+        {"$set": {"password_hash": hash_password(new_password)}}
+    )
     return jsonify({
-        "message": "If an account exists for that email, reset instructions will be sent."
+        "message": "If a player account exists, its password has been updated."
     })
 
 @auth_bp.post("/login")
@@ -137,6 +147,7 @@ def me():
             "id": str(user["_id"]),
             "name": user["name"],
             "email": user["email"],
+            "role": user.get("role", "player"),
             "created_at": user["created_at"].isoformat(),
         }
     })

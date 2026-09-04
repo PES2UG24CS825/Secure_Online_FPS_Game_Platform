@@ -7,7 +7,11 @@ forgotForm.addEventListener("submit", async (event) => {
   try {
     const data = await api("/auth/forgot-password", {
       method: "POST",
-      body: JSON.stringify({ email: document.getElementById("email").value })
+      body: JSON.stringify({
+        email: document.getElementById("email").value,
+        new_password: document.getElementById("newPassword").value,
+        confirm_password: document.getElementById("confirmPassword").value
+      })
     });
     message.textContent = data.message;
   } catch (error) {

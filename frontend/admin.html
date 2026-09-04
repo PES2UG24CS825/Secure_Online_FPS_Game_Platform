@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SecureFPS | Admin Control Center</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="dashboard-page admin-page">
+  <main class="dashboard-main admin-main">
+    <header class="topbar"><div><p class="eyebrow">SECURITY OPERATIONS</p><h1>Admin control center</h1><p class="muted admin-subtitle">Monitor player access, review risk events, and control sessions.</p></div><div><span class="status-pill"><span class="status-dot"></span>Live monitoring</span><button id="logoutBtn" class="play-btn admin-player-view" type="button">Player view</button></div></header>
+    <section class="panel admin-session"><div class="avatar">SA</div><div><p class="eyebrow">SIGNED-IN ADMINISTRATOR</p><h2 id="adminName">Security Admin</h2><p class="muted" id="adminEmail"></p></div><div class="admin-session-time"><span class="muted">Current session</span><strong>Active</strong><small>IP 127.0.0.1</small></div></section>
+    <section class="stats-grid"><article class="stat-card"><span>Players</span><strong id="playerCount">0</strong><small>Registered accounts</small></article><article class="stat-card"><span>Security events</span><strong id="eventCount">0</strong><small>Audit trail</small></article><article class="stat-card"><span>High severity</span><strong id="highCount">0</strong><small>Needs review</small></article><article class="stat-card"><span>Logins today</span><strong id="loginCount">0</strong><small>Successful access</small></article></section>
+    <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">PLAYER ACCESS + BEHAVIOUR</p><h2>Player accounts</h2></div><button class="play-btn" type="button" disabled>Add player</button></div><div class="admin-table-wrap"><table><thead><tr><th>Player</th><th>Role</th><th>MFA</th><th>Created</th><th>Actions</th></tr></thead><tbody id="players"></tbody></table></div></section>
+    <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">AUDIT TRAIL</p><h2>Security events</h2></div></div><div id="events" class="list"><div class="empty">No security events.</div></div></section>
+  </main>
+  <script src="js/api.js"></script><script src="js/admin.js"></script>
+</body>
+</html>

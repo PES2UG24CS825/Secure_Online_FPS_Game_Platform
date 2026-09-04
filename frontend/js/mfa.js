@@ -10,7 +10,8 @@ form.addEventListener("submit", async (event) => {
       method: "POST",
       body: JSON.stringify({ code: document.getElementById("code").value })
     });
-    window.location.href = "dashboard.html";
+    const me = await api("/auth/me");
+    window.location.href = me.user.role === "admin" ? "admin.html" : "dashboard.html";
   } catch (error) {
     message.textContent = error.message;
   }
