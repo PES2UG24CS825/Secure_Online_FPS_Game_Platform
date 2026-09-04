@@ -20,6 +20,9 @@ async function loadDashboard() {
         const me = await api("/auth/me");
         const user = me.user;
 
+        const playerAnalysis = document.getElementById("playerAnalysis");
+        if (playerAnalysis) playerAnalysis.remove();
+
         const welcome = document.getElementById("welcome");
         const sideName = document.getElementById("sideName");
         const sideEmail = document.getElementById("sideEmail");

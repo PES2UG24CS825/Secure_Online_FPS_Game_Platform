@@ -14,5 +14,6 @@ async function loadAdmin() {
   } catch (error) { window.location.href = "login.html"; }
 }
 document.getElementById("players").addEventListener("click", async (event) => { const button = event.target.closest("button[data-action]"); if (!button) return; await api(`/admin/players/${button.dataset.id}/${button.dataset.action}`, { method: "POST" }); loadAdmin(); });
+document.getElementById("playerViewBtn").addEventListener("click", () => { window.location.href = "dashboard.html"; });
 document.getElementById("logoutBtn").addEventListener("click", async () => { await api("/auth/logout", { method: "POST" }); window.location.href = "login.html"; });
 loadAdmin();

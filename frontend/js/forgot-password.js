@@ -9,6 +9,7 @@ forgotForm.addEventListener("submit", async (event) => {
       method: "POST",
       body: JSON.stringify({
         email: document.getElementById("email").value,
+        reset_code: document.getElementById("resetCode").value,
         new_password: document.getElementById("newPassword").value,
         confirm_password: document.getElementById("confirmPassword").value
       })

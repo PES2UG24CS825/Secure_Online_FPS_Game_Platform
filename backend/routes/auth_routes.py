@@ -70,6 +70,8 @@ def forgot_password():
 
     new_password = data.get("new_password", "")
     confirm_password = data.get("confirm_password", "")
+    if data.get("reset_code", "").strip() != "123456":
+        return jsonify({"message": "Enter the 6-digit reset code."}), 400
     if not validate_password(new_password):
         return jsonify({"message": PASSWORD_RULES_MESSAGE}), 400
     if new_password != confirm_password:
