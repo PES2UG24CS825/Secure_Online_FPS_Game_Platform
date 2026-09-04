@@ -20,6 +20,11 @@ async function loadDashboard() {
         const me = await api("/auth/me");
         const user = me.user;
 
+        if (user.role === "admin") {
+            window.location.replace("admin.html");
+            return;
+        }
+
         const playerAnalysis = document.getElementById("playerAnalysis");
         if (playerAnalysis) playerAnalysis.remove();
 
