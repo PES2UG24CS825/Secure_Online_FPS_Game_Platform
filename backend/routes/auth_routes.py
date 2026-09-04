@@ -84,12 +84,6 @@ def login():
         return jsonify({"message": "Invalid email or password."}), 401
 
     session.clear()
-    if user.get("role") == "admin":
-        session["user_id"] = str(user["_id"])
-        session["role"] = "admin"
-        session["login_at"] = utcnow().isoformat()
-        return jsonify({"message": "Admin login successful.", "mfa_required": False, "role": "admin"})
-
     session["mfa_pending_user"] = str(user["_id"])
     session["mfa_attempts"] = 0
 

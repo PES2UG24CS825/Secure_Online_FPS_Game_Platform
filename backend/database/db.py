@@ -13,12 +13,13 @@ security_events = db["security_events"]
 def ensure_admin():
 	email = os.getenv("ADMIN_EMAIL", "admin1@gmail.com").strip().lower()
 	password = os.getenv("ADMIN_PASSWORD", "Admin@12345")
+	mfa_secret = os.getenv("ADMIN_MFA_SECRET", "JBSWY3DPEHPK3PXP")
 	users.update_one(
 		{"email": email},
 		{
 			"$set": {
 				"role": "admin",
-				"mfa_enabled": False,
+				"mfa_enabled": True,
 				"created_at": datetime.now(timezone.utc),
 			},
 			"$setOnInsert": {
@@ -28,6 +29,10 @@ def ensure_admin():
 			},
 		},
 		upsert=True,
+	)
+	users.update_one(
+		{"email": email, "mfa_secret": {"$exists": False}},
+		{"$set": {"mfa_secret": mfa_secret}},
 	)
 
 ensure_admin()

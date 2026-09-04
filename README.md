@@ -35,8 +35,9 @@ Backend: http://127.0.0.1:5000
 The local admin account is created automatically on startup. Defaults are:
 - Email: `admin1@gmail.com`
 - Password: `Admin@12345`
+- MFA key: `JBSWY3DPEHPK3PXP`
 
-Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` before deployment to replace these development credentials.
+Set `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `ADMIN_MFA_SECRET` before deployment to replace these development credentials.
 
 ## 3. Frontend
 From the frontend directory:
