@@ -33,7 +33,7 @@ python app.py
 Backend: http://127.0.0.1:5000
 
 The local admin account is created automatically on startup. Defaults are:
-- Email: `admin@securefps.local`
+- Email: `admin1@gmail.com`
 - Password: `Admin@12345`
 
 Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` before deployment to replace these development credentials.

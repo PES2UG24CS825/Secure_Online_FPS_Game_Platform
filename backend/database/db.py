@@ -11,7 +11,7 @@ game_events = db["game_events"]
 security_events = db["security_events"]
 
 def ensure_admin():
-	email = os.getenv("ADMIN_EMAIL", "admin@securefps.local").strip().lower()
+	email = os.getenv("ADMIN_EMAIL", "admin1@gmail.com").strip().lower()
 	password = os.getenv("ADMIN_PASSWORD", "Admin@12345")
 	users.update_one(
 		{"email": email},
