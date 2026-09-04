@@ -9,7 +9,7 @@ from flask import Blueprint, jsonify, request, session
 from pymongo.errors import DuplicateKeyError
 
 from database.db import users
-from services.auth import hash_password, verify_password
+from services.auth import PASSWORD_RULES_MESSAGE, hash_password, validate_password, verify_password
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
@@ -23,8 +23,10 @@ def signup():
     email = data.get("email", "").strip().lower()
     password = data.get("password", "")
 
-    if not name or not email or len(password) < 8:
-        return jsonify({"message": "Name, valid email and 8+ character password are required."}), 400
+    if not name or not email:
+        return jsonify({"message": "Name and a valid email are required."}), 400
+    if not validate_password(password):
+        return jsonify({"message": PASSWORD_RULES_MESSAGE}), 400
 
     secret = pyotp.random_base32()
     user = {
@@ -59,6 +61,18 @@ def signup():
         }
     }), 201
 
+@auth_bp.post("/forgot-password")
+def forgot_password():
+    data = request.get_json(silent=True) or {}
+    email = data.get("email", "").strip().lower()
+    if not email:
+        return jsonify({"message": "Enter your player email address."}), 400
+
+    # Keep the response identical for known and unknown addresses.
+    return jsonify({
+        "message": "If an account exists for that email, reset instructions will be sent."
+    })
+
 @auth_bp.post("/login")
 def login():
     data = request.get_json(silent=True) or {}
@@ -70,6 +84,12 @@ def login():
         return jsonify({"message": "Invalid email or password."}), 401
 
     session.clear()
+    if user.get("role") == "admin":
+        session["user_id"] = str(user["_id"])
+        session["role"] = "admin"
+        session["login_at"] = utcnow().isoformat()
+        return jsonify({"message": "Admin login successful.", "mfa_required": False, "role": "admin"})
+
     session["mfa_pending_user"] = str(user["_id"])
     session["mfa_attempts"] = 0
 

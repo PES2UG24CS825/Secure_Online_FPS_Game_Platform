@@ -12,6 +12,10 @@ form.addEventListener("submit", async (event) => {
     message.textContent = "Passwords do not match.";
     return;
   }
+  if (!/[A-Z]/.test(password) || !/\d/.test(password) || !/[^A-Za-z0-9]/.test(password) || password.length < 8) {
+    message.textContent = "Password must be at least 8 characters and include an uppercase letter, a number, and a special character.";
+    return;
+  }
 
   try {
     const data = await api("/auth/signup", {

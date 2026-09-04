@@ -29,8 +29,8 @@
       <form id="signupForm" class="form">
         <label>Full name<input id="name" type="text" autocomplete="name" required placeholder="Your name"></label>
         <label>Email<input id="email" type="email" autocomplete="email" required placeholder="player@example.com"></label>
-        <label>Password<input id="password" type="password" autocomplete="new-password" minlength="8" required placeholder="Minimum 8 characters"></label>
-        <label>Confirm password<input id="confirmPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="Re-enter password"></label>
+        <label>Password<div class="password-field"><input id="password" type="password" autocomplete="new-password" minlength="8" required placeholder="Uppercase, number, special character"><button class="password-toggle" type="button" data-password-target="password" aria-label="Show password" title="Show password">&#128065;</button></div></label>
+        <label>Confirm password<div class="password-field"><input id="confirmPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="Re-enter password"><button class="password-toggle" type="button" data-password-target="confirmPassword" aria-label="Show password" title="Show password">&#128065;</button></div></label>
         <button class="primary-btn" type="submit">Create secure account <span>→</span></button>
       </form>
       <div id="message" class="message"></div>
@@ -46,5 +46,6 @@
   </main>
   <script src="js/api.js"></script>
   <script src="js/signup.js"></script>
+  <script src="js/password-toggle.js"></script>
 </body>
 </html>

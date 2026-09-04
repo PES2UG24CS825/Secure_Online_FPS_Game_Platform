@@ -24,9 +24,11 @@ button,input{font:inherit}
 .form label{font-size:12px;color:#b8c7d9;font-weight:600}
 .form input{display:block;width:100%;margin-top:8px;background:#091626;border:1px solid #223852;color:white;border-radius:11px;padding:13px 14px;outline:none}
 .form input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,140,255,.12)}
+.password-field{position:relative}.password-field input{padding-right:44px}.password-toggle{position:absolute;right:8px;top:50%;transform:translateY(-35%);border:0;background:transparent;color:var(--muted);cursor:pointer;padding:6px}.password-toggle:hover{color:white}
 .primary-btn{border:0;border-radius:11px;padding:13px 16px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;font-weight:700;cursor:pointer;text-align:center}
 .primary-btn:hover{filter:brightness(1.08)}
 .switch{text-align:center;color:var(--muted);font-size:12px;margin-top:20px}.switch a,.text-link{color:#79a8ff}
+.forgot-link{text-align:right;font-size:12px;margin:14px 0 0}.forgot-link a{color:#79a8ff}
 .message{margin-top:14px;min-height:18px;color:#ff9aa6;font-size:12px}
 .mfa-setup{margin-top:20px;padding:18px;border:1px solid var(--line);border-radius:16px;text-align:center}.mfa-setup img{width:180px;background:white;padding:8px;border-radius:10px}.mfa-setup p{font-size:12px;color:var(--muted);line-height:1.5}.manual-key code{color:white;word-break:break-all}.link-btn{display:block;margin-top:12px}
 .hidden{display:none!important}.mfa-card{text-align:center}.mfa-card .brand-mark{margin:0 auto 22px}.otp-input{text-align:center;letter-spacing:.45em;font-size:25px;font-weight:700}

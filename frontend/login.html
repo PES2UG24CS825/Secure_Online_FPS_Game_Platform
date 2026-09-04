@@ -28,14 +28,16 @@
       </div>
       <form id="loginForm" class="form">
         <label>Email<input id="email" type="email" autocomplete="email" required placeholder="player@example.com"></label>
-        <label>Password<input id="password" type="password" autocomplete="current-password" required placeholder="Enter your password"></label>
+        <label>Password<div class="password-field"><input id="password" type="password" autocomplete="current-password" required placeholder="Enter your password"><button class="password-toggle" type="button" data-password-target="password" aria-label="Show password" title="Show password">&#128065;</button></div></label>
         <button class="primary-btn" type="submit">Continue to MFA <span>→</span></button>
       </form>
       <div id="message" class="message"></div>
+      <p class="forgot-link"><a href="forgot-password.html">Forgot password?</a></p>
       <p class="switch">New player? <a href="signup.html">Create an account</a></p>
     </section>
   </main>
   <script src="js/api.js"></script>
   <script src="js/login.js"></script>
+  <script src="js/password-toggle.js"></script>
 </body>
 </html>
