@@ -6,7 +6,6 @@ Tests role-based access control and authorization
 
 import requests
 import json
-import time
 from typing import Dict, Optional
 
 BASE_URL = "http://127.0.0.1:5000/api"
@@ -84,21 +83,12 @@ def test_auth():
     print("\n=== TEST 1: Authentication ===")
     
     # Login admin
-    success = login_player(SESSION_ADMIN, "admin1@gmail.com", "Admin@12345", "JBSWY3DPEHPK3PXP")
+    success = login_player(SESSION_ADMIN, "admin1@gmail.com", "Admin@12345")
     test_result("Admin login", success)
     
-    # Create player account with unique email
-    timestamp = int(time.time())
-    player_email = f"testplayer{timestamp}@example.com"
-    print(f"Creating player account: {player_email}")
-    player_info = create_player(player_email)
-    
-    if not player_info:
-        print("ERROR: Could not create player account")
-        return
-    
-    # Login player
-    success = login_player(SESSION_PLAYER, player_info["email"], player_info["password"], player_info["mfa_secret"])
+    # Create and login player
+    player_email = "testplayer@example.com"
+    success = login_player(SESSION_PLAYER, player_email)
     if not success:
         print("Warning: Player login failed, skipping player tests")
         return
@@ -171,9 +161,9 @@ def test_unauthenticated():
     
     session = requests.Session()
     
-    # Try player endpoints (403 from before_request check)
+    # Try player endpoints
     res = session.get(f"{BASE_URL}/player/profile")
-    test_result("Unauthenticated CANNOT access /player/profile", res.status_code in [401, 403],
+    test_result("Unauthenticated CANNOT access /player/profile", res.status_code == 401,
                 f"Status: {res.status_code}")
     
     # Try admin endpoints
