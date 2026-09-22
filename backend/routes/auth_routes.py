@@ -10,6 +10,7 @@ from pymongo.errors import DuplicateKeyError
 
 from database.db import (
     create_session_record,
+    get_active_session,
     login_history,
     log_security_event,
     revoke_session_records,
@@ -28,13 +29,29 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 def current_user_record():
     user_id = session.get("user_id")
-    if not user_id:
+    session_id = session.get("session_id")
+
+    if not user_id or not session_id:
         return None
 
     try:
-        return users.find_one({"_id": ObjectId(user_id)})
+        user = users.find_one({"_id": ObjectId(user_id)})
     except Exception:
         return None
+
+    if not user:
+        session.clear()
+        return None
+
+    if user.get("status") == "suspended":
+        session.clear()
+        return None
+
+    if not get_active_session(user_id, session_id):
+        session.clear()
+        return None
+
+    return user
 
 
 @auth_bp.post("/signup")
@@ -249,12 +266,15 @@ def verify_mfa():
         }
     )
 
-    create_session_record(
+    db_session = create_session_record(
         str(user["_id"]),
         user.get("role", "player"),
         ip_address=request.remote_addr or "127.0.0.1",
         user_agent=request.headers.get("User-Agent", "unknown"),
     )
+
+    session["session_id"] = str(db_session["_id"])
+    session["role"] = user.get("role", "player")
 
     log_security_event(
         str(user["_id"]),
@@ -302,6 +322,10 @@ def me():
             }
         ), 403
 
+    if not get_active_session(user_id, session.get("session_id")):
+        session.clear()
+        return jsonify({"authenticated": False}), 401
+
     return jsonify(
         {
             "authenticated": True,
@@ -341,8 +365,11 @@ def logout():
             }
         )
 
-        # Revoke active database sessions.
-        revoke_session_records(user_id)
+        # Revoke only the current browser session.
+        revoke_session_records(
+            user_id,
+            session_id=session.get("session_id"),
+        )
 
         log_security_event(
             user_id,
@@ -366,7 +393,16 @@ def logout_other_sessions():
     if not user_id:
         return jsonify({"message": "Authentication required."}), 401
 
-    revoke_session_records(user_id)
+    current_session_id = session.get("session_id")
+    if not current_session_id:
+        session.clear()
+        return jsonify({"message": "Authentication required."}), 401
+
+    revoked_count = revoke_session_records(
+        user_id,
+        session_id=current_session_id,
+        keep_current=True,
+    )
 
     log_security_event(
         user_id,

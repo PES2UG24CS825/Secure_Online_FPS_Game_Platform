@@ -4,8 +4,18 @@ from functools import wraps
 from bson import ObjectId
 from flask import Blueprint, jsonify, request, session
 
-from database.db import (detections, login_history, log_security_event, matches, security_events, sessions,
-                          telemetry, users, utcnow)
+from database.db import (
+    detections,
+    get_active_session,
+    login_history,
+    log_security_event,
+    matches,
+    security_events,
+    sessions,
+    telemetry,
+    users,
+    utcnow,
+)
 from models.ml_model import FEATURES, predict
 
 game_bp = Blueprint("game", __name__, url_prefix="/api")
@@ -13,22 +23,28 @@ game_bp = Blueprint("game", __name__, url_prefix="/api")
 
 def current_user_record():
     user_id = session.get("user_id")
-    if not user_id:
+    session_id = session.get("session_id")
+
+    if not user_id or not session_id:
         return None
+
     try:
         user = users.find_one({"_id": ObjectId(user_id)})
     except Exception:
         return None
+
     if not user:
         session.clear()
         return None
+
     if user.get("status") == "suspended":
         session.clear()
         return None
-    active_session = sessions.find_one({"user_id": user_id, "revoked": False, "expires_at": {"$gt": utcnow()}})
-    if not active_session:
+
+    if not get_active_session(user_id, session_id):
         session.clear()
         return None
+
     return user
 
 
