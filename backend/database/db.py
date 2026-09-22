@@ -9,6 +9,9 @@ db = client[os.getenv("DB_NAME", "fps_security")]
 users = db["users"]
 game_events = db["game_events"]
 security_events = db["security_events"]
+matches = db["matches"]
+sessions_db = db["sessions"]
+login_history = db["login_history"]
 
 def ensure_admin():
 	email = os.getenv("ADMIN_EMAIL", "admin1@gmail.com").strip().lower()
@@ -41,3 +44,7 @@ ensure_admin()
 users.create_index("email", unique=True)
 game_events.create_index([("user_id", 1), ("created_at", -1)])
 security_events.create_index([("user_id", 1), ("created_at", -1)])
+matches.create_index([("user_id", 1), ("created_at", -1)])
+matches.create_index([("user_id", 1)])
+sessions_db.create_index([("user_id", 1)])
+login_history.create_index([("user_id", 1), ("created_at", -1)])

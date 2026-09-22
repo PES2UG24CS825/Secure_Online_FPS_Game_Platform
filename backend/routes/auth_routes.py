@@ -7,8 +7,9 @@ import pyotp
 import qrcode
 from flask import Blueprint, jsonify, request, session
 from pymongo.errors import DuplicateKeyError
+from bson import ObjectId
 
-from database.db import users
+from database.db import users, login_history, security_events
 from services.auth import PASSWORD_RULES_MESSAGE, hash_password, validate_password, verify_password
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
@@ -35,6 +36,7 @@ def signup():
         "password_hash": hash_password(password),
         "mfa_secret": secret,
         "mfa_enabled": True,
+        "role": "player",
         "created_at": utcnow(),
     }
 
@@ -110,7 +112,6 @@ def verify_mfa():
     if not pending_id:
         return jsonify({"message": "MFA session expired. Please log in again."}), 401
 
-    from bson import ObjectId
     user = users.find_one({"_id": ObjectId(pending_id)})
     if not user:
         session.clear()
@@ -128,6 +129,17 @@ def verify_mfa():
     session.clear()
     session["user_id"] = str(user["_id"])
     session["login_at"] = utcnow().isoformat()
+
+    # Log successful login
+    client_ip = request.remote_addr or "Unknown"
+    login_history.insert_one({
+        "user_id": ObjectId(pending_id),
+        "type": "login_success",
+        "ip": client_ip,
+        "description": f"Successful login from {client_ip}",
+        "status": "success",
+        "created_at": utcnow(),
+    })
 
     return jsonify({"message": "MFA verified. Login successful."})
 
@@ -156,5 +168,17 @@ def me():
 
 @auth_bp.post("/logout")
 def logout():
+    user_id = session.get("user_id")
+    if user_id:
+        client_ip = request.remote_addr or "Unknown"
+        login_history.insert_one({
+            "user_id": ObjectId(user_id),
+            "type": "logout",
+            "ip": client_ip,
+            "description": f"Logout from {client_ip}",
+            "status": "success",
+            "created_at": utcnow(),
+        })
+    
     session.clear()
     return jsonify({"message": "Logged out successfully."})
