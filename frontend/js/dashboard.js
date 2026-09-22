@@ -4,8 +4,8 @@
 
 // Unity game locations
 const GAME_URLS = {
-    "fps-microgame": "/public/games/FPS_Microgame/index.html",
-    "multiplayer-fps": "/public/games/Multiplayer_FPS/index.html"
+    "fps-microgame": "public/games/FPS_Microgame/index.html",
+    "multiplayer-fps": "public/games/Multiplayer_FPS/index.html"
 };
 
 
@@ -46,145 +46,132 @@ async function loadDashboard() {
         }
 
         if (avatar) {
-            avatar.textContent =
-                user.name.charAt(0).toUpperCase();
+            avatar.textContent = user.name.charAt(0).toUpperCase();
         }
 
+        const [dashboardData, matchesData, detectionsData, historyData, securityStatus] = await Promise.all([
+            api("/dashboard").catch((error) => {
+                console.error("Dashboard summary failed:", error);
+                return { stats: {}, recent_detections: [], alerts: [] };
+            }),
+            api("/player/matches").catch((error) => {
+                console.error("Matches failed:", error);
+                return { matches: [] };
+            }),
+            api("/player/detections").catch((error) => {
+                console.error("Detections failed:", error);
+                return { detections: [] };
+            }),
+            api("/player/login-history").catch((error) => {
+                console.error("Login history failed:", error);
+                return { login_history: [] };
+            }),
+            api("/player/security-status").catch((error) => {
+                console.error("Security status failed:", error);
+                return { status: "active", mfa_enabled: true, last_login: null };
+            })
+        ]);
 
-        // Dashboard data
-        const data = await api("/dashboard");
-
-
-        // Statistics
         const matches = document.getElementById("matches");
         const alerts = document.getElementById("alerts");
 
         if (matches) {
-            matches.textContent =
-                data.stats?.matches_analyzed ?? 0;
+            matches.textContent = dashboardData.stats?.matches_analyzed ?? matchesData.matches?.length ?? 0;
         }
 
         if (alerts) {
-            alerts.textContent =
-                data.stats?.alerts ?? 0;
+            alerts.textContent = dashboardData.stats?.alerts ?? 0;
         }
 
-
-        // Recent detections
-        const detections =
-            document.getElementById("detectionsList");
-
-        if (detections) {
-
-            if (
-                data.recent_detections &&
-                data.recent_detections.length > 0
-            ) {
-
-                detections.innerHTML =
-                    data.recent_detections.map(d => {
-
-                        const bad =
-                            d.rf === "cheater" ||
-                            d.if === "anomaly";
-
-                        const score =
-                            d.risk_score == null
-                                ? "—"
-                                : `${Math.round(
-                                    d.risk_score * 100
-                                )}%`;
-
-                        return `
-                            <div class="list-row">
-
-                                <div>
-                                    <strong>RF:</strong>
-                                    ${d.rf ?? "not loaded"}
-
-                                    &nbsp;&nbsp;
-
-                                    <strong>IF:</strong>
-                                    ${d.if ?? "not loaded"}
-                                </div>
-
-                                <span class="badge ${
-                                    bad ? "bad" : "good"
-                                }">
-                                    ${bad ? "Review" : "Normal"}
-                                    · ${score}
-                                </span>
-
+        const detectionsElement = document.getElementById("detectionsList");
+        if (detectionsElement) {
+            const recentDetections = detectionsData.detections ?? dashboardData.recent_detections ?? [];
+            if (recentDetections.length > 0) {
+                detectionsElement.innerHTML = recentDetections.map(d => {
+                    const risk = d.risk_score ?? d.confidence ?? 0;
+                    const score = `${Math.round(Number(risk) * 100 || Number(risk) || 0)}%`;
+                    const title = d.detection_type || d.rf || "Suspicious behaviour";
+                    return `
+                        <div class="list-row">
+                            <div>
+                                <strong>${title}</strong>
+                                <div class="muted">${d.description || "Anomaly detected."}</div>
                             </div>
-                        `;
-
-                    }).join("");
-
+                            <span class="badge ${Number(risk) >= 0.6 ? "bad" : "warn"}">${score}</span>
+                        </div>
+                    `;
+                }).join("");
             } else {
-
-                detections.innerHTML =
-                    '<div class="empty">No gameplay detections yet.</div>';
+                detectionsElement.innerHTML = '<div class="empty">No gameplay detections yet.</div>';
             }
         }
 
-
-        // Security alerts
-        const alertsList =
-            document.getElementById("alertsList");
-
+        const alertsList = document.getElementById("alertsList");
         if (alertsList) {
-
-            if (
-                data.alerts &&
-                data.alerts.length > 0
-            ) {
-
-                alertsList.innerHTML =
-                    data.alerts.map(a => {
-
-                        const type =
-                            String(
-                                a.type ?? "security_alert"
-                            ).replaceAll("_", " ");
-
-                        const severity =
-                            a.severity ?? "low";
-
-                        return `
-                            <div class="list-row">
-
-                                <div>
-                                    ${type}
-                                </div>
-
-                                <span class="badge ${
-                                    severity === "high"
-                                        ? "bad"
-                                        : "warn"
-                                }">
-                                    ${severity}
-                                </span>
-
-                            </div>
-                        `;
-
-                    }).join("");
-
+            const alertItems = dashboardData.alerts ?? [];
+            if (alertItems.length > 0) {
+                alertsList.innerHTML = alertItems.map(a => {
+                    const severity = a.severity ?? "low";
+                    return `
+                        <div class="list-row">
+                            <div>${a.type || "security_alert"}</div>
+                            <span class="badge ${severity === "high" ? "bad" : "warn"}">${severity}</span>
+                        </div>
+                    `;
+                }).join("");
             } else {
-
-                alertsList.innerHTML =
-                    '<div class="empty">No security alerts.</div>';
+                alertsList.innerHTML = '<div class="empty">No security alerts.</div>';
             }
+        }
+
+        const matchesList = document.getElementById("matchesList");
+        if (matchesList) {
+            if (matchesData.matches && matchesData.matches.length > 0) {
+                matchesList.innerHTML = matchesData.matches.map(match => `
+                    <div class="list-row">
+                        <div>
+                            <strong>Match ${match.match_id || "unknown"}</strong>
+                            <div class="muted">${match.date ? new Date(match.date).toLocaleString() : "Recent match"}</div>
+                        </div>
+                        <div class="muted">K/D ${match.kd ?? 0} · Acc ${match.accuracy ?? 0}%</div>
+                    </div>
+                `).join("");
+            } else {
+                matchesList.innerHTML = '<div class="empty">No matches found.</div>';
+            }
+        }
+
+        const loginHistoryList = document.getElementById("loginHistoryList");
+        if (loginHistoryList) {
+            const history = historyData.login_history ?? [];
+            if (history.length > 0) {
+                loginHistoryList.innerHTML = history.map(entry => `
+                    <div class="list-row">
+                        <div>
+                            <strong>${entry.authentication_method || "MFA"}</strong>
+                            <div class="muted">${entry.timestamp ? new Date(entry.timestamp).toLocaleString() : "Recent login"}</div>
+                        </div>
+                        <span class="badge ${entry.success === false ? "bad" : "good"}">${entry.success === false ? "Failed" : "Success"}</span>
+                    </div>
+                `).join("");
+            } else {
+                loginHistoryList.innerHTML = '<div class="empty">No login history found.</div>';
+            }
+        }
+
+        const statusElement = document.querySelector(".status-pill");
+        if (statusElement && securityStatus) {
+            statusElement.innerHTML = `<span class="status-dot"></span>${securityStatus.status === "active" ? "Platform protected" : "Review required"}`;
         }
 
     } catch (error) {
-
-        console.error(
-            "Dashboard loading error:",
-            error
-        );
-
-        window.location.href = "login.html";
+        console.error("Dashboard loading error:", error);
+        const message = document.getElementById("message") || document.body;
+        if (message && message.id === "message") {
+            message.textContent = "Unable to load dashboard. Please try again.";
+        } else {
+            window.location.href = "login.html";
+        }
     }
 }
 

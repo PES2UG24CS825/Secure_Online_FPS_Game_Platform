@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SecureFPS | Player Console</title>
+  <link rel="stylesheet" href="css/styles.css?v=ui-v3">
+</head>
+<body class="dashboard-page player-page">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">SF</div>
+      <div>
+        <strong>SecureFPS</strong>
+        <small>Gaming Security</small>
+      </div>
+    </div>
+
+    <nav>
+      <a class="active" href="#overview">Overview</a>
+      <a href="#games">Game Hub</a>
+      <a href="#matches">Matches</a>
+      <a href="#detections">Detections</a>
+      <a href="#security">Account Security</a>
+      <a href="#profile">Profile</a>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="mini-profile">
+        <div class="avatar" id="avatar">P</div>
+        <div>
+          <strong id="sideName">Player</strong>
+          <small id="sideEmail">player@example.com</small>
+        </div>
+      </div>
+      <button id="logoutBtn" class="ghost-btn" type="button">Logout</button>
+    </div>
+  </aside>
+
+  <main class="dashboard-main">
+    <header class="topbar" id="overview">
+      <div>
+        <p class="eyebrow">PLAYER CONSOLE</p>
+        <h1 id="welcome">Welcome back</h1>
+      </div>
+      <div class="status-pill"><span class="status-dot"></span>Protected</div>
+    </header>
+
+    <section class="stats-grid">
+      <article class="stat-card">
+        <span>Matches analyzed</span>
+        <strong id="matchesCount">0</strong>
+        <small>Gameplay telemetry</small>
+      </article>
+      <article class="stat-card">
+        <span>Security alerts</span>
+        <strong id="alertsCount">0</strong>
+        <small>Requires attention</small>
+      </article>
+      <article class="stat-card">
+        <span>Authentication</span>
+        <strong id="mfaStatus">2FA</strong>
+        <small>Authenticator status</small>
+      </article>
+      <article class="stat-card">
+        <span>Account status</span>
+        <strong id="accountStatus" class="success-text">Protected</strong>
+        <small>Secure session active</small>
+      </article>
+      <article class="stat-card">
+        <span>Current risk score</span>
+        <strong id="riskScore">0</strong>
+        <small>Backend security model</small>
+      </article>
+    </section>
+
+    <section id="games" class="section">
+      <div class="section-title">
+        <div>
+          <p class="eyebrow">GAME HUB</p>
+          <h2>Available FPS games</h2>
+        </div>
+      </div>
+      <div class="game-grid">
+        <article class="game-card featured">
+          <div class="game-art art-one"><span>FPS 01</span></div>
+          <div class="game-info">
+            <span class="tag">AVAILABLE</span>
+            <h3>FPS Microgame</h3>
+            <p>Competitive FPS training environment with security telemetry and anomaly detection.</p>
+            <button id="fpsMicrogameBtn" class="play-btn" data-game="fps-microgame" type="button">Play Game <span>→</span></button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <div class="content-grid">
+      <section id="matches" class="panel">
+        <div class="section-title">
+          <div><p class="eyebrow">MATCHES</p><h2>Recent matches</h2></div>
+        </div>
+        <div id="matchesList" class="list"><div class="empty">No matches analyzed yet.</div></div>
+      </section>
+
+      <section id="detections" class="panel">
+        <div class="section-title">
+          <div><p class="eyebrow">DETECTIONS</p><h2>Recent detections</h2></div>
+        </div>
+        <div id="detectionsList" class="list"><div class="empty">No suspicious gameplay detected.</div></div>
+      </section>
+    </div>
+
+    <div class="content-grid">
+      <section id="security" class="panel">
+        <div class="section-title">
+          <div><p class="eyebrow">ACCOUNT SECURITY</p><h2>Account security</h2></div>
+        </div>
+        <div id="securityStatus" class="list">
+          <div class="empty">Loading account security data...</div>
+        </div>
+      </section>
+
+      <section id="profile" class="panel">
+        <div class="section-title">
+          <div><p class="eyebrow">PROFILE</p><h2>Player profile</h2></div>
+        </div>
+        <div id="profileContent" class="list">
+          <div class="empty">Loading profile...</div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script src="js/player.js"></script>
+</body>
+</html>

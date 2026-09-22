@@ -12,10 +12,23 @@ app.config.update(
     SESSION_COOKIE_SECURE=False,  # Set True when deployed behind HTTPS
 )
 
+allowed_origins = [
+    "http://127.0.0.1:5500",
+    "http://127.0.0.1:3000",
+    "http://localhost:5500",
+    "http://localhost:3000",
+    "http://localhost:8080",
+]
+frontend_origin = os.getenv("FRONTEND_ORIGIN")
+if frontend_origin:
+    allowed_origins.append(frontend_origin)
+
 CORS(
     app,
-    resources={r"/api/*": {"origins": [os.getenv("FRONTEND_ORIGIN", "http://127.0.0.1:5500")]}},
+    resources={r"/api/*": {"origins": allowed_origins}},
     supports_credentials=True,
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 )
 
 app.register_blueprint(auth_bp)
