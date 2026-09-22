@@ -3,6 +3,8 @@ from flask import Flask
 from flask_cors import CORS
 from routes.auth_routes import auth_bp
 from routes.game_routes import game_bp
+from routes.player_routes import player_bp
+from routes.admin_routes import admin_bp
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-only-change-this-secret")
@@ -33,6 +35,8 @@ CORS(
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(game_bp)
+app.register_blueprint(player_bp)
+app.register_blueprint(admin_bp)
 
 @app.get("/api/health")
 def health():

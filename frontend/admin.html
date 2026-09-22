@@ -4,17 +4,607 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>SecureFPS | Admin Control Center</title>
-  <link rel="stylesheet" href="css/styles.css?v=ui-v3">
+  <link rel="stylesheet" href="css/styles.css?v=rbac-v1">
+  <style>
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      color: #aaa;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-radius: 8px;
+      margin: 4px 0;
+    }
+
+    .nav-btn:hover {
+      color: #fff;
+      background: rgba(79, 140, 255, 0.1);
+    }
+
+    .nav-btn.active {
+      color: #4f8cff;
+      background: rgba(79, 140, 255, 0.15);
+      font-weight: 600;
+    }
+
+    .section {
+      display: none;
+    }
+
+    .section.active {
+      display: block;
+    }
+
+    .admin-table-wrap {
+      overflow-x: auto;
+      margin-top: 16px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      color: #aaa;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    td {
+      padding: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      color: #ddd;
+    }
+
+    tbody tr:hover {
+      background: rgba(79, 140, 255, 0.05);
+    }
+
+    .action-btn {
+      background: none;
+      border: 1px solid rgba(79, 140, 255, 0.4);
+      color: #4f8cff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      margin: 0 4px;
+      transition: all 0.2s;
+    }
+
+    .action-btn:hover {
+      background: rgba(79, 140, 255, 0.1);
+      border-color: #4f8cff;
+    }
+
+    .action-btn.danger {
+      border-color: rgba(255, 107, 107, 0.4);
+      color: #ff6b6b;
+    }
+
+    .action-btn.danger:hover {
+      background: rgba(255, 107, 107, 0.1);
+      border-color: #ff6b6b;
+    }
+
+    .severity-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .severity-low {
+      background: rgba(53, 212, 154, 0.2);
+      color: #35d49a;
+    }
+
+    .severity-medium {
+      background: rgba(255, 193, 7, 0.2);
+      color: #ffc107;
+    }
+
+    .severity-high {
+      background: rgba(255, 107, 107, 0.2);
+      color: #ff6b6b;
+    }
+
+    .severity-critical {
+      background: rgba(220, 53, 69, 0.2);
+      color: #dc3545;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #999;
+    }
+
+    .empty-state strong {
+      display: block;
+      margin-bottom: 8px;
+      color: #ccc;
+    }
+
+    .admin-sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 240px;
+      height: 100vh;
+      background: #07111f;
+      border-right: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 20px;
+      overflow-y: auto;
+      z-index: 100;
+    }
+
+    .admin-sidebar .brand {
+      margin-bottom: 32px;
+    }
+
+    .admin-sidebar nav {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .admin-main-wrapper {
+      margin-left: 240px;
+    }
+
+    @media (max-width: 900px) {
+      .admin-sidebar {
+        width: 100%;
+        height: auto;
+        position: static;
+        border-right: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .admin-main-wrapper {
+        margin-left: 0;
+      }
+
+      .admin-sidebar nav {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 8px;
+      }
+    }
+  </style>
 </head>
 <body class="dashboard-page admin-page">
-  <main class="dashboard-main admin-main">
-    <header class="topbar"><div><p class="eyebrow">SECURITY OPERATIONS</p><h1>Admin control center</h1><p class="muted admin-subtitle">Monitor player access, review risk events, and control sessions.</p></div><div><span class="status-pill"><span class="status-dot"></span>Live monitoring</span><button id="playerViewBtn" class="play-btn admin-player-view" type="button">Player view</button><button id="logoutBtn" class="ghost-btn admin-logout" type="button">Sign out</button></div></header>
-    <section class="panel admin-session"><div class="avatar">SA</div><div><p class="eyebrow">SIGNED-IN ADMINISTRATOR</p><h2 id="adminName">Security Admin</h2><p class="muted" id="adminEmail"></p></div><div class="admin-session-time"><span class="muted">Current session</span><strong>Active</strong><small>IP 127.0.0.1</small></div></section>
-    <section class="stats-grid"><article class="stat-card"><span>Total players</span><strong id="playerCount">0</strong></article><article class="stat-card"><span>Active sessions</span><strong id="activeSessionCount">0</strong></article><article class="stat-card"><span>Matches analyzed</span><strong id="matchCount">0</strong></article><article class="stat-card"><span>High severity events</span><strong id="highCount">0</strong></article></section>
-    <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">PLAYER ACCESS + BEHAVIOUR</p><h2>Player accounts</h2></div></div><div class="admin-table-wrap"><table><thead><tr><th>Player</th><th>Email</th><th>MFA</th><th>Status</th><th>Risk score</th><th>Created</th><th>Actions</th></tr></thead><tbody id="players"></tbody></table></div></section>
-    <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">AUDIT TRAIL</p><h2>Security events</h2></div><select id="severityFilter" aria-label="Filter security events"><option value="">All severity</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></div><div class="admin-table-wrap"><table><thead><tr><th>Timestamp</th><th>Event type</th><th>Severity</th><th>User</th><th>Description</th></tr></thead><tbody id="events"></tbody></table></div></section>
-    <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">GAME MONITORING</p><h2>FPS Microgame telemetry</h2></div></div><div class="stats-grid monitoring-grid"><article class="stat-card"><span>Active games</span><strong id="activeGames">0</strong></article><article class="stat-card"><span>Average suspicion rate</span><strong id="suspicionRate">0%</strong></article><article class="stat-card"><span>Detections</span><strong id="detectionCount">0</strong></article><article class="stat-card"><span>Active players</span><strong id="activePlayerCount">0</strong></article></div><div id="supportedGames" class="list"><div class="empty">Loading supported games...</div></div><div id="activeGamesList" class="list"><div class="empty">No active games.</div></div></section>
-  </main>
-  <script src="js/api.js?v=admin-fix-4"></script><script src="js/admin-fixed.js"></script>
+
+
+  <!-- SIDEBAR -->
+  <aside class="admin-sidebar">
+    <div class="brand">
+      <div class="brand-mark">SF</div>
+      <div>
+        <strong>SecureFPS</strong>
+        <small>Admin Panel</small>
+      </div>
+    </div>
+
+    <nav>
+      <div class="nav-btn active" data-section="overview">
+        📊 Overview
+      </div>
+      <div class="nav-btn" data-section="players">
+        👥 Players
+      </div>
+      <div class="nav-btn" data-section="security-events">
+        🚨 Security Events
+      </div>
+      <div class="nav-btn" data-section="game-monitoring">
+        🎮 Game Monitoring
+      </div>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="mini-profile">
+        <div class="avatar">SA</div>
+        <div>
+          <strong id="adminName">Admin</strong>
+          <small id="adminEmail">admin@example.com</small>
+        </div>
+      </div>
+      <button id="logoutBtn" class="ghost-btn" type="button">Sign out</button>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <div class="admin-main-wrapper">
+    <main class="dashboard-main">
+
+      <!-- OVERVIEW SECTION -->
+      <section id="overview" class="section active">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">SECURITY OPERATIONS</p>
+            <h1>Admin control center</h1>
+            <p class="muted">Monitor player access, review risk events, and control sessions.</p>
+          </div>
+          <div class="status-pill">
+            <span class="status-dot"></span>
+            Live monitoring
+          </div>
+        </header>
+
+        <section class="stats-grid">
+          <article class="stat-card">
+            <span>Total Players</span>
+            <strong id="playerCount">0</strong>
+            <small>Registered accounts</small>
+          </article>
+          <article class="stat-card">
+            <span>Active Sessions</span>
+            <strong id="sessionCount">0</strong>
+            <small>Currently online</small>
+          </article>
+          <article class="stat-card">
+            <span>Matches Analyzed</span>
+            <strong id="matchCount">0</strong>
+            <small>Total gameplay events</small>
+          </article>
+          <article class="stat-card">
+            <span>High Severity Events</span>
+            <strong id="highCount">0</strong>
+            <small>Needs review</small>
+          </article>
+        </section>
+
+        <section style="margin-top: 32px;">
+          <h2 style="margin-bottom: 16px;">Recent security events</h2>
+          <div id="recentEvents" style="background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 20px;">
+            <p class="muted">Loading events...</p>
+          </div>
+        </section>
+      </section>
+
+      <!-- PLAYERS SECTION -->
+      <section id="players" class="section">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">PLAYER ACCESS</p>
+            <h1>Player management</h1>
+          </div>
+        </header>
+
+        <div class="admin-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Email</th>
+                <th>MFA</th>
+                <th>Status</th>
+                <th>Risk Score</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="playersTable">
+            </tbody>
+          </table>
+          <div id="playersEmpty" class="empty-state" style="display: none;">
+            <strong>No players</strong>
+            <p>No player accounts have been created yet.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECURITY EVENTS SECTION -->
+      <section id="security-events" class="section">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">AUDIT TRAIL</p>
+            <h1>Security events log</h1>
+          </div>
+        </header>
+
+        <div style="margin-bottom: 20px;">
+          <label style="color: #aaa; margin-right: 16px;">
+            Filter by severity:
+            <select id="severityFilter" style="background: rgba(79, 140, 255, 0.15); color: #fff; padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(79, 140, 255, 0.4);">
+              <option value="">All</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="admin-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Type</th>
+                <th>Severity</th>
+                <th>User</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody id="eventsTable">
+            </tbody>
+          </table>
+          <div id="eventsEmpty" class="empty-state" style="display: none;">
+            <strong>No security events</strong>
+            <p>No events have been recorded yet.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- GAME MONITORING SECTION -->
+      <section id="game-monitoring" class="section">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">GAME TELEMETRY</p>
+            <h1>Game monitoring</h1>
+          </div>
+        </header>
+
+        <section class="stats-grid">
+          <article class="stat-card">
+            <span>Active Games</span>
+            <strong>1</strong>
+            <small>FPS Microgame</small>
+          </article>
+          <article class="stat-card">
+            <span>Total Matches</span>
+            <strong id="totalMatches">0</strong>
+            <small>All-time</small>
+          </article>
+          <article class="stat-card">
+            <span>Avg Suspicion Rate</span>
+            <strong id="avgSuspicion">0%</strong>
+            <small>Gameplay anomalies</small>
+          </article>
+          <article class="stat-card">
+            <span>Detections</span>
+            <strong id="detectionCount">0</strong>
+            <small>Behavioral anomalies</small>
+          </article>
+        </section>
+
+        <section style="margin-top: 32px;">
+          <h2 style="margin-bottom: 16px;">Supported games</h2>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+            <div class="game-card featured">
+              <div class="game-art art-one"><span>FPS 01</span></div>
+              <div class="game-info">
+                <span class="tag">ACTIVE</span>
+                <h3>FPS Microgame</h3>
+                <p>Unity-based FPS with built-in telemetry and detection systems.</p>
+                <small style="color: #aaa;">Players: <strong id="fps1Players">0</strong></small>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    // Check authentication - only admin
+    async function checkAuth() {
+      try {
+        const data = await api("/auth/me");
+        if (data.user.role !== 'admin') {
+          window.location.href = 'dashboard.html';
+          return false;
+        }
+        return data.user;
+      } catch (err) {
+        console.error('Auth check error:', err);
+        window.location.href = 'login.html';
+        return false;
+      }
+    }
+
+    // Navigation handling
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        btn.classList.add('active');
+        const section = document.getElementById(btn.dataset.section);
+        if (section) {
+          section.classList.add('active');
+          loadSectionData(btn.dataset.section);
+        }
+      });
+    });
+
+    // Load admin profile
+    async function loadProfile(user) {
+      document.getElementById('adminName').textContent = user.name;
+      document.getElementById('adminEmail').textContent = user.email;
+    }
+
+    // Load overview data
+    async function loadOverview() {
+      try {
+        const res = await fetch('/api/admin/overview');
+        if (!res.ok) throw new Error('Failed to load overview');
+        const data = await res.json();
+        
+        document.getElementById('playerCount').textContent = data.stats.total_players;
+        document.getElementById('sessionCount').textContent = data.stats.active_sessions;
+        document.getElementById('matchCount').textContent = data.stats.matches_analyzed;
+        document.getElementById('highCount').textContent = data.stats.high_severity_events;
+
+        const eventsDiv = document.getElementById('recentEvents');
+        if (data.recent_events.length === 0) {
+          eventsDiv.innerHTML = '<p class="muted">No security events recorded.</p>';
+        } else {
+          eventsDiv.innerHTML = data.recent_events.map(e => `
+            <div style="padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+              <strong>${e.type}</strong>
+              <span class="severity-badge severity-${e.severity}">${e.severity}</span>
+              <br>
+              <small style="color: #aaa;">${new Date(e.timestamp).toLocaleString()}</small><br>
+              <small style="color: #666;">${e.description}</small>
+            </div>
+          `).join('');
+        }
+      } catch (err) {
+        console.error('Error loading overview:', err);
+      }
+    }
+
+    // Load players
+    async function loadPlayers() {
+      try {
+        const res = await fetch('/api/admin/players');
+        if (!res.ok) throw new Error('Failed to load players');
+        const data = await res.json();
+        const tbody = document.getElementById('playersTable');
+        const empty = document.getElementById('playersEmpty');
+
+        if (data.players.length === 0) {
+          tbody.parentElement.style.display = 'none';
+          empty.style.display = 'block';
+          return;
+        }
+
+        tbody.innerHTML = data.players.map(p => `
+          <tr>
+            <td><strong>${p.name}</strong></td>
+            <td>${p.email}</td>
+            <td>${p.mfa_enabled ? '✓ Enabled' : '✗ Disabled'}</td>
+            <td>${p.account_status === 'active' ? '<span style="color: #35d49a;">Active</span>' : '<span style="color: #ff6b6b;">Suspended</span>'}</td>
+            <td>${p.risk_score}</td>
+            <td>${new Date(p.created_at).toLocaleDateString()}</td>
+            <td>
+              <button class="action-btn" onclick="viewPlayer('${p.id}')">View</button>
+              <button class="action-btn danger" onclick="suspendPlayer('${p.id}', '${p.name}')">Suspend</button>
+              <button class="action-btn danger" onclick="deletePlayer('${p.id}', '${p.name}')">Delete</button>
+            </td>
+          </tr>
+        `).join('');
+        tbody.parentElement.style.display = 'table';
+        empty.style.display = 'none';
+      } catch (err) {
+        console.error('Error loading players:', err);
+      }
+    }
+
+    // Load security events
+    async function loadSecurityEvents() {
+      try {
+        const severity = document.getElementById('severityFilter').value;
+        const url = new URL('/api/admin/security-events', window.location.origin);
+        if (severity) url.searchParams.set('severity', severity);
+        
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to load events');
+        const data = await res.json();
+        const tbody = document.getElementById('eventsTable');
+        const empty = document.getElementById('eventsEmpty');
+
+        if (data.events.length === 0) {
+          tbody.parentElement.style.display = 'none';
+          empty.style.display = 'block';
+          return;
+        }
+
+        tbody.innerHTML = data.events.map(e => `
+          <tr>
+            <td>${new Date(e.timestamp).toLocaleString()}</td>
+            <td>${e.type}</td>
+            <td><span class="severity-badge severity-${e.severity}">${e.severity}</span></td>
+            <td>${e.user_id ? e.user_id.substring(0, 8) + '...' : 'System'}</td>
+            <td>${e.description}</td>
+          </tr>
+        `).join('');
+        tbody.parentElement.style.display = 'table';
+        empty.style.display = 'none';
+      } catch (err) {
+        console.error('Error loading events:', err);
+      }
+    }
+
+    // Load section data
+    async function loadSectionData(section) {
+      if (section === 'overview') loadOverview();
+      else if (section === 'players') loadPlayers();
+      else if (section === 'security-events') loadSecurityEvents();
+    }
+
+    // Admin actions
+    function viewPlayer(playerId) {
+      alert('View player: ' + playerId + '\nFeature coming soon');
+    }
+
+    async function suspendPlayer(playerId, name) {
+      if (!confirm(`Suspend player ${name}?`)) return;
+      try {
+        const res = await fetch(`/api/admin/players/${playerId}/suspend`, { method: 'POST' });
+        if (res.ok) {
+          alert('Player suspended');
+          loadPlayers();
+        } else {
+          alert('Failed to suspend player');
+        }
+      } catch (err) {
+        console.error('Error suspending player:', err);
+      }
+    }
+
+    async function deletePlayer(playerId, name) {
+      if (!confirm(`Delete player ${name}? This cannot be undone.`)) return;
+      try {
+        const res = await fetch(`/api/admin/players/${playerId}/delete`, { method: 'POST' });
+        if (res.ok) {
+          alert('Player deleted');
+          loadPlayers();
+        } else {
+          alert('Failed to delete player');
+        }
+      } catch (err) {
+        console.error('Error deleting player:', err);
+      }
+    }
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      try {
+        await api('/auth/logout', { method: 'POST' });
+        window.location.href = 'login.html';
+      } catch (err) {
+        console.error('Logout error:', err);
+        window.location.href = 'login.html';
+      }
+    });
+
+    // Filter events
+    document.getElementById('severityFilter').addEventListener('change', loadSecurityEvents);
+
+    // Initialize
+    (async () => {
+      const user = await checkAuth();
+      if (user) {
+        await loadProfile(user);
+        loadOverview();
+      }
+    })();
+  </script>
+
+
 </body>
 </html>
