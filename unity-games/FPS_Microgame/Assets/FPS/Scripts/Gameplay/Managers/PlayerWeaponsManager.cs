@@ -144,11 +144,20 @@ namespace Unity.FPS.Gameplay
                     m_InputHandler.GetFireInputHeld(),
                     m_InputHandler.GetFireInputReleased());
 
-                // Handle accumulating recoil
+                // ============================================================
+                // SECUREFPS TELEMETRY
+                // Send weapon_fire only when the weapon actually fires.
+                // This gives the backend the raw shot count needed for:
+                // Accuracy and Fire_Rate.
+                // ============================================================
                 if (hasFired)
                 {
+                    // Handle accumulating recoil
                     m_AccumulatedRecoil += Vector3.back * activeWeapon.RecoilForce;
-                    m_AccumulatedRecoil = Vector3.ClampMagnitude(m_AccumulatedRecoil, MaxRecoilDistance);
+                    m_AccumulatedRecoil = Vector3.ClampMagnitude(
+                        m_AccumulatedRecoil,
+                        MaxRecoilDistance
+                    );
                 }
             }
 

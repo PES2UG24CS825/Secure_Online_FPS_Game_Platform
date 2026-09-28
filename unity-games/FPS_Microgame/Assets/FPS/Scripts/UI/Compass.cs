@@ -32,12 +32,17 @@ namespace Unity.FPS.UI
             m_WidthMultiplier = CompasRect.rect.width / VisibilityAngle;
             m_HeightOffset = -CompasRect.rect.height / 2;
         }
-
+        
         void Update()
         {
+            if (m_PlayerTransform == null || CompasRect == null)
+                return;
             // this is all very WIP, and needs to be reworked
             foreach (var element in m_ElementsDictionnary)
             {
+                if (element.Key == null || element.Value == null ||
+                    element.Value.CanvasGroup == null)
+                    continue;
                 float distanceRatio = 1;
                 float heightDifference = 0;
                 float angle;

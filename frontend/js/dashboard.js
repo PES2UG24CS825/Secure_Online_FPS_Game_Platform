@@ -2,11 +2,165 @@
 // SecureFPS Dashboard
 // ============================================================
 
-// Unity game locations
+
+// ============================================================
+// CONFIGURATION
+// ============================================================
+
+if (window.__SECUREFPS_DASHBOARD_LOADED__) {
+
+    console.warn(
+        "[SecureFPS] dashboard.js already loaded. Skipping duplicate execution."
+    );
+
+} 
+else {
+
+    window.__SECUREFPS_DASHBOARD_LOADED__ = true;
+
+
+    // ============================================================
+    // SecureFPS Dashboard
+    // ============================================================
+
+    const API_BASE =
+        "http://127.0.0.1:5000/api";
+}
+
+// ============================================================
+// UNITY GAME LOCATIONS
+// ============================================================
+
 const GAME_URLS = {
-    "fps-microgame": "/public/games/FPS_Microgame/index.html",
-    "multiplayer-fps": "/public/games/Multiplayer_FPS/index.html"
+
+    "fps-microgame":
+        "/public/games/FPS_Microgame/index.html",
+
+    "multiplayer-fps":
+        "/public/games/Multiplayer_FPS/index.html"
+
 };
+
+
+// ============================================================
+// API HELPER
+// ============================================================
+//
+// All requests to Flask go through this function.
+//
+// credentials: "include" is IMPORTANT because your Flask
+// authentication uses a session cookie.
+//
+
+async function api(
+    path,
+    options = {}
+) {
+
+    const config = {
+        credentials: "include",
+        ...options
+    };
+
+
+    // Add JSON header only when needed
+    if (
+        !config.headers
+    ) {
+
+        config.headers = {};
+
+    }
+
+
+    if (
+        !config.headers["Content-Type"] &&
+        config.body
+    ) {
+
+        config.headers["Content-Type"] =
+            "application/json";
+
+    }
+
+
+    const url =
+        `${API_BASE}${path}`;
+
+
+    console.log(
+        "[SecureFPS] API request:",
+        config.method || "GET",
+        url
+    );
+
+
+    let response;
+
+
+    try {
+
+        response =
+            await fetch(
+                url,
+                config
+            );
+
+    } catch (error) {
+
+        console.error(
+            "[SecureFPS] Network error:",
+            error
+        );
+
+        throw new Error(
+            "Cannot connect to Flask backend at " +
+            API_BASE
+        );
+
+    }
+
+
+    let data = {};
+
+
+    try {
+
+        data =
+            await response.json();
+
+    } catch (error) {
+
+        data = {};
+
+    }
+
+
+    const safeData = { ...data };
+    if (safeData.game_token) {
+        safeData.game_token = "[REDACTED]";
+    }
+
+    console.log(
+        "[SecureFPS] API response:",
+        response.status,
+        safeData
+    );
+
+
+    if (!response.ok) {
+
+        throw new Error(
+            data.message ||
+            `Request failed with HTTP ${response.status}`
+        );
+
+    }
+
+
+    return data;
+
+}
 
 
 // ============================================================
@@ -15,64 +169,183 @@ const GAME_URLS = {
 
 async function loadDashboard() {
 
+    console.log(
+        "[SecureFPS] Loading dashboard..."
+    );
+
+
     try {
 
-        const me = await api("/auth/me");
-        const user = me.user;
+        // ----------------------------------------------------
+        // GET CURRENT USER
+        // ----------------------------------------------------
 
-        if (user.role === "admin") {
-            window.location.replace("admin.html");
+        const me =
+            await api(
+                "/auth/me"
+            );
+
+
+        const user =
+            me.user;
+
+
+        if (!user) {
+
+            console.warn(
+                "[SecureFPS] No authenticated user."
+            );
+
+            window.location.href =
+                "login.html";
+
             return;
+
         }
 
-        const playerAnalysis = document.getElementById("playerAnalysis");
-        if (playerAnalysis) playerAnalysis.remove();
 
-        const welcome = document.getElementById("welcome");
-        const sideName = document.getElementById("sideName");
-        const sideEmail = document.getElementById("sideEmail");
-        const avatar = document.getElementById("avatar");
+        console.log(
+            "[SecureFPS] Logged-in user:",
+            user.email
+        );
+
+
+        // ----------------------------------------------------
+        // ADMIN REDIRECT
+        // ----------------------------------------------------
+
+        if (
+            user.role === "admin"
+        ) {
+
+            window.location.replace(
+                "admin.html"
+            );
+
+            return;
+
+        }
+
+
+        // ----------------------------------------------------
+        // USER INFORMATION
+        // ----------------------------------------------------
+
+        const welcome =
+            document.getElementById(
+                "welcome"
+            );
+
+
+        const sideName =
+            document.getElementById(
+                "sideName"
+            );
+
+
+        const sideEmail =
+            document.getElementById(
+                "sideEmail"
+            );
+
+
+        const avatar =
+            document.getElementById(
+                "avatar"
+            );
+
 
         if (welcome) {
-            welcome.textContent = `Welcome back, ${user.name}`;
+
+            welcome.textContent =
+                `Welcome back, ${user.name}`;
+
         }
+
 
         if (sideName) {
-            sideName.textContent = user.name;
+
+            sideName.textContent =
+                user.name;
+
         }
+
 
         if (sideEmail) {
-            sideEmail.textContent = user.email;
+
+            sideEmail.textContent =
+                user.email;
+
         }
+
 
         if (avatar) {
+
             avatar.textContent =
-                user.name.charAt(0).toUpperCase();
+                user.name
+                    .charAt(0)
+                    .toUpperCase();
+
         }
 
 
-        // Dashboard data
-        const data = await api("/dashboard");
+        // ----------------------------------------------------
+        // GET DASHBOARD DATA
+        // ----------------------------------------------------
+
+        const data =
+            await api(
+                "/dashboard"
+            );
 
 
-        // Statistics
-        const matches = document.getElementById("matches");
-        const alerts = document.getElementById("alerts");
+        console.log(
+            "[SecureFPS] Dashboard data:",
+            data
+        );
+
+
+        // ----------------------------------------------------
+        // STATISTICS
+        // ----------------------------------------------------
+
+        const matches =
+            document.getElementById(
+                "matches"
+            );
+
+
+        const alerts =
+            document.getElementById(
+                "alerts"
+            );
+
 
         if (matches) {
+
             matches.textContent =
                 data.stats?.matches_analyzed ?? 0;
+
         }
+
 
         if (alerts) {
+
             alerts.textContent =
                 data.stats?.alerts ?? 0;
+
         }
 
 
-        // Recent detections
+        // ----------------------------------------------------
+        // RECENT DETECTIONS
+        // ----------------------------------------------------
+
         const detections =
-            document.getElementById("detectionsList");
+            document.getElementById(
+                "detectionsList"
+            );
+
 
         if (detections) {
 
@@ -82,55 +355,106 @@ async function loadDashboard() {
             ) {
 
                 detections.innerHTML =
-                    data.recent_detections.map(d => {
+                    data.recent_detections
+                        .map(
+                            function (detection) {
 
-                        const bad =
-                            d.rf === "cheater" ||
-                            d.if === "anomaly";
+                                const bad =
+                                    detection.rf ===
+                                        "cheater" ||
 
-                        const score =
-                            d.risk_score == null
-                                ? "—"
-                                : `${Math.round(
-                                    d.risk_score * 100
-                                )}%`;
+                                    detection.if ===
+                                        "anomaly";
 
-                        return `
-                            <div class="list-row">
 
-                                <div>
-                                    <strong>RF:</strong>
-                                    ${d.rf ?? "not loaded"}
+                                const score =
+                                    detection.risk_score ==
+                                    null
 
-                                    &nbsp;&nbsp;
+                                        ? "—"
 
-                                    <strong>IF:</strong>
-                                    ${d.if ?? "not loaded"}
-                                </div>
+                                        : `${Math.round(
+                                            Number(
+                                                detection.risk_score
+                                            ) * 100
+                                        )}%`;
 
-                                <span class="badge ${
-                                    bad ? "bad" : "good"
-                                }">
-                                    ${bad ? "Review" : "Normal"}
-                                    · ${score}
-                                </span>
 
-                            </div>
-                        `;
+                                return `
 
-                    }).join("");
+                                    <div class="list-row">
+
+                                        <div>
+
+                                            <strong>
+                                                RF:
+                                            </strong>
+
+                                            ${escapeHtml(
+                                                detection.rf ??
+                                                "not loaded"
+                                            )}
+
+                                            &nbsp;&nbsp;
+
+                                            <strong>
+                                                IF:
+                                            </strong>
+
+                                            ${escapeHtml(
+                                                detection.if ??
+                                                "not loaded"
+                                            )}
+
+                                        </div>
+
+
+                                        <span class="badge ${
+                                            bad
+                                                ? "bad"
+                                                : "good"
+                                        }">
+
+                                            ${
+                                                bad
+                                                    ? "Review"
+                                                    : "Normal"
+                                            }
+
+                                            · ${score}
+
+                                        </span>
+
+                                    </div>
+
+                                `;
+
+                            }
+                        )
+                        .join("");
 
             } else {
 
-                detections.innerHTML =
-                    '<div class="empty">No gameplay detections yet.</div>';
+                detections.innerHTML = `
+                    <div class="empty">
+                        No gameplay detections yet.
+                    </div>
+                `;
+
             }
+
         }
 
 
-        // Security alerts
+        // ----------------------------------------------------
+        // SECURITY ALERTS
+        // ----------------------------------------------------
+
         const alertsList =
-            document.getElementById("alertsList");
+            document.getElementById(
+                "alertsList"
+            );
+
 
         if (alertsList) {
 
@@ -140,52 +464,100 @@ async function loadDashboard() {
             ) {
 
                 alertsList.innerHTML =
-                    data.alerts.map(a => {
+                    data.alerts
+                        .map(
+                            function (alert) {
 
-                        const type =
-                            String(
-                                a.type ?? "security_alert"
-                            ).replaceAll("_", " ");
+                                const type =
+                                    String(
+                                        alert.type ??
+                                        "security_alert"
+                                    )
+                                    .replaceAll(
+                                        "_",
+                                        " "
+                                    );
 
-                        const severity =
-                            a.severity ?? "low";
 
-                        return `
-                            <div class="list-row">
+                                const severity =
+                                    alert.severity ??
+                                    "low";
 
-                                <div>
-                                    ${type}
-                                </div>
 
-                                <span class="badge ${
-                                    severity === "high"
-                                        ? "bad"
-                                        : "warn"
-                                }">
-                                    ${severity}
-                                </span>
+                                return `
 
-                            </div>
-                        `;
+                                    <div class="list-row">
 
-                    }).join("");
+                                        <div>
+
+                                            ${escapeHtml(
+                                                type
+                                            )}
+
+                                        </div>
+
+
+                                        <span class="badge ${
+                                            severity === "high"
+                                                ? "bad"
+                                                : "warn"
+                                        }">
+
+                                            ${escapeHtml(
+                                                severity
+                                            )}
+
+                                        </span>
+
+                                    </div>
+
+                                `;
+
+                            }
+                        )
+                        .join("");
 
             } else {
 
-                alertsList.innerHTML =
-                    '<div class="empty">No security alerts.</div>';
+                alertsList.innerHTML = `
+                    <div class="empty">
+                        No security alerts.
+                    </div>
+                `;
+
             }
+
         }
+
 
     } catch (error) {
 
         console.error(
-            "Dashboard loading error:",
+            "[SecureFPS] Dashboard loading error:",
             error
         );
 
-        window.location.href = "login.html";
+
+        // Only redirect for authentication problems.
+        // Do not redirect if MongoDB/API temporarily fails.
+
+        if (
+            error.message &&
+            (
+                error.message.includes("401") ||
+                error.message.includes(
+                    "Authentication required"
+                )
+            )
+        ) {
+
+            window.location.href =
+                "login.html";
+
+        }
+
     }
+
 }
 
 
@@ -194,455 +566,769 @@ async function loadDashboard() {
 // ============================================================
 
 const logoutBtn =
-    document.getElementById("logoutBtn");
+    document.getElementById(
+        "logoutBtn"
+    );
+
 
 if (logoutBtn) {
 
-    logoutBtn.addEventListener("click", async () => {
-
-        try {
-
-            await api("/auth/logout", {
-                method: "POST"
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Logout error:",
-                error
-            );
-        }
-
-        window.location.href = "login.html";
-
-    });
-}
-
-
-// ============================================================
-// UNITY GAME
-// ============================================================
-
-function openUnityGame(gameKey) {
-
-    console.log("Opening Unity game:", gameKey);
-
-    const gameUrl = GAME_URLS[gameKey];
-
-    if (!gameUrl) {
-
-        console.error(
-            "Game URL not found:",
-            gameKey
-        );
-
-        return;
-    }
-
-
-    // Remove existing game window
-    const existing =
-        document.getElementById("unityGameModal");
-
-    if (existing) {
-        existing.remove();
-    }
-
-
-    // Create modal
-    const modal =
-        document.createElement("div");
-
-    modal.id = "unityGameModal";
-
-    modal.innerHTML = `
-
-        <div class="unity-overlay">
-
-            <div class="unity-container">
-
-                <div class="unity-header">
-
-                    <div>
-                        <strong>FPS Microgame</strong>
-                        <small>Unity WebGL</small>
-                    </div>
-
-                    <div class="unity-buttons">
-
-                        <button
-                            id="unityFullscreen"
-                            type="button">
-                            ⛶ Fullscreen
-                        </button>
-
-                        <button
-                            id="unityClose"
-                            type="button">
-                            ✕ Close
-                        </button>
-
-                    </div>
-
-                </div>
-
-
-                <div class="unity-content">
-
-                    <div
-                        id="unityLoading"
-                        class="unity-loading">
-
-                        <div class="spinner"></div>
-
-                        <p>Loading FPS Microgame...</p>
-
-                    </div>
-
-
-                    <iframe
-                        id="unityFrame"
-                        src="${gameUrl}"
-                        title="FPS Microgame"
-                        allow="fullscreen; autoplay"
-                        allowfullscreen>
-                    </iframe>
-
-                </div>
-
-            </div>
-
-        </div>
-    `;
-
-
-    document.body.appendChild(modal);
-
-    document.body.style.overflow = "hidden";
-
-
-    // Add styles
-    addUnityStyles();
-
-
-    // iframe
-    const iframe =
-        document.getElementById("unityFrame");
-
-
-    // Loading
-    const loading =
-        document.getElementById("unityLoading");
-
-
-    iframe.addEventListener("load", () => {
-
-        if (loading) {
-            loading.style.display = "none";
-        }
-
-    });
-
-
-    // Close
-    const close =
-        document.getElementById("unityClose");
-
-    close.addEventListener("click", () => {
-
-        modal.remove();
-
-        document.body.style.overflow = "";
-
-    });
-
-
-    // Fullscreen
-    const fullscreen =
-        document.getElementById(
-            "unityFullscreen"
-        );
-
-    fullscreen.addEventListener(
+    logoutBtn.addEventListener(
         "click",
-        async () => {
+        async function () {
 
             try {
 
-                await iframe.requestFullscreen();
+                await api(
+                    "/auth/logout",
+                    {
+                        method: "POST"
+                    }
+                );
 
             } catch (error) {
 
                 console.error(
-                    "Fullscreen error:",
+                    "[SecureFPS] Logout error:",
                     error
                 );
 
             }
 
+
+            window.location.href =
+                "login.html";
+
         }
     );
+
 }
 
 
 // ============================================================
-// UNITY GAME STYLES
+// CREATE SECURE UNITY GAME SESSION
+// ============================================================
+//
+// IMPORTANT:
+//
+// The browser does NOT create the game token.
+//
+// Flask creates:
+//
+//     session_id
+//     game_token
+//
+// through:
+//
+//     POST /api/game/start
+//
+// Then this function receives them and creates:
+//
+//     Unity/index.html
+//       ?session_id=XXXX
+//       &game_token=YYYY
+//
 // ============================================================
 
-function addUnityStyles() {
+async function startUnityGameSession(
+    gameKey
+) {
 
-    if (
-        document.getElementById(
-            "unityGameStyles"
-        )
-    ) {
-        return;
-    }
+    console.log(
+        "=========================================="
+    );
 
+    console.log(
+        "[SecureFPS] STARTING UNITY GAME SESSION"
+    );
 
-    const style =
-        document.createElement("style");
+    console.log(
+        "Game:",
+        gameKey
+    );
 
-    style.id = "unityGameStyles";
+    console.log(
+        "=========================================="
+    );
 
 
-    style.textContent = `
+    // --------------------------------------------------------
+    // CHECK GAME URL
+    // --------------------------------------------------------
 
-        #unityGameModal {
-            position: fixed;
-            inset: 0;
-            z-index: 999999;
-        }
+    const baseGameUrl =
+        GAME_URLS[gameKey];
 
-        .unity-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.92);
 
-            display: flex;
-            align-items: center;
-            justify-content: center;
+    if (!baseGameUrl) {
 
-            padding: 20px;
-        }
-
-        .unity-container {
-            width: 95vw;
-            height: 92vh;
-
-            background: #080d16;
-
-            border-radius: 12px;
-            overflow: hidden;
-
-            display: flex;
-            flex-direction: column;
-
-            box-shadow:
-                0 20px 80px rgba(0,0,0,0.7);
-        }
-
-        .unity-header {
-            height: 55px;
-            min-height: 55px;
-
-            background: #0c1624;
-
-            color: white;
-
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-
-            padding: 0 15px;
-
-            box-sizing: border-box;
-        }
-
-        .unity-header strong {
-            display: block;
-            font-size: 15px;
-        }
-
-        .unity-header small {
-            display: block;
-            margin-top: 3px;
-            opacity: 0.6;
-        }
-
-        .unity-buttons {
-            display: flex;
-            gap: 8px;
-        }
-
-        .unity-buttons button {
-            border: 1px solid
-                rgba(255,255,255,0.15);
-
-            background: #16253a;
-            color: white;
-
-            padding: 8px 12px;
-
-            border-radius: 6px;
-
-            cursor: pointer;
-        }
-
-        .unity-buttons button:hover {
-            background: #243c5b;
-        }
-
-        .unity-content {
-            position: relative;
-
-            flex: 1;
-
-            background: black;
-        }
-
-        #unityFrame {
-            position: absolute;
-
-            left: 0;
-            top: 0;
-
-            width: 100%;
-            height: 100%;
-
-            border: none;
-
-            background: black;
-        }
-
-        .unity-loading {
-            position: absolute;
-
-            inset: 0;
-
-            z-index: 5;
-
-            display: flex;
-
-            flex-direction: column;
-
-            align-items: center;
-
-            justify-content: center;
-
-            background: black;
-
-            color: white;
-        }
-
-        .spinner {
-            width: 35px;
-            height: 35px;
-
-            border: 3px solid
-                rgba(255,255,255,0.25);
-
-            border-top-color: white;
-
-            border-radius: 50%;
-
-            animation:
-                spin 0.8s linear infinite;
-        }
-
-        .unity-loading p {
-            margin-top: 15px;
-            opacity: 0.7;
-        }
-
-        @keyframes spin {
-
-            from {
-                transform: rotate(0deg);
-            }
-
-            to {
-                transform: rotate(360deg);
-            }
-
-        }
-
-        @media(max-width:700px) {
-
-            .unity-overlay {
-                padding: 0;
-            }
-
-            .unity-container {
-                width: 100vw;
-                height: 100vh;
-
-                border-radius: 0;
-            }
-
-        }
-
-    `;
-
-    document.head.appendChild(style);
-}
-
-
-// ============================================================
-// PLAY BUTTONS
-// ============================================================
-
-document.addEventListener("click", function(event) {
-
-    const button =
-        event.target.closest(
-            ".play-btn[data-game]"
+        throw new Error(
+            `Game URL not found: ${gameKey}`
         );
 
-    if (!button) {
-        return;
     }
-
-
-    event.preventDefault();
-    event.stopPropagation();
-
-
-    const game =
-        button.getAttribute("data-game");
 
 
     console.log(
-        "PLAY GAME BUTTON CLICKED:",
-        game
+        "[SecureFPS] Base Unity URL:",
+        baseGameUrl
     );
 
 
-    openUnityGame(game);
+    // --------------------------------------------------------
+    // CALL FLASK
+    // --------------------------------------------------------
+
+    console.log(
+        "[SecureFPS] Calling POST /api/game/start..."
+    );
+
+
+    let response;
+
+
+    try {
+
+        response =
+            await api(
+                "/game/start",
+                {
+                    method: "POST"
+                }
+            );
+
+    } catch (error) {
+
+        console.error(
+            "[SecureFPS] /api/game/start failed:",
+            error
+        );
+
+
+        throw new Error(
+            "Could not create game session. " +
+            "Make sure Flask is running and you are logged in."
+        );
+
+    }
+
+
+    // --------------------------------------------------------
+    // Log session metadata without exposing the game token.
+    // --------------------------------------------------------
+
+    console.log(
+        "[SecureFPS] /game/start response:",
+        {
+            success: Boolean(response && response.success),
+            session_id: response && response.session_id,
+            game_token_received: Boolean(response && response.game_token),
+            game: response && response.game
+        }
+    );
+
+
+    // --------------------------------------------------------
+    // VALIDATE SESSION ID
+    // --------------------------------------------------------
+
+    if (
+        !response ||
+        !response.session_id
+    ) {
+
+        console.error(
+            "[SecureFPS] session_id missing from /game/start response."
+        );
+
+
+        throw new Error(
+            "Flask did not return session_id."
+        );
+
+    }
+
+
+    // --------------------------------------------------------
+    // VALIDATE GAME TOKEN
+    // --------------------------------------------------------
+
+    if (
+        !response.game_token
+    ) {
+
+        console.error(
+            "[SecureFPS] game_token missing from /game/start response."
+        );
+
+
+        throw new Error(
+            "Flask did not return game_token."
+        );
+
+    }
+
+
+    const sessionId =
+        response.session_id;
+
+
+    const gameToken =
+        response.game_token;
+
+
+    // --------------------------------------------------------
+    // LOG CREDENTIAL STATUS
+    // --------------------------------------------------------
+
+    console.log(
+        "[SecureFPS] Game session created successfully."
+    );
+
+
+    console.log(
+        "[SecureFPS] Session ID:",
+        sessionId
+    );
+
+
+    console.log(
+        "[SecureFPS] Game token received:",
+        true
+    );
+
+
+    // --------------------------------------------------------
+    // CREATE UNITY URL
+    // --------------------------------------------------------
+
+    const separator =
+        baseGameUrl.includes("?")
+            ? "&"
+            : "?";
+
+
+    const gameUrl =
+        baseGameUrl +
+        separator +
+        "session_id=" +
+        encodeURIComponent(
+            sessionId
+        ) +
+        "&game_token=" +
+        encodeURIComponent(
+            gameToken
+        );
+
+
+    // --------------------------------------------------------
+    // DO NOT PRINT THE COMPLETE TOKEN
+    // --------------------------------------------------------
+
+    console.log(
+        "[SecureFPS] Final Unity URL created."
+    );
+
+
+    console.log(
+        "[SecureFPS] Session parameter present:",
+        gameUrl.includes(
+            "session_id="
+        )
+    );
+
+
+    console.log(
+        "[SecureFPS] Token parameter present:",
+        gameUrl.includes(
+            "game_token="
+        )
+    );
+
+
+    return gameUrl;
+
+}
+
+
+// ============================================================
+// OPEN UNITY GAME
+// ============================================================
+
+async function openUnityGame(
+    gameKey
+) {
+
+    console.log(
+        "[SecureFPS] Opening Unity game:",
+        gameKey
+    );
+
+
+    // --------------------------------------------------------
+    // CHECK GAME
+    // --------------------------------------------------------
+
+    if (
+        !GAME_URLS[gameKey]
+    ) {
+
+        console.error(
+            "[SecureFPS] Unknown game:",
+            gameKey
+        );
+
+        return;
+
+    }
+
+
+    // --------------------------------------------------------
+    // GET ELEMENTS
+    // --------------------------------------------------------
+
+    const gameSection =
+        document.getElementById(
+            "gameSection"
+        );
+
+
+    const gameFrame =
+        document.getElementById(
+            "gameFrame"
+        );
+
+
+    const gameLoading =
+        document.getElementById(
+            "gameLoading"
+        );
+
+
+    const gameError =
+        document.getElementById(
+            "gameError"
+        );
+
+
+    if (!gameSection) {
+
+        console.error(
+            "[SecureFPS] gameSection not found."
+        );
+
+        return;
+
+    }
+
+
+    if (!gameFrame) {
+
+        console.error(
+            "[SecureFPS] gameFrame not found."
+        );
+
+        return;
+
+    }
+
+
+    // --------------------------------------------------------
+    // RESET UI
+    // --------------------------------------------------------
+
+    if (gameError) {
+
+        gameError.classList.remove(
+            "active"
+        );
+
+    }
+
+
+    if (gameLoading) {
+
+        gameLoading.classList.add(
+            "active"
+        );
+
+
+        const loadingText =
+            gameLoading.querySelector(
+                "p"
+            );
+
+
+        if (loadingText) {
+
+            loadingText.textContent =
+                "Creating secure game session...";
+
+        }
+
+    }
+
+
+    // --------------------------------------------------------
+    // SHOW GAME
+    // --------------------------------------------------------
+
+    gameSection.style.display =
+        "block";
+
+
+    gameSection.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+    });
+
+
+    // --------------------------------------------------------
+    // CLEAR OLD UNITY
+    // --------------------------------------------------------
+
+    gameFrame.onload =
+        function () {
+
+            console.log(
+                "[SecureFPS] Unity WebGL page loaded."
+            );
+
+
+            if (gameLoading) {
+
+                gameLoading.classList.remove(
+                    "active"
+                );
+
+            }
+
+        };
+
+
+    gameFrame.onerror =
+        function () {
+
+            console.error(
+                "[SecureFPS] Unity iframe failed to load."
+            );
+
+
+            if (gameLoading) {
+
+                gameLoading.classList.remove(
+                    "active"
+                );
+
+            }
+
+
+            if (gameError) {
+
+                gameError.textContent =
+                    "Unable to load the Unity WebGL game.";
+
+                gameError.classList.add(
+                    "active"
+                );
+
+            }
+
+        };
+
+
+    gameFrame.src =
+        "about:blank";
+
+
+    // --------------------------------------------------------
+    // CREATE SESSION AND GET SECURE URL
+    // --------------------------------------------------------
+
+    try {
+
+        const gameUrl =
+            await startUnityGameSession(
+                gameKey
+            );
+
+
+        console.log(
+            "[SecureFPS] Loading Unity WebGL..."
+        );
+
+
+        // ----------------------------------------------------
+        // LOAD UNITY
+        // ----------------------------------------------------
+
+        gameFrame.src =
+            gameUrl;
+
+
+    } catch (error) {
+
+        console.error(
+            "[SecureFPS] Could not start Unity:",
+            error
+        );
+
+
+        if (gameLoading) {
+
+            gameLoading.classList.remove(
+                "active"
+            );
+
+        }
+
+
+        if (gameError) {
+
+            gameError.textContent =
+                error.message ||
+                "Unable to start the Unity game.";
+
+            gameError.classList.add(
+                "active"
+            );
+
+        }
+
+    }
+
+}
+
+
+// ============================================================
+// CLOSE UNITY GAME
+// ============================================================
+
+const closeGameBtn =
+    document.getElementById(
+        "closeGameBtn"
+    );
+
+
+if (closeGameBtn) {
+
+    closeGameBtn.addEventListener(
+        "click",
+        function () {
+
+            console.log(
+                "[SecureFPS] Closing Unity game."
+            );
+
+
+            const gameSection =
+                document.getElementById(
+                    "gameSection"
+                );
+
+
+            const gameFrame =
+                document.getElementById(
+                    "gameFrame"
+                );
+
+
+            const gameLoading =
+                document.getElementById(
+                    "gameLoading"
+                );
+
+
+            const gameError =
+                document.getElementById(
+                    "gameError"
+                );
+
+
+            // ------------------------------------------------
+            // STOP UNITY
+            // ------------------------------------------------
+
+            if (gameFrame) {
+
+                gameFrame.src =
+                    "about:blank";
+
+            }
+
+
+            // ------------------------------------------------
+            // HIDE GAME
+            // ------------------------------------------------
+
+            if (gameSection) {
+
+                gameSection.style.display =
+                    "none";
+
+            }
+
+
+            // ------------------------------------------------
+            // RESET LOADING
+            // ------------------------------------------------
+
+            if (gameLoading) {
+
+                gameLoading.classList.remove(
+                    "active"
+                );
+
+            }
+
+
+            // ------------------------------------------------
+            // RESET ERROR
+            // ------------------------------------------------
+
+            if (gameError) {
+
+                gameError.classList.remove(
+                    "active"
+                );
+
+            }
+
+
+            window.scrollTo({
+
+                top: 0,
+
+                behavior: "smooth"
+
+            });
+
+        }
+    );
+
+}
+
+
+// ============================================================
+// PLAY GAME BUTTONS
+// ============================================================
+//
+// Your existing HTML should have:
+//
+// <button
+//     class="play-btn"
+//     data-game="fps-microgame">
+//     Play Game
+// </button>
+//
+// This event handler supports that structure.
+//
+
+// ============================================================
+// PLAY GAME BUTTONS
+// ============================================================
+
+document.addEventListener("DOMContentLoaded", function () {
+
+    console.log("[SecureFPS] DOM loaded.");
+
+    const playButtons =
+        document.querySelectorAll(".play-btn[data-game]");
+
+    console.log(
+        "[SecureFPS] Play buttons found:",
+        playButtons.length
+    );
+
+    playButtons.forEach(function (button) {
+
+        button.addEventListener("click", async function (event) {
+
+            event.preventDefault();
+
+            console.log("==========================================");
+            console.log("[SecureFPS] PLAY GAME CLICKED");
+            console.log(
+                "[SecureFPS] Game:",
+                button.getAttribute("data-game")
+            );
+            console.log("==========================================");
+
+            const gameKey =
+                button.getAttribute("data-game");
+
+            if (!gameKey) {
+                console.error(
+                    "[SecureFPS] No data-game attribute."
+                );
+                return;
+            }
+
+            if (button.dataset.loading === "true") {
+                console.log(
+                    "[SecureFPS] Game start already running."
+                );
+                return;
+            }
+
+            button.dataset.loading = "true";
+
+            const originalText =
+                button.innerHTML;
+
+            button.innerHTML =
+                "Starting Game...";
+
+            try {
+
+                await openUnityGame(gameKey);
+
+            } catch (error) {
+
+                console.error(
+                    "[SecureFPS] Game start error:",
+                    error
+                );
+
+            } finally {
+
+                button.dataset.loading = "false";
+
+                button.innerHTML =
+                    originalText;
+
+            }
+
+        });
+
+    });
 
 });
 
 
 // ============================================================
-// ML DETECTION
+// MANUAL ML DETECTION
 // ============================================================
 
 const detectForm =
-    document.getElementById("detectForm");
+    document.getElementById(
+        "detectForm"
+    );
 
 
 if (detectForm) {
 
     detectForm.addEventListener(
         "submit",
-        async (event) => {
+        async function (event) {
 
             event.preventDefault();
 
 
             const form =
-                new FormData(event.target);
+                new FormData(
+                    event.target
+                );
 
 
             const features =
@@ -665,9 +1351,16 @@ if (detectForm) {
                         {
                             method: "POST",
 
-                            body: JSON.stringify({
-                                features
-                            })
+                            headers: {
+                                "Content-Type":
+                                    "application/json"
+                            },
+
+                            body:
+                                JSON.stringify({
+                                    features:
+                                        features
+                                })
                         }
                     );
 
@@ -680,11 +1373,28 @@ if (detectForm) {
 
 
                     const score =
-                        result.risk_score == null
+                        result.result?.risk_score ??
+                        result.risk_score;
+
+
+                    const scoreText =
+                        score == null
                             ? "—"
                             : `${Math.round(
-                                result.risk_score * 100
+                                Number(score) * 100
                             )}%`;
+
+
+                    const rf =
+                        result.result?.random_forest ??
+                        result.random_forest ??
+                        "model not loaded";
+
+
+                    const isolation =
+                        result.result?.isolation_forest ??
+                        result.isolation_forest ??
+                        "model not loaded";
 
 
                     resultBox.innerHTML = `
@@ -693,43 +1403,46 @@ if (detectForm) {
                             Detection result
                         </strong>
 
-                        <br>
+                        <br><br>
 
                         Random Forest:
+
                         <b>
-                            ${
-                                result.random_forest ??
-                                "model not loaded"
-                            }
+                            ${escapeHtml(
+                                rf
+                            )}
                         </b>
 
                         <br>
 
                         Isolation Forest:
+
                         <b>
-                            ${
-                                result.isolation_forest ??
-                                "model not loaded"
-                            }
+                            ${escapeHtml(
+                                isolation
+                            )}
                         </b>
 
                         <br>
 
                         Risk score:
+
                         <b>
-                            ${score}
+                            ${scoreText}
                         </b>
 
                     `;
+
                 }
 
 
                 await loadDashboard();
 
+
             } catch (error) {
 
                 console.error(
-                    "Detection error:",
+                    "[SecureFPS] Detection error:",
                     error
                 );
 
@@ -740,20 +1453,68 @@ if (detectForm) {
                         "hidden"
                     );
 
+
                     resultBox.textContent =
                         error.message ||
                         "Security analysis failed.";
+
                 }
 
             }
 
         }
     );
+
 }
 
 
 // ============================================================
-// START
+// HTML ESCAPE
 // ============================================================
+
+function escapeHtml(
+    value
+) {
+
+    return String(
+        value
+    )
+
+        .replaceAll(
+            "&",
+            "&amp;"
+        )
+
+        .replaceAll(
+            "<",
+            "&lt;"
+        )
+
+        .replaceAll(
+            ">",
+            "&gt;"
+        )
+
+        .replaceAll(
+            '"',
+            "&quot;"
+        )
+
+        .replaceAll(
+            "'",
+            "&#039;"
+        );
+
+}
+
+
+// ============================================================
+// START DASHBOARD
+// ============================================================
+
+console.log(
+    "[SecureFPS] dashboard.js loaded."
+);
+
 
 loadDashboard();

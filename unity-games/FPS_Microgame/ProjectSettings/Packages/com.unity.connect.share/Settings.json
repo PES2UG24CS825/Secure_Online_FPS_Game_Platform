@@ -1,0 +1,26 @@
+{
+    "m_Dictionary": {
+        "m_DictionaryValues": [
+            {
+                "type": "System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+                "key": "buildOutputDirList",
+                "value": "{\"m_Value\":\"C:/Users/sudha/OneDrive/Documents/capstone_project/secure_fps_platform/frontend/public/games/fps4;C:/Users/sudha/OneDrive/Documents/capstone_project/secure_fps_platform/frontend/public/games/fps3;C:/Users/sudha/OneDrive/Documents/capstone_project/secure_fps_platform/frontend/public/games/fps2;C:/Users/sudha/OneDrive/Documents/capstone_project/secure_fps_platform/frontend/public/games/fps1;C:/Users/sudha/OneDrive/Documents/capstone_project/secure_fps_platform/frontend/public/games/fps;C:/Users/sudha/OneDrive/Documents/capstone_project/secure_fps_platform/frontend/public/games/FPS_Microgame1;C:/Users/sudha/OneDrive/Documents/capstone_project/secure_fps_platform/frontend/public/games/fps_webgl;C:/Users/sudha/OneDrive/Documents/capstone_project/secure_fps_platform/frontend/public/games/FPS_Microgame;C:/Users/sudha/OneDrive/Documents/capstone_project/FPS_Microgame/WebBuild;C:/Users/sudha/OneDrive/Documents/capstone_project/secure_fps_platform/unity-games/FPS_Microgame/WebBuild\"}"
+            },
+            {
+                "type": "System.Boolean, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+                "key": "createDefaultBuildsFolder",
+                "value": "{\"m_Value\":true}"
+            },
+            {
+                "type": "System.Boolean, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+                "key": "firstTime",
+                "value": "{\"m_Value\":true}"
+            },
+            {
+                "type": "System.Boolean, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+                "key": "autoPublish",
+                "value": "{\"m_Value\":true}"
+            }
+        ]
+    }
+}
