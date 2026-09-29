@@ -583,8 +583,8 @@ def detect():
 
     try:
         result = predict(features)
-    except (TypeError, ValueError) as exc:
-        return jsonify({"message": f"Invalid feature values: {exc}"}), 400
+    except (TypeError, ValueError):
+        return jsonify({"message": "Invalid feature values provided."}), 400
 
     timestamp = datetime.now(timezone.utc)
     detection_record = {
