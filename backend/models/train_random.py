@@ -1,6 +1,6 @@
 """
 Random Forest Training — FINAL VERSION (WITH SMOTE)
-Uses processed_dataset.csv from same model folder
+Uses the shared processed gameplay dataset.
 """
 
 import pandas as pd
@@ -18,7 +18,12 @@ from imblearn.over_sampling import SMOTE
 # ─────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-DATA_PATH = os.path.join(BASE_DIR, "processed_dataset.csv")
+DATA_PATH = os.path.join(
+    BASE_DIR,
+    "..",
+    "data Preprocessing",
+    "processed_dataset.csv"
+)
 MODEL_PATH = os.path.join(BASE_DIR, "random_forest.pkl")
 
 # ─────────────────────────────────────────────
@@ -32,8 +37,6 @@ FEATURES = [
     "Movement_Speed",
     "Aim_Smoothness",
     "KDR",
-    "activity_intensity",
-    "gameplay_pattern",
 ]
 
 print("=" * 60)
@@ -146,7 +149,7 @@ print(f"\nModel Saved → {MODEL_PATH}")
 # ─────────────────────────────────────────────
 print("\n=== Sample Prediction ===")
 
-sample = np.array([[0.32, 0.88, 0.55, 0.70, 0.62, 0.81, 2.1, 0.71, 0.78]])
+sample = np.array([[0.32, 0.88, 0.55, 0.70, 0.62, 0.81, 2.1]])
 
 pred = model.predict(sample)[0]
 result = "Cheater" if pred == 1 else "Normal"

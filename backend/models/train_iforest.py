@@ -12,7 +12,12 @@ import joblib, os
 
 # ── Paths ─────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = os.path.join(BASE_DIR, "..", "preprocessing", "data preprocessing/processed_dataset.csv")
+DATA_PATH = os.path.join(
+    BASE_DIR,
+    "..",
+    "data Preprocessing",
+    "processed_dataset.csv"
+)
 MODEL_DIR = BASE_DIR
 
 os.makedirs(MODEL_DIR, exist_ok=True)
