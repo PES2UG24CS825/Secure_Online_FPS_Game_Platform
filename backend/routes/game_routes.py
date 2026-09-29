@@ -1,1586 +1,621 @@
-from datetime import datetime, timezone, timedelta
-import secrets
-import uuid
+from datetime import datetime, timedelta, timezone
+from functools import wraps
 
-from flask import Blueprint, jsonify, request, session
 from bson import ObjectId
+from flask import Blueprint, jsonify, request, session
 
 from database.db import (
-    game_events,
-    game_telemetry,
-    game_sessions,
+    detections,
+    get_active_session,
+    login_history,
+    log_security_event,
+    matches,
     security_events,
+    sessions,
+    telemetry,
     users,
+    utcnow,
 )
+from models.ml_model import FEATURES, predict
 
-from models.ml_model import predict, FEATURES
-
-
-game_bp = Blueprint(
-    "game",
-    __name__,
-    url_prefix="/api"
-)
+game_bp = Blueprint("game", __name__, url_prefix="/api")
 
 
-# =========================================================
-# HELPER FUNCTIONS
-# =========================================================
+def current_user_record():
+    user_id = session.get("user_id")
+    session_id = session.get("session_id")
 
-def current_user():
-    """
-    Return logged-in user's ID from Flask session.
-    """
-    return session.get("user_id")
-
-
-def get_current_user_object_id():
-    """
-    Convert logged-in user's session ID into MongoDB ObjectId.
-    """
-    user_id = current_user()
-
-    if not user_id:
+    if not user_id or not session_id:
         return None
 
     try:
-        return ObjectId(user_id)
+        user = users.find_one({"_id": ObjectId(user_id)})
     except Exception:
         return None
 
-
-def is_admin():
-    """
-    Check whether currently logged-in user is admin.
-    """
-    user_id = get_current_user_object_id()
-
-    if not user_id:
-        return False
-
-    return bool(
-        users.find_one({
-            "_id": user_id,
-            "role": "admin"
-        })
-    )
-
-
-def utc_now():
-    """
-    Return timezone-aware UTC datetime.
-    """
-    return datetime.now(timezone.utc)
-
-
-# =========================================================
-# START GAME SESSION
-# =========================================================
-#
-# Dashboard:
-#
-# POST /api/game/start
-#
-# Response:
-#
-# {
-#     "success": true,
-#     "session_id": "...",
-#     "game_token": "...",
-#     "game": "FPS_Microgame"
-# }
-#
-# Dashboard then opens:
-#
-# index.html?session_id=XXX&game_token=YYY
-#
-# =========================================================
-
-@game_bp.post("/game/start")
-def start_game():
-
-    user_id = get_current_user_object_id()
-
-    if not user_id:
-        return jsonify({
-            "message": "Authentication required."
-        }), 401
-
-    session_id = str(uuid.uuid4())
-
-    game_token = secrets.token_urlsafe(32)
-
-    now = utc_now()
-
-    game_session = {
-        "session_id": session_id,
-        "game_token": game_token,
-        "user_id": user_id,
-        "game": "FPS_Microgame",
-        "started_at": now,
-        "ended_at": None,
-        "expires_at": now + timedelta(hours=2),
-        "status": "active"
-    }
-
-    try:
-
-        game_sessions.insert_one(game_session)
-
-    except Exception as exc:
-
-        print(
-            "[SecureFPS] Failed to create game session:",
-            exc
-        )
-
-        return jsonify({
-            "message": "Could not create game session."
-        }), 500
-
-    print()
-    print("==========================================")
-    print("[SecureFPS] GAME SESSION CREATED")
-    print("User ID:", user_id)
-    print("Session ID:", session_id)
-    print("Game token received:", bool(game_token))
-    print("==========================================")
-    print()
-
-    return jsonify({
-        "success": True,
-        "session_id": session_id,
-        "game_token": game_token,
-        "game": "FPS_Microgame"
-    }), 201
-
-
-# =========================================================
-# RECEIVE UNITY GAME EVENTS
-# =========================================================
-#
-# Unity sends:
-#
-# POST /api/game-events
-#
-# {
-#     "game_token": "...",
-#     "session_id": "...",
-#     "event_type": "weapon_fire",
-#     "game": "FPS_Microgame",
-#     "telemetry": {}
-# }
-#
-# =========================================================
-
-@game_bp.post("/game-events")
-def receive_game_event():
-
-    data = request.get_json(silent=True) or {}
-
-    game_token = data.get("game_token")
-    session_id = data.get("session_id")
-    event_type = data.get("event_type")
-    game_name = data.get(
-        "game",
-        "FPS_Microgame"
-    )
-    telemetry = data.get(
-        "telemetry",
-        {}
-    )
-
-    print()
-    print("========== UNITY TELEMETRY ==========")
-    print("Session:", session_id)
-    print("Event:", event_type)
-    print("Game:", game_name)
-    print("Telemetry:", telemetry)
-    print("=====================================")
-
-    # -----------------------------------------------------
-    # VALIDATION
-    # -----------------------------------------------------
-
-    if not game_token:
-
-        print("[SecureFPS] ERROR: Game token missing.")
-
-        return jsonify({
-            "message": "Game token is required."
-        }), 400
-
-    if not session_id:
-
-        print("[SecureFPS] ERROR: Session ID missing.")
-
-        return jsonify({
-            "message": "Session ID is required."
-        }), 400
-
-    if not event_type:
-
-        return jsonify({
-            "message": "Event type is required."
-        }), 400
-
-    if not isinstance(telemetry, dict):
-
-        return jsonify({
-            "message": "Telemetry must be a JSON object."
-        }), 400
-
-    # -----------------------------------------------------
-    # FIND SESSION
-    # -----------------------------------------------------
-
-    game_session = game_sessions.find_one({
-        "session_id": session_id,
-        "game_token": game_token
-    })
-
-    if not game_session:
-
-        print(
-            "[SecureFPS] ERROR: Invalid session/token."
-        )
-
-        return jsonify({
-            "message": "Invalid game session."
-        }), 403
-
-    # -----------------------------------------------------
-    # CHECK STATUS
-    # -----------------------------------------------------
-
-    if game_session.get("status") != "active":
-
-        print(
-            "[SecureFPS] ERROR: Game session is not active."
-        )
-
-        return jsonify({
-            "message": "Game session is not active."
-        }), 403
-
-    # -----------------------------------------------------
-    # CHECK EXPIRATION
-    # -----------------------------------------------------
-
-    expires_at = game_session.get("expires_at")
-
-    if expires_at:
-
-        now = utc_now()
-
-        # Handle both timezone-aware and old naive Mongo dates
-        if expires_at.tzinfo is None:
-
-            expires_at = expires_at.replace(
-                tzinfo=timezone.utc
-            )
-
-        if expires_at < now:
-
-            game_sessions.update_one(
-                {
-                    "session_id": session_id
-                },
-                {
-                    "$set": {
-                        "status": "expired"
-                    }
-                }
-            )
-
-            return jsonify({
-                "message": "Game session has expired."
-            }), 403
-
-    # -----------------------------------------------------
-    # GET USER
-    # -----------------------------------------------------
-
-    user_id = game_session.get("user_id")
-
-    if not user_id:
-
-        return jsonify({
-            "message": "Game session has no user."
-        }), 400
-
-    # -----------------------------------------------------
-    # STORE TELEMETRY
-    # -----------------------------------------------------
-
-    telemetry_document = {
-        "session_id": session_id,
-        "user_id": user_id,
-        "game": game_name,
-        "event_type": event_type,
-        "telemetry": telemetry,
-        "created_at": utc_now()
-    }
-
-    try:
-
-        result = game_telemetry.insert_one(
-            telemetry_document
-        )
-
-    except Exception as exc:
-
-        print(
-            "[SecureFPS] MongoDB telemetry error:",
-            exc
-        )
-
-        return jsonify({
-            "message": "Failed to store telemetry."
-        }), 500
-
-    print(
-        "[SecureFPS] Telemetry stored:",
-        result.inserted_id
-    )
-
-    # -----------------------------------------------------
-    # AUTOMATIC ML ANALYSIS
-    # -----------------------------------------------------
-    #
-    # When Unity sends game_completed,
-    # automatically extract features and run:
-    #
-    # Random Forest
-    # Isolation Forest
-    #
-    # -----------------------------------------------------
-
-    analysis = None
-
-    if event_type == "game_completed":
-
-        print()
-        print(
-            "[SecureFPS] Game completed."
-        )
-
-        print(
-            "[SecureFPS] Starting automatic ML analysis..."
-        )
-
-        analysis = analyze_game_session(
-            user_id,
-            session_id
-        )
-
-        # Mark session completed after analysis
-        game_sessions.update_one(
-            {
-                "session_id": session_id
-            },
-            {
-                "$set": {
-                    "status": "completed",
-                    "ended_at": utc_now()
-                }
-            }
-        )
-
-    # -----------------------------------------------------
-    # RESPONSE
-    # -----------------------------------------------------
-
-    response = {
-        "success": True,
-        "message": "Telemetry stored.",
-        "event_id": str(result.inserted_id),
-        "session_id": session_id,
-        "event_type": event_type
-    }
-
-    if analysis:
-
-        response["analysis"] = analysis
-
-    return jsonify(response), 201
-
-
-# =========================================================
-# ANALYZE GAME SESSION
-# =========================================================
-
-def analyze_game_session(
-    user_id,
-    session_id
-):
-    """
-    Extract gameplay features and run all
-    currently available ML models.
-    """
-
-    print()
-    print("==========================================")
-    print("[SecureFPS] ANALYZING GAME SESSION")
-    print("Session:", session_id)
-    print("==========================================")
-
-    features = extract_features(
-        user_id,
-        session_id
-    )
-
-    if features is None:
-
-        print(
-            "[SecureFPS] Insufficient telemetry."
-        )
-
-        return {
-            "status": "insufficient_data",
-            "features": {},
-            "result": {}
-        }
-
-    missing_features = [
-        feature
-        for feature in FEATURES
-        if features.get(feature) is None
-    ]
-
-    if missing_features:
-
-        print(
-            "[SecureFPS] Missing measurable gameplay features:",
-            missing_features
-        )
-
-        return {
-            "status": "incomplete_features",
-            "features": features,
-            "missing_features": missing_features,
-            "result": {}
-        }
-
-    # -----------------------------------------------------
-    # RUN ML MODELS
-    # -----------------------------------------------------
-
-    try:
-
-        result = predict(features)
-
-    except Exception as exc:
-
-        print(
-            "[SecureFPS] ML prediction error:",
-            exc
-        )
-
-        return {
-            "status": "ml_error",
-            "features": features,
-            "result": {},
-            "error": str(exc)
-        }
-
-    # -----------------------------------------------------
-    # PRINT MODEL RESULTS
-    # -----------------------------------------------------
-
-    print()
-    print("========== ML RESULT ==========")
-    print("Features:")
-
-    for name, value in features.items():
-
-        print(
-            f"  {name}: {value}"
-        )
-
-    print()
-    print("Random Forest:",
-          result.get("random_forest"))
-
-    print("Isolation Forest:",
-          result.get("isolation_forest"))
-
-    print("Risk Score:",
-          result.get("risk_score"))
-
-    print("===============================")
-    print()
-
-    # -----------------------------------------------------
-    # STORE DETECTION
-    # -----------------------------------------------------
-
-    detection_event = {
-        "user_id": user_id,
-        "session_id": session_id,
-
-        "features": {
-            key: float(features[key])
-            for key in FEATURES
-        },
-
-        "result": result,
-
-        "created_at": utc_now()
-    }
-
-    try:
-
-        game_events.insert_one(
-            detection_event
-        )
-
-    except Exception as exc:
-
-        print(
-            "[SecureFPS] Failed to store ML result:",
-            exc
-        )
-
-    # -----------------------------------------------------
-    # SECURITY ALERT
-    # -----------------------------------------------------
-
-    rf_cheater = (
-        result.get("random_forest")
-        == "cheater"
-    )
-
-    isolation_anomaly = (
-        result.get("isolation_forest")
-        == "anomaly"
-    )
-
-    if rf_cheater or isolation_anomaly:
-
-        severity = "high"
-
-        if (
-            not rf_cheater
-            and isolation_anomaly
-        ):
-
-            severity = "medium"
-
-        security_event = {
-            "user_id": user_id,
-            "session_id": session_id,
-            "type": "gameplay_anomaly",
-            "severity": severity,
-            "result": result,
-            "features": features,
-            "created_at": utc_now()
-        }
-
-        try:
-
-            security_events.insert_one(
-                security_event
-            )
-
-            print(
-                "[SecureFPS] SECURITY ALERT CREATED:",
-                severity
-            )
-
-        except Exception as exc:
-
-            print(
-                "[SecureFPS] Failed to store security alert:",
-                exc
-            )
-
-    return {
-        "status": "success",
-        "features": features,
-        "result": result
-    }
-
-
-# =========================================================
-# END GAME
-# =========================================================
-#
-# This endpoint is useful if dashboard explicitly
-# ends the game.
-#
-# POST /api/game/end
-#
-# {
-#     "session_id": "..."
-# }
-#
-# =========================================================
-
-@game_bp.post("/game/end")
-def end_game():
-
-    user_id = get_current_user_object_id()
-
-    if not user_id:
-
-        return jsonify({
-            "message": "Authentication required."
-        }), 401
-
-    data = request.get_json(
-        silent=True
-    ) or {}
-
-    session_id = data.get(
-        "session_id"
-    )
-
-    if not session_id:
-
-        return jsonify({
-            "message": "session_id is required."
-        }), 400
-
-    game_session = game_sessions.find_one({
-        "session_id": session_id,
-        "user_id": user_id
-    })
-
-    if not game_session:
-
-        return jsonify({
-            "message": "Game session not found."
-        }), 404
-
-    # -----------------------------------------------------
-    # DON'T ANALYZE AN ALREADY COMPLETED SESSION AGAIN
-    # -----------------------------------------------------
-
-    already_completed = (
-        game_session.get("status")
-        == "completed"
-    )
-
-    if already_completed:
-
-        return jsonify({
-            "success": True,
-            "message": "Game session already completed."
-        }), 200
-
-    # -----------------------------------------------------
-    # ANALYZE FIRST
-    # -----------------------------------------------------
-
-    analysis = analyze_game_session(
-        user_id,
-        session_id
-    )
-
-    # -----------------------------------------------------
-    # MARK SESSION COMPLETE
-    # -----------------------------------------------------
-
-    game_sessions.update_one(
-        {
-            "session_id": session_id,
-            "user_id": user_id
-        },
-        {
-            "$set": {
-                "ended_at": utc_now(),
-                "status": "completed"
-            }
-        }
-    )
-
-    return jsonify({
-        "success": True,
-        "session_id": session_id,
-        "analysis": analysis
-    }), 200
-
-
-# =========================================================
-# FEATURE EXTRACTION
-# =========================================================
-
-def extract_features(
-    user_id,
-    session_id
-):
-    """
-    Convert raw Unity telemetry into the same
-    seven features expected by the ML models.
-    """
-
-    events = list(
-        game_telemetry.find({
-            "user_id": user_id,
-            "session_id": session_id
-        }).sort(
-            "created_at",
-            1
-        )
-    )
-
-    if not events:
-
+    if not user:
+        session.clear()
         return None
 
-    # -----------------------------------------------------
-    # COUNTERS
-    # -----------------------------------------------------
-
-    shots = 0
-    enemy_hits = 0
-    legacy_player_hits = 0
-    has_enemy_hit_events = False
-    kills = 0
-    deaths = 0
-    headshots = 0
-
-    movement_speeds = []
-    aim_changes = []
-    reaction_times = []
-
-    event_times = []
-
-    # -----------------------------------------------------
-    # PROCESS EVENTS
-    # -----------------------------------------------------
-
-    for event in events:
-
-        event_type = event.get(
-            "event_type",
-            ""
-        )
-
-        telemetry = event.get(
-            "telemetry",
-            {}
-        )
-
-        if not isinstance(
-            telemetry,
-            dict
-        ):
-
-            telemetry = {}
-
-        # -------------------------------------------------
-        # WEAPON FIRE
-        # -------------------------------------------------
-
-        if event_type == "weapon_fire":
-
-            shots += 1
-
-        # -------------------------------------------------
-        # CONFIRMED ENEMY HIT
-        # -------------------------------------------------
-
-        elif event_type == "enemy_hit":
-
-            enemy_hits += 1
-            has_enemy_hit_events = True
-
-        # -------------------------------------------------
-        # LEGACY HIT FALLBACK
-        # -------------------------------------------------
-
-        elif event_type == "player_hit":
-
-            legacy_player_hits += 1
-
-        # -------------------------------------------------
-        # ENEMY KILLED
-        # -------------------------------------------------
-
-        elif event_type == "enemy_killed":
-
-            kills += 1
-
-        # -------------------------------------------------
-        # PLAYER DEATH
-        # -------------------------------------------------
-
-        elif event_type == "player_death":
-
-            deaths += 1
-
-        # -------------------------------------------------
-        # HEADSHOT
-        # -------------------------------------------------
-
-        elif event_type == "headshot":
-
-            headshots += 1
-
-        # -------------------------------------------------
-        # MOVEMENT
-        # -------------------------------------------------
-
-        elif event_type == "player_behavior":
-
-            speed = telemetry.get(
-                "speed"
-            )
-
-            if speed is not None:
-
-                try:
-
-                    movement_speeds.append(
-                        float(speed)
-                    )
-
-                except (
-                    TypeError,
-                    ValueError
-                ):
-
-                    pass
-
-        # -------------------------------------------------
-        # AIM
-        # -------------------------------------------------
-
-        elif event_type == "aim_behavior":
-
-            rotation_change = telemetry.get(
-                "rotation_change"
-            )
-
-            if rotation_change is not None:
-
-                try:
-
-                    aim_changes.append(
-                        float(rotation_change)
-                    )
-
-                except (
-                    TypeError,
-                    ValueError
-                ):
-
-                    pass
-
-        # -------------------------------------------------
-        # REACTION TIME
-        # -------------------------------------------------
-
-        reaction_time = telemetry.get(
-            "reaction_time"
-        )
-
-        if reaction_time is not None:
-
-            try:
-
-                value = float(
-                    reaction_time
-                )
-
-                if value > 0:
-
-                    reaction_times.append(
-                        value
-                    )
-
-            except (
-                TypeError,
-                ValueError
-            ):
-
-                pass
-
-        # -------------------------------------------------
-        # EVENT TIME
-        # -------------------------------------------------
-
-        created_at = event.get(
-            "created_at"
-        )
-
-        if created_at:
-
-            try:
-
-                event_times.append(
-                    created_at.timestamp()
-                )
-
-            except Exception:
-
-                pass
-
-    # =====================================================
-    # GAME DURATION
-    # =====================================================
-
-    if len(event_times) >= 2:
-
-        duration = max(
-            event_times[-1]
-            - event_times[0],
-            1.0
-        )
-
-    else:
-
-        duration = 1.0
-
-    # =====================================================
-    # ACCURACY
-    # =====================================================
-
-    hits = (
-        enemy_hits
-        if has_enemy_hit_events
-        else legacy_player_hits
-    )
-
-    if shots > 0:
-
-        accuracy = hits / shots
-
-    else:
-
-        accuracy = None
-
-    if accuracy is not None:
-        accuracy = max(0.0, min(accuracy, 1.0))
-
-    # =====================================================
-    # HEADSHOT RATIO
-    # =====================================================
-
-    if hits > 0 and headshots > 0:
-
-        headshot_ratio = (
-            headshots / hits
-        )
-
-    else:
-
-        headshot_ratio = None
-
-    if headshot_ratio is not None:
-        headshot_ratio = max(0.0, min(headshot_ratio, 1.0))
-
-    # =====================================================
-    # FIRE RATE
-    # =====================================================
-
-    fire_rate = (
-        shots / duration
-        if duration > 0
-        else 0.0
-    )
-
-    # =====================================================
-    # MOVEMENT SPEED
-    # =====================================================
-
-    if movement_speeds:
-
-        movement_speed = (
-            sum(movement_speeds)
-            /
-            len(movement_speeds)
-        )
-
-    else:
-
-        movement_speed = None
-
-    # =====================================================
-    # AIM SMOOTHNESS
-    # =====================================================
-
-    if aim_changes:
-
-        average_aim_change = (
-            sum(aim_changes)
-            /
-            len(aim_changes)
-        )
-
-        aim_smoothness = (
-            1.0
-            /
-            (
-                1.0
-                +
-                abs(
-                    average_aim_change
-                )
-            )
-        )
-
-    else:
-
-        # Neutral fallback when Unity
-        # has not sent aim telemetry.
-        aim_smoothness = None
-
-    if aim_smoothness is not None:
-        aim_smoothness = max(0.0, min(aim_smoothness, 1.0))
-
-    # =====================================================
-    # KDR
-    # =====================================================
-
-    if deaths > 0:
-
-        kdr = kills / deaths
-
-    else:
-
-        kdr = float(kills)
-
-    # =====================================================
-    # REACTION TIME
-    # =====================================================
-
-    if reaction_times:
-
-        reaction_time = (
-            sum(reaction_times)
-            /
-            len(reaction_times)
-        )
-
-    else:
-
-            reaction_time = None
-
-    # =====================================================
-    # FINAL FEATURES
-    # =====================================================
-
-    features = {
-
-        "reaction_time":
-            float(reaction_time) if reaction_time is not None else None,
-
-        "accuracy":
-            float(accuracy) if accuracy is not None else None,
-
-        "headshot_ratio":
-            float(headshot_ratio) if headshot_ratio is not None else None,
-
-        "fire_rate":
-            float(fire_rate),
-
-        "movement_speed":
-            float(movement_speed) if movement_speed is not None else None,
-
-        "aim_smoothness":
-            float(aim_smoothness) if aim_smoothness is not None else None,
-
-        "kdr":
-            float(kdr)
-    }
-
-    # -----------------------------------------------------
-    # VERIFY FEATURES MATCH ML MODEL
-    # -----------------------------------------------------
-
-    missing = [
-        feature
-        for feature in FEATURES
-        if feature not in features
-    ]
-
-    if missing:
-
-        print(
-            "[SecureFPS] Missing ML features:",
-            missing
-        )
-
+    if user.get("status") == "suspended":
+        session.clear()
         return None
 
-    print()
-    print("========== EXTRACTED FEATURES ==========")
+    if not get_active_session(user_id, session_id):
+        session.clear()
+        return None
 
-    for name in FEATURES:
+    return user
 
-        print(
-            f"{name}: {features[name]}"
-        )
 
-    print("=========================================")
-    print()
+def require_auth(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        user = current_user_record()
+        if not user:
+            return jsonify({"message": "Authentication required."}), 401
+        return func(*args, **kwargs)
 
-    return features
+    return wrapper
 
 
-# =========================================================
-# MANUAL ML DETECTION
-# =========================================================
+def require_role(required_role):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            user = current_user_record()
+            if not user:
+                return jsonify({"message": "Authentication required."}), 401
+            if user.get("role") != required_role:
+                return jsonify({"message": f"{required_role.title()} access required."}), 403
+            return func(*args, **kwargs)
 
-@game_bp.post("/detect")
-def detect():
+        return wrapper
 
-    user_id = get_current_user_object_id()
+    return decorator
 
-    if not user_id:
-
-        return jsonify({
-            "message": "Authentication required."
-        }), 401
-
-    data = request.get_json(
-        silent=True
-    ) or {}
-
-    features = data.get(
-        "features",
-        {}
-    )
-
-    # -----------------------------------------------------
-    # REQUIRED FEATURES
-    # -----------------------------------------------------
-
-    missing = [
-        name
-        for name in FEATURES
-        if name not in features
-    ]
-
-    if missing:
-
-        return jsonify({
-            "message":
-                "Missing features: "
-                + ", ".join(missing)
-        }), 400
-
-    # -----------------------------------------------------
-    # CONVERT FEATURES TO FLOAT
-    # -----------------------------------------------------
-
-    try:
-
-        clean_features = {
-            name: float(features[name])
-            for name in FEATURES
-        }
-
-    except (
-        TypeError,
-        ValueError
-    ) as exc:
-
-        return jsonify({
-            "message":
-                f"Invalid feature values: {exc}"
-        }), 400
-
-    # -----------------------------------------------------
-    # RUN ALL AVAILABLE MODELS
-    # -----------------------------------------------------
-
-    try:
-
-        result = predict(
-            clean_features
-        )
-
-    except Exception as exc:
-
-        print(
-            "[SecureFPS] ML error:",
-            exc
-        )
-
-        return jsonify({
-            "message":
-                f"ML prediction failed: {exc}"
-        }), 400
-
-    # -----------------------------------------------------
-    # STORE DETECTION
-    # -----------------------------------------------------
-
-    event = {
-        "user_id": user_id,
-        "features": clean_features,
-        "result": result,
-        "created_at": utc_now()
-    }
-
-    try:
-
-        game_events.insert_one(
-            event
-        )
-
-    except Exception as exc:
-
-        print(
-            "[SecureFPS] Failed to store detection:",
-            exc
-        )
-
-    # -----------------------------------------------------
-    # SECURITY ALERT
-    # -----------------------------------------------------
-
-    rf_cheater = (
-        result.get("random_forest")
-        == "cheater"
-    )
-
-    isolation_anomaly = (
-        result.get("isolation_forest")
-        == "anomaly"
-    )
-
-    if rf_cheater or isolation_anomaly:
-
-        severity = "high"
-
-        if (
-            not rf_cheater
-            and isolation_anomaly
-        ):
-
-            severity = "medium"
-
-        try:
-
-            security_events.insert_one({
-                "user_id": user_id,
-                "type": "gameplay_anomaly",
-                "severity": severity,
-                "result": result,
-                "features": clean_features,
-                "created_at": utc_now()
-            })
-
-        except Exception as exc:
-
-            print(
-                "[SecureFPS] Security event error:",
-                exc
-            )
-
-    return jsonify({
-        "success": True,
-        "result": result,
-        "features": clean_features
-    }), 200
-
-
-# =========================================================
-# PLAYER DASHBOARD
-# =========================================================
-
-@game_bp.get("/dashboard")
-def dashboard():
-
-    user_id = get_current_user_object_id()
-
-    if not user_id:
-
-        return jsonify({
-            "message": "Authentication required."
-        }), 401
-
-    recent = list(
-        game_events.find({
-            "user_id": user_id
-        })
-        .sort(
-            "created_at",
-            -1
-        )
-        .limit(8)
-    )
-
-    alerts = list(
-        security_events.find({
-            "user_id": user_id
-        })
-        .sort(
-            "created_at",
-            -1
-        )
-        .limit(6)
-    )
-
-    return jsonify({
-
-        "stats": {
-
-            "matches_analyzed":
-                game_events.count_documents({
-                    "user_id": user_id
-                }),
-
-            "alerts":
-                security_events.count_documents({
-                    "user_id": user_id,
-                    "severity": {
-                        "$in": [
-                            "medium",
-                            "high"
-                        ]
-                    }
-                }),
-
-            "security_status":
-                "Protected"
-        },
-
-        "recent_detections": [
-
-            {
-                "rf":
-                    item.get(
-                        "result",
-                        {}
-                    ).get(
-                        "random_forest"
-                    ),
-
-                "if":
-                    item.get(
-                        "result",
-                        {}
-                    ).get(
-                        "isolation_forest"
-                    ),
-
-                "risk_score":
-                    item.get(
-                        "result",
-                        {}
-                    ).get(
-                        "risk_score"
-                    ),
-
-                "created_at":
-                    item.get(
-                        "created_at"
-                    ).isoformat()
-            }
-
-            for item in recent
-
-            if item.get(
-                "created_at"
-            )
-        ],
-
-        "alerts": [
-
-            {
-                "type":
-                    alert.get(
-                        "type",
-                        "security_event"
-                    ),
-
-                "severity":
-                    alert.get(
-                        "severity",
-                        "low"
-                    ),
-
-                "created_at":
-                    alert.get(
-                        "created_at"
-                    ).isoformat()
-            }
-
-            for alert in alerts
-
-            if alert.get(
-                "created_at"
-            )
-        ]
-    })
-
-
-# =========================================================
-# ADMIN OVERVIEW
-# =========================================================
 
 @game_bp.get("/admin/overview")
+@require_role("admin")
 def admin_overview():
-
-    if not is_admin():
-
-        return jsonify({
-            "message":
-                "Admin access required."
-        }), 403
-
-    players = list(
-        users.find(
-            {
-                "role": {
-                    "$ne": "admin"
-                }
-            },
-            {
-                "password_hash": 0,
-                "mfa_secret": 0
-            }
-        )
-    )
-
-    events = list(
-        security_events.find()
-        .sort(
-            "created_at",
-            -1
-        )
-        .limit(100)
-    )
+    players = list(users.find({"role": {"$ne": "admin"}}, {"password_hash": 0, "mfa_secret": 0}).sort("created_at", -1))
+    events = list(security_events.find({}).sort("timestamp", -1).limit(100))
+    total_matches = matches.count_documents({})
+    active_sessions = sessions.count_documents({"role": {"$ne": "admin"}, "revoked": False, "expires_at": {"$gt": utcnow()}})
+    active_players = users.count_documents({"status": "active", "role": {"$ne": "admin"}})
+    high_severity = security_events.count_documents({"severity": {"$in": ["high", "critical"]}})
+    suspicious_players = users.count_documents({"role": {"$ne": "admin"}, "risk_score": {"$gte": 70}})
+    login_count = login_history.count_documents({"success": True})
 
     return jsonify({
-
-        "players": [
-
-            {
-                "id":
-                    str(
-                        player["_id"]
-                    ),
-
-                "name":
-                    player.get(
-                        "name",
-                        ""
-                    ),
-
-                "email":
-                    player.get(
-                        "email",
-                        ""
-                    ),
-
-                "role":
-                    player.get(
-                        "role",
-                        "player"
-                    ),
-
-                "mfa_enabled":
-                    player.get(
-                        "mfa_enabled",
-                        False
-                    ),
-
-                "created_at":
-                    (
-                        player["created_at"].isoformat()
-                        if player.get("created_at")
-                        else None
-                    )
-            }
-
-            for player in players
-        ],
-
-        "events": [
-
-            {
-                "type":
-                    event.get(
-                        "type",
-                        "security_event"
-                    ),
-
-                "severity":
-                    event.get(
-                        "severity",
-                        "low"
-                    )
-            }
-
-            for event in events
-        ],
-
-        "login_count":
-            0
+        "players": [{
+            "id": str(player["_id"]),
+            "name": player.get("name"),
+            "email": player.get("email"),
+            "role": player.get("role", "player"),
+            "status": player.get("status", "active"),
+            "mfa_enabled": player.get("mfa_enabled", False),
+            "risk_score": player.get("risk_score", 0),
+            "created_at": player.get("created_at").isoformat() if player.get("created_at") else None,
+            "last_login": (login_history.find_one({"user_id": str(player["_id"]), "success": True}, sort=[("timestamp", -1)]) or {}).get("timestamp").isoformat() if login_history.find_one({"user_id": str(player["_id"]), "success": True}, sort=[("timestamp", -1)]) else None,
+        } for player in players],
+        "events": [{
+            "id": str(event.get("_id")),
+            "type": event.get("event_type", event.get("type", "security_event")),
+            "severity": event.get("severity", "low"),
+            "user": event.get("user_id") or event.get("user") or "unknown",
+            "description": event.get("description", "Security event recorded."),
+            "timestamp": event.get("timestamp").isoformat() if isinstance(event.get("timestamp"), datetime) else event.get("timestamp"),
+        } for event in events],
+        "summary": {
+            "total_players": len(players),
+            "active_players": active_players,
+            "active_sessions": active_sessions,
+            "matches_analyzed": total_matches,
+            "security_events": len(events),
+            "high_severity_events": high_severity,
+            "suspicious_players": suspicious_players,
+            "login_count": login_count,
+        },
+        "login_count": login_count,
     })
 
 
-# =========================================================
-# ADMIN PLAYER ACTION
-# =========================================================
-
-@game_bp.post(
-    "/admin/players/<player_id>/<action>"
-)
-def admin_player_action(
-    player_id,
-    action
-):
-
-    if (
-        not is_admin()
-        or action not in {
-            "revoke",
-            "delete"
-        }
-    ):
-
-        return jsonify({
-            "message":
-                "Admin access required."
-        }), 403
-
-    try:
-
-        oid = ObjectId(
-            player_id
-        )
-
-    except Exception:
-
-        return jsonify({
-            "message":
-                "Invalid player id."
-        }), 400
-
-    if action == "delete":
-
-        users.delete_one({
-            "_id": oid,
-            "role": {
-                "$ne": "admin"
-            }
+@game_bp.get("/admin/players")
+@require_role("admin")
+def admin_players():
+    players = list(users.find({"role": {"$ne": "admin"}}, {"password_hash": 0, "mfa_secret": 0}).sort("created_at", -1))
+    rows = []
+    for player in players:
+        last_login = login_history.find_one({"user_id": str(player["_id"]), "success": True}, sort=[("timestamp", -1)])
+        rows.append({
+            "id": str(player["_id"]),
+            "username": player.get("name"),
+            "email": player.get("email"),
+            "role": player.get("role", "player"),
+            "mfa_status": "Enabled" if player.get("mfa_enabled") else "Disabled",
+            "account_status": player.get("status", "active"),
+            "created_at": player.get("created_at").isoformat() if player.get("created_at") else None,
+            "last_login": last_login.get("timestamp").isoformat() if last_login and last_login.get("timestamp") else None,
+            "risk_score": player.get("risk_score", 0),
         })
+    return jsonify({"players": rows})
 
-    else:
 
-        users.update_one(
-            {
-                "_id": oid,
-                "role": {
-                    "$ne": "admin"
-                }
-            },
-            {
-                "$set": {
-                    "revoked": True
-                }
-            }
-        )
+@game_bp.get("/admin/players/<player_id>")
+@require_role("admin")
+def admin_player_detail(player_id):
+    try:
+        oid = ObjectId(player_id)
+    except Exception:
+        return jsonify({"message": "Invalid player id."}), 400
+    player = users.find_one({"_id": oid, "role": {"$ne": "admin"}}, {"password_hash": 0, "mfa_secret": 0})
+    if not player:
+        return jsonify({"message": "Player not found."}), 404
+
+    last_login = login_history.find_one({"user_id": str(player["_id"]), "success": True}, sort=[("timestamp", -1)])
+    player_matches = list(matches.find({"player_id": str(player["_id"])}))
+    player_detections = list(detections.find({"player_id": str(player["_id"])}).sort("timestamp", -1))
+    player_events = list(security_events.find({"user_id": str(player["_id"])}).sort("timestamp", -1))
+    active_sessions = list(sessions.find({"user_id": str(player["_id"]), "revoked": False, "expires_at": {"$gt": utcnow()}}).sort("created_at", -1))
+    login_events = list(login_history.find({"user_id": str(player["_id"])}).sort("timestamp", -1))
+
+    kills = sum(int(m.get("kills", 0)) for m in player_matches)
+    deaths = sum(int(m.get("deaths", 0)) for m in player_matches)
+    kd = round(kills / deaths, 2) if deaths else float(kills)
+    headshots = sum(int(m.get("headshots", 0)) for m in player_matches)
+    shots_fired = sum(int(item.get("shots", 0)) for item in telemetry.find({"player_id": str(player["_id"])}))
+    shots_hit = sum(int(item.get("hits", 0)) for item in telemetry.find({"player_id": str(player["_id"])}))
+    accuracy = round((shots_hit / shots_fired) * 100, 2) if shots_fired else 0
+    headshot_percentage = round((headshots / shots_hit) * 100, 2) if shots_hit else 0
 
     return jsonify({
-        "message":
-            f"Player {action} complete."
-    }), 200
+        "user": {
+            "id": str(player["_id"]),
+            "username": player.get("name"),
+            "email": player.get("email"),
+            "role": player.get("role", "player"),
+            "created_at": player.get("created_at").isoformat() if player.get("created_at") else None,
+            "mfa_status": "Enabled" if player.get("mfa_enabled") else "Disabled",
+            "account_status": player.get("status", "active"),
+            "last_login": last_login.get("timestamp").isoformat() if last_login and last_login.get("timestamp") else None,
+        },
+        "security": {
+            "risk_score": player.get("risk_score", 0),
+            "security_alerts": len([event for event in player_events if event.get("severity") in {"medium", "high", "critical"}]),
+            "detections": [{
+                "id": str(item.get("_id")),
+                "match_id": item.get("match_id"),
+                "type": item.get("detection_type"),
+                "severity": item.get("severity"),
+                "confidence": item.get("confidence"),
+                "timestamp": item.get("timestamp").isoformat() if isinstance(item.get("timestamp"), datetime) else item.get("timestamp"),
+                "description": item.get("description"),
+                "status": item.get("status", "open"),
+            } for item in player_detections],
+            "login_history": [{
+                "timestamp": item.get("timestamp").isoformat() if item.get("timestamp") else None,
+                "success": item.get("success"),
+                "ip_address": item.get("ip_address"),
+                "authentication_method": item.get("authentication_method"),
+                "location": item.get("location"),
+            } for item in login_events],
+            "active_sessions": [{
+                "id": str(item.get("_id")),
+                "ip_address": item.get("ip_address"),
+                "created_at": item.get("created_at").isoformat() if item.get("created_at") else None,
+                "expires_at": item.get("expires_at").isoformat() if item.get("expires_at") else None,
+            } for item in active_sessions],
+        },
+        "gameplay": {
+            "total_matches": len(player_matches),
+            "kills": kills,
+            "deaths": deaths,
+            "kd": kd,
+            "headshot_percentage": headshot_percentage,
+            "accuracy": accuracy,
+            "suspicious_matches": len([item for item in player_detections if item.get("severity") in {"high", "critical"}]),
+        },
+    })
+
+
+@game_bp.post("/admin/players/<player_id>/<action>")
+@require_role("admin")
+def admin_player_action(player_id, action):
+    if action not in {"activate", "revoke", "suspend", "delete"}:
+        return jsonify({"message": "Unsupported action."}), 400
+    try:
+        oid = ObjectId(player_id)
+    except Exception:
+        return jsonify({"message": "Invalid player id."}), 400
+
+    player = users.find_one({"_id": oid, "role": {"$ne": "admin"}})
+    if not player:
+        return jsonify({"message": "Player not found."}), 404
+
+    if action == "delete":
+        users.delete_one({"_id": oid})
+        matches.delete_many({"player_id": str(oid)})
+        detections.delete_many({"player_id": str(oid)})
+        telemetry.delete_many({"player_id": str(oid)})
+        security_events.delete_many({"user_id": str(oid)})
+        login_history.delete_many({"user_id": str(oid)})
+        sessions.delete_many({"user_id": str(oid)})
+        log_security_event(
+            str(oid),
+            "account_deleted",
+            "critical",
+            "Admin deleted player account.",
+            ip_address=request.remote_addr or "127.0.0.1",
+            source="admin",
+            status="success",
+        )
+        return jsonify({"message": "Player account deleted."})
+
+    if action == "activate":
+        users.update_one({"_id": oid}, {"$set": {"status": "active"}})
+        log_security_event(
+            str(oid),
+            "account_activation",
+            "medium",
+            "Admin activated player account.",
+            ip_address=request.remote_addr or "127.0.0.1",
+            source="admin",
+            status="success",
+        )
+        return jsonify({"message": "Player account activated."})
+
+    users.update_one({"_id": oid}, {"$set": {"status": "suspended"}})
+    sessions.update_many({"user_id": str(oid)}, {"$set": {"revoked": True, "revoked_at": utcnow(), "status": "revoked"}})
+    log_security_event(
+        str(oid),
+        "account_suspension",
+        "high",
+        f"Admin suspended player account ({action}).",
+        ip_address=request.remote_addr or "127.0.0.1",
+        source="admin",
+        status="success",
+    )
+    return jsonify({"message": f"Player account {action}d."})
+
+
+@game_bp.get("/admin/security-events")
+@require_role("admin")
+def admin_security_events():
+    filters = {}
+    if request.args.get("player"):
+        filters["user_id"] = request.args.get("player")
+    if request.args.get("severity"):
+        filters["severity"] = request.args.get("severity")
+    if request.args.get("event_type"):
+        filters["event_type"] = request.args.get("event_type")
+    if request.args.get("date"):
+        filters["timestamp"] = {"$gte": datetime.fromisoformat(request.args.get("date"))}
+
+    rows = list(security_events.find(filters).sort("timestamp", -1).limit(200))
+    return jsonify({
+        "events": [{
+            "id": str(item.get("_id")),
+            "timestamp": item.get("timestamp").isoformat() if isinstance(item.get("timestamp"), datetime) else item.get("timestamp"),
+            "event_type": item.get("event_type"),
+            "user": item.get("user_id"),
+            "severity": item.get("severity"),
+            "description": item.get("description"),
+            "ip_address": item.get("ip_address"),
+            "source": item.get("source", "platform"),
+            "status": item.get("status", "recorded"),
+        } for item in rows],
+    })
+
+
+@game_bp.get("/admin/game-monitoring")
+@require_role("admin")
+def admin_game_monitoring():
+    active_matches = list(matches.find({"status": "active"}))
+    active_sessions = sessions.count_documents({"role": "player", "revoked": False, "expires_at": {"$gt": utcnow()}})
+    recent_telemetry = list(telemetry.find({"timestamp": {"$gte": utcnow() - timedelta(minutes=5)}}))
+    active_match_ids = {item.get("match_id") for item in active_matches}
+    for item in recent_telemetry:
+        if item.get("match_id") not in active_match_ids:
+            active_matches.append({
+                "match_id": item.get("match_id"),
+                "game_id": item.get("game_id", "fps-microgame"),
+                "player_id": item.get("player_id"),
+                "start_time": item.get("timestamp"),
+                "status": "active",
+            })
+            active_match_ids.add(item.get("match_id"))
+    total_matches = matches.count_documents({})
+    detection_count = detections.count_documents({})
+    suspicion_total = sum(float(item.get("risk_score", item.get("confidence", 0)) or 0) for item in detections.find({}))
+    suspicion_rate = round((suspicion_total / detection_count) * 100, 2) if detection_count else 0
+    return jsonify({
+        "active_games": [{
+            "match_id": item.get("match_id"),
+            "game_id": item.get("game_id", "fps-microgame"),
+            "player_id": item.get("player_id"),
+            "started_at": item.get("start_time").isoformat() if isinstance(item.get("start_time"), datetime) else item.get("start_time"),
+        } for item in active_matches],
+        "total_matches": total_matches,
+        "average_suspicion_rate": suspicion_rate,
+        "detections": detection_count,
+        "supported_games": [{"id": "fps-microgame", "name": "FPS Microgame", "status": "available"}],
+        "active_player_count": len({item.get("player_id") for item in active_matches if item.get("player_id")}) or active_sessions,
+    })
+
+
+@game_bp.get("/admin/sessions")
+@require_role("admin")
+def admin_sessions():
+    rows = list(sessions.find({"revoked": False, "expires_at": {"$gt": utcnow()}}).sort("created_at", -1))
+    return jsonify({
+        "sessions": [{
+            "id": str(item.get("_id")),
+            "user_id": item.get("user_id"),
+            "role": item.get("role"),
+            "ip_address": item.get("ip_address"),
+            "created_at": item.get("created_at").isoformat() if item.get("created_at") else None,
+            "expires_at": item.get("expires_at").isoformat() if item.get("expires_at") else None,
+        } for item in rows],
+    })
+
+
+@game_bp.get("/dashboard")
+@require_role("player")
+def dashboard():
+    user_id = session["user_id"]
+    player_matches = list(matches.find({"player_id": user_id}).sort("start_time", -1).limit(10))
+    recent_detections = list(detections.find({"player_id": user_id}).sort("timestamp", -1).limit(10))
+    alerts = list(security_events.find({"user_id": user_id}).sort("timestamp", -1).limit(10))
+
+    return jsonify({
+        "stats": {
+            "matches_analyzed": len(player_matches),
+            "security_alerts": len([a for a in alerts if a.get("severity") in {"medium", "high", "critical"}]),
+            "mfa_enabled": bool(users.find_one({"_id": ObjectId(user_id)}, {"mfa_enabled": 1}).get("mfa_enabled")),
+            "account_status": users.find_one({"_id": ObjectId(user_id)}, {"status": 1}).get("status", "active"),
+            "recent_detections": len(recent_detections),
+            "recent_security_activity": len(alerts),
+            "risk_score": users.find_one({"_id": ObjectId(user_id)}, {"risk_score": 1}).get("risk_score", 0),
+        },
+        "recent_detections": [{
+            "detection_id": str(item.get("_id")),
+            "detection_type": item.get("detection_type", "anomaly_detected"),
+            "severity": item.get("severity", "low"),
+            "confidence": item.get("confidence", 0),
+            "description": item.get("description", "Gameplay anomaly detected."),
+            "timestamp": item.get("timestamp").isoformat() if isinstance(item.get("timestamp"), datetime) else item.get("timestamp"),
+        } for item in recent_detections],
+        "alerts": [{
+            "type": a.get("event_type", "security_event"),
+            "severity": a.get("severity", "low"),
+            "description": a.get("description", "Security alert."),
+            "created_at": a.get("timestamp").isoformat() if isinstance(a.get("timestamp"), datetime) else a.get("timestamp"),
+        } for a in alerts],
+        "matches": [{
+            "match_id": m.get("match_id"),
+            "status": m.get("status", "completed"),
+            "duration": m.get("duration_seconds"),
+            "kills": m.get("kills", 0),
+            "deaths": m.get("deaths", 0),
+            "accuracy": m.get("accuracy", 0),
+            "headshots": m.get("headshots", 0),
+            "risk_score": m.get("risk_score", 0),
+            "start_time": m.get("start_time").isoformat() if isinstance(m.get("start_time"), datetime) else m.get("start_time"),
+        } for m in player_matches],
+    })
+
+
+@game_bp.get("/player/matches")
+@require_role("player")
+def player_matches():
+    user_id = session["user_id"]
+    rows = list(matches.find({"player_id": user_id}).sort("start_time", -1))
+    response = []
+    for row in rows:
+        telemetry_rows = list(telemetry.find({"player_id": user_id, "match_id": row.get("match_id")}))
+        shots_fired = sum(int(item.get("shots", 0)) for item in telemetry_rows)
+        shots_hit = sum(int(item.get("hits", 0)) for item in telemetry_rows)
+        suspicious_events = len(list(security_events.find({"user_id": user_id, "metadata.match_id": row.get("match_id")})))
+        killings = row.get("kills", sum(int(item.get("kills", 0)) for item in telemetry_rows))
+        deaths = row.get("deaths", sum(int(item.get("deaths", 0)) for item in telemetry_rows))
+        headshots = row.get("headshots", sum(int(item.get("headshots", 0)) for item in telemetry_rows))
+        headshot_percentage = round((headshots / shots_hit) * 100, 2) if shots_hit else 0
+        accuracy = row.get("accuracy", round((shots_hit / shots_fired) * 100, 2) if shots_fired else 0)
+        kd = round((killings / deaths), 2) if deaths else float(killings)
+        response.append({
+            "match_id": row.get("match_id"),
+            "date": row.get("start_time").isoformat() if isinstance(row.get("start_time"), datetime) else row.get("start_time"),
+            "duration": row.get("duration_seconds"),
+            "kills": killings,
+            "deaths": deaths,
+            "kd": kd,
+            "headshots": headshots,
+            "headshot_percentage": headshot_percentage,
+            "accuracy": accuracy,
+            "shots_fired": shots_fired,
+            "shots_hit": shots_hit,
+            "suspicious_events": suspicious_events,
+            "risk_score": row.get("risk_score", 0),
+            "status": row.get("status", "completed"),
+        })
+    return jsonify({"matches": response})
+
+
+@game_bp.get("/player/detections")
+@require_role("player")
+def player_detections():
+    user_id = session["user_id"]
+    rows = list(detections.find({"player_id": user_id}).sort("timestamp", -1))
+    return jsonify({
+        "detections": [{
+            "detection_id": str(item.get("_id")),
+            "match_id": item.get("match_id"),
+            "detection_type": item.get("detection_type", "anomaly_detected"),
+            "severity": item.get("severity", "low"),
+            "confidence_score": item.get("confidence", 0),
+            "timestamp": item.get("timestamp").isoformat() if isinstance(item.get("timestamp"), datetime) else item.get("timestamp"),
+            "description": item.get("description", "Detected anomaly."),
+            "status": item.get("status", "open"),
+            "risk_score": item.get("risk_score", item.get("confidence", 0)),
+        } for item in rows],
+    })
+
+
+@game_bp.get("/player/security")
+@require_role("player")
+def player_security():
+    user_id = session["user_id"]
+    user = users.find_one({"_id": ObjectId(user_id)}, {"password_hash": 0, "mfa_secret": 0})
+    active_sessions = list(sessions.find({"user_id": user_id, "revoked": False, "expires_at": {"$gt": utcnow()}}).sort("created_at", -1))
+    history_rows = list(login_history.find({"user_id": user_id}).sort("timestamp", -1))
+    last_login = login_history.find_one({"user_id": user_id, "success": True}, sort=[("timestamp", -1)])
+    return jsonify({
+        "mfa_status": "enabled" if user.get("mfa_enabled") else "disabled",
+        "active_sessions": [{
+            "id": str(item.get("_id")),
+            "ip_address": item.get("ip_address"),
+            "user_agent": item.get("user_agent"),
+            "created_at": item.get("created_at").isoformat() if item.get("created_at") else None,
+            "expires_at": item.get("expires_at").isoformat() if item.get("expires_at") else None,
+        } for item in active_sessions],
+        "login_history": [{
+            "timestamp": item.get("timestamp").isoformat() if isinstance(item.get("timestamp"), datetime) else item.get("timestamp"),
+            "success": item.get("success"),
+            "authentication_method": item.get("authentication_method", "mfa"),
+            "ip_address": item.get("ip_address"),
+            "location": item.get("location"),
+        } for item in history_rows],
+        "last_login": last_login.get("timestamp").isoformat() if last_login and last_login.get("timestamp") else None,
+        "password_status": "Protected" if user.get("password_hash") else "Needs reset",
+        "account_status": user.get("status", "active"),
+    })
+
+
+@game_bp.get("/player/login-history")
+@require_role("player")
+def player_login_history():
+    user_id = session["user_id"]
+    rows = list(login_history.find({"user_id": user_id}).sort("timestamp", -1))
+    return jsonify({
+        "login_history": [{
+            "timestamp": row.get("timestamp").isoformat() if isinstance(row.get("timestamp"), datetime) else row.get("timestamp"),
+            "success": row.get("success", True),
+            "authentication_method": row.get("authentication_method", "mfa"),
+            "ip_address": row.get("ip_address", "127.0.0.1"),
+            "location": row.get("location", "Localhost"),
+        } for row in rows],
+    })
+
+
+@game_bp.get("/player/security-status")
+@require_role("player")
+def player_security_status():
+    user_id = session["user_id"]
+    user = users.find_one({"_id": ObjectId(user_id)}, {"password_hash": 0, "mfa_secret": 0})
+    last_login = login_history.find_one({"user_id": user_id, "success": True}, sort=[("timestamp", -1)])
+    return jsonify({
+        "status": user.get("status", "active"),
+        "mfa_enabled": user.get("mfa_enabled", False),
+        "last_login": last_login.get("timestamp").isoformat() if last_login and last_login.get("timestamp") else None,
+    })
+
+
+@game_bp.post("/telemetry")
+@require_role("player")
+def collect_telemetry():
+    user_id = session["user_id"]
+    payload = request.get_json(silent=True) or {}
+    item = {
+        "player_id": user_id,
+        "match_id": payload.get("match_id") or "manual-match",
+        "game_id": payload.get("game_id", "fps-microgame"),
+        "timestamp": datetime.now(timezone.utc),
+        "kills": payload.get("kills", 0),
+        "deaths": payload.get("deaths", 0),
+        "shots": payload.get("shots", 0),
+        "hits": payload.get("hits", 0),
+        "headshots": payload.get("headshots", 0),
+        "accuracy": payload.get("accuracy", 0),
+        "movement": payload.get("movement", {}),
+        "gameplay_events": payload.get("gameplay_events", []),
+        "created_at": datetime.now(timezone.utc),
+    }
+    telemetry.insert_one(item)
+    return jsonify({"message": "Telemetry stored."})
+
+
+@game_bp.post("/matches")
+@require_role("player")
+def create_match():
+    user_id = session["user_id"]
+    payload = request.get_json(silent=True) or {}
+    match_id = payload.get("match_id") or f"match-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    preview = {
+        "match_id": match_id,
+        "player_id": user_id,
+        "game_id": payload.get("game_id", "fps-microgame"),
+        "status": payload.get("status", "active"),
+        "start_time": payload.get("start_time") or datetime.now(timezone.utc),
+        "end_time": payload.get("end_time"),
+        "duration_seconds": payload.get("duration_seconds", 0),
+        "kills": payload.get("kills", 0),
+        "deaths": payload.get("deaths", 0),
+        "accuracy": payload.get("accuracy", 0),
+        "headshots": payload.get("headshots", 0),
+        "risk_score": payload.get("risk_score", 0),
+        "created_at": datetime.now(timezone.utc),
+    }
+    matches.update_one({"match_id": match_id}, {"$set": preview}, upsert=True)
+    return jsonify({"match_id": match_id, "status": preview["status"]})
+
+
+@game_bp.post("/detect")
+@require_role("player")
+def detect():
+    user_id = session["user_id"]
+    data = request.get_json(silent=True) or {}
+    features = data.get("features", {})
+
+    missing = [name for name in FEATURES if name not in features]
+    if missing:
+        return jsonify({"message": f"Missing features: {', '.join(missing)}"}), 400
+
+    try:
+        result = predict(features)
+    except (TypeError, ValueError) as exc:
+        return jsonify({"message": f"Invalid feature values: {exc}"}), 400
+
+    timestamp = datetime.now(timezone.utc)
+    detection_record = {
+        "player_id": user_id,
+        "match_id": data.get("match_id") or "manual-detection",
+        "detection_type": "anomaly_detected",
+        "severity": "medium" if result.get("risk_score", 0) >= 0.5 else "low",
+        "confidence": result.get("risk_score", 0),
+        "risk_score": result.get("risk_score", 0),
+        "description": "Gameplay anomaly detected and reviewed by the security model.",
+        "timestamp": timestamp,
+        "created_at": timestamp,
+        "status": "open",
+        "result": result,
+    }
+    detections.insert_one(detection_record)
+
+    if result.get("random_forest") == "cheater" or result.get("isolation_forest") == "anomaly":
+        security_events.insert_one({
+            "user_id": user_id,
+            "event_type": "gameplay_anomaly",
+            "severity": "high" if result.get("random_forest") == "cheater" else "medium",
+            "confidence": result.get("risk_score", 0),
+            "description": "Suspicious behaviour pattern was detected using ML telemetry analysis.",
+            "result": result,
+            "timestamp": timestamp,
+            "created_at": timestamp,
+            "risk_score": result.get("risk_score", 0),
+            "status": "open",
+            "source": "ml_model",
+            "metadata": {"match_id": data.get("match_id") or "manual-detection"},
+        })
+
+    return jsonify(result)

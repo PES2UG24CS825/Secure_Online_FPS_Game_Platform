@@ -1,0 +1,11 @@
+{
+  "name": "secure-online-fps-frontend",
+  "version": "1.0.0",
+  "description": "Secure Online FPS Game Platform Frontend",
+  "scripts": {
+    "start": "http-server . -p 3000 -o /login.html"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}
