@@ -359,24 +359,36 @@ async function loadDashboard() {
                         .map(
                             function (detection) {
 
+                                const incomplete =
+                                    detection.status !== "success";
+
                                 const bad =
+                                    !incomplete && (
                                     detection.rf ===
                                         "cheater" ||
 
                                     detection.if ===
-                                        "anomaly";
+                                        "anomaly"
+                                    );
+
+                                const rf = incomplete
+                                    ? "unavailable"
+                                    : detection.rf ?? "not loaded";
+
+                                const isolation = incomplete
+                                    ? "unavailable"
+                                    : detection.if ?? "not loaded";
 
 
                                 const score =
-                                    detection.risk_score ==
-                                    null
+                                    incomplete || detection.risk_score == null
 
                                         ? "—"
 
                                         : `${Math.round(
                                             Number(
                                                 detection.risk_score
-                                            ) * 100
+                                            )
                                         )}%`;
 
 
@@ -391,8 +403,7 @@ async function loadDashboard() {
                                             </strong>
 
                                             ${escapeHtml(
-                                                detection.rf ??
-                                                "not loaded"
+                                                rf
                                             )}
 
                                             &nbsp;&nbsp;
@@ -402,23 +413,26 @@ async function loadDashboard() {
                                             </strong>
 
                                             ${escapeHtml(
-                                                detection.if ??
-                                                "not loaded"
+                                                isolation
                                             )}
 
                                         </div>
 
 
                                         <span class="badge ${
-                                            bad
-                                                ? "bad"
-                                                : "good"
+                                            incomplete
+                                                ? "gray"
+                                                : bad
+                                                    ? "bad"
+                                                    : "good"
                                         }">
 
                                             ${
-                                                bad
-                                                    ? "Review"
-                                                    : "Normal"
+                                                incomplete
+                                                    ? "Analysis incomplete"
+                                                    : bad
+                                                        ? "Review"
+                                                        : "Normal"
                                             }
 
                                             · ${score}
@@ -1371,33 +1385,37 @@ if (detectForm) {
                         "hidden"
                     );
 
+                    if (result.status !== "success") {
+                        resultBox.textContent =
+                            "Analysis incomplete — model results unavailable.";
+                    } else {
 
-                    const score =
-                        result.result?.risk_score ??
-                        result.risk_score;
-
-
-                    const scoreText =
-                        score == null
-                            ? "—"
-                            : `${Math.round(
-                                Number(score) * 100
-                            )}%`;
+                        const score =
+                            result.result?.risk_score ??
+                            result.risk_score;
 
 
-                    const rf =
-                        result.result?.random_forest ??
-                        result.random_forest ??
-                        "model not loaded";
+                        const scoreText =
+                            score == null
+                                ? "—"
+                                : `${Math.round(
+                                    Number(score)
+                                )}%`;
 
 
-                    const isolation =
-                        result.result?.isolation_forest ??
-                        result.isolation_forest ??
-                        "model not loaded";
+                        const rf =
+                            result.result?.random_forest ??
+                            result.random_forest ??
+                            "model not loaded";
 
 
-                    resultBox.innerHTML = `
+                        const isolation =
+                            result.result?.isolation_forest ??
+                            result.isolation_forest ??
+                            "model not loaded";
+
+
+                        resultBox.innerHTML = `
 
                         <strong>
                             Detection result
@@ -1431,7 +1449,8 @@ if (detectForm) {
                             ${scoreText}
                         </b>
 
-                    `;
+                        `;
+                    }
 
                 }
 

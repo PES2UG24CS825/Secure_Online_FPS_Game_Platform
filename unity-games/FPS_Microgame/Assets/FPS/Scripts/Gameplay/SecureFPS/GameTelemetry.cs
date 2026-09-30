@@ -1,6 +1,7 @@
 
 using UnityEngine;
 using System.Globalization;
+using System.Collections;
 using Unity.FPS.Game;
 
 public class GameTelemetry : MonoBehaviour
@@ -11,6 +12,10 @@ public class GameTelemetry : MonoBehaviour
     private bool gameStarted = false;
     private bool gameCompleted = false;
     private bool playerDeathSent = false;
+    private float sessionStartTime;
+    private bool completionRequested = false;
+    private bool demoTelemetryStarted = false;
+    private Coroutine demoTelemetryRoutine;
 
     private SecureFPSClient secureClient;
 
@@ -82,6 +87,50 @@ public class GameTelemetry : MonoBehaviour
         StartGame();
     }
 
+    public void StartDemoTelemetry()
+    {
+        if (demoTelemetryStarted)
+            return;
+
+        demoTelemetryStarted = true;
+        demoTelemetryRoutine = StartCoroutine(DemoTelemetryPattern());
+    }
+
+    public void StopDemoTelemetry()
+    {
+        if (demoTelemetryRoutine != null)
+        {
+            StopCoroutine(demoTelemetryRoutine);
+            demoTelemetryRoutine = null;
+        }
+    }
+
+    private IEnumerator DemoTelemetryPattern()
+    {
+        // Development simulation only: emit existing events; never change gameplay or model outputs.
+        for (int shotIndex = 0; shotIndex < 20; shotIndex++)
+        {
+            WeaponFire("demo-telemetry-fixture");
+            if (shotIndex < 19)
+                EnemyHit("demo-telemetry-target", 1f);
+
+            PlayerBehavior(8f, 0f, 0f, 0f, true);
+            AimBehavior((1f / 0.95f) - 1f);
+
+            yield return new WaitForSecondsRealtime(0.04f);
+        }
+
+        for (int killIndex = 0; killIndex < 9; killIndex++)
+        {
+            EnemyKilled("demo-telemetry-fixture");
+            yield return new WaitForSecondsRealtime(0.005f);
+        }
+
+        // Report a telemetry event only. Do not invoke PlayerDeath(), which ends gameplay.
+        SendEvent("player_death", "{}");
+        demoTelemetryRoutine = null;
+    }
+
     // =========================================================
     // GAME START
     // =========================================================
@@ -95,6 +144,8 @@ public class GameTelemetry : MonoBehaviour
 
         gameStarted = true;
         gameStartedSent = true;
+        sessionStartTime = Time.realtimeSinceStartup;
+
 
         SendEvent("game_started", "{}");
     }
@@ -152,6 +203,21 @@ public class GameTelemetry : MonoBehaviour
         );
     }
 
+    public void EnemySpawned(string enemyId)
+    {
+        string json =
+            "{"
+            + "\"enemy_id\":\"" + EscapeJson(enemyId) + "\","
+            + "\"timestamp\":"
+            + Time.realtimeSinceStartup.ToString(
+            CultureInfo.InvariantCulture)
+            + "}";
+
+        SendEvent("enemy_spawned", json);
+    }
+
+
+
     // =========================================================
     // WEAPON FIRE
     // =========================================================
@@ -167,7 +233,9 @@ public class GameTelemetry : MonoBehaviour
             "{"
             + "\"weapon\":\""
             + EscapeJson(weaponName)
-            + "\""
+            + "\","
+            + "\"timestamp\":"
+            + Time.realtimeSinceStartup.ToString(CultureInfo.InvariantCulture)
             + "}";
 
         SendEvent(
@@ -188,6 +256,9 @@ public class GameTelemetry : MonoBehaviour
             + EscapeJson(targetId)
             + "\",\"damage\":"
             + damage.ToString(CultureInfo.InvariantCulture)
+            + ","
+            + "\"timestamp\":"
+            + Time.realtimeSinceStartup.ToString(CultureInfo.InvariantCulture)
             + "}";
 
         SendEvent(

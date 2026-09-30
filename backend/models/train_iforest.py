@@ -24,6 +24,23 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 
 # ── Features ──────────────────────────────────────────
 FEATURES = [
+    "accuracy",
+    "fire_rate",
+    "movement_speed",
+    "aim_smoothness",
+    "kdr"
+]
+
+DATASET_FEATURES = [
+    "Accuracy",
+    "Fire_Rate",
+    "Movement_Speed",
+    "Aim_Smoothness",
+    "KDR"
+]
+
+# Original seven-feature training order retained for future re-enablement.
+LEGACY_FEATURES = [
     "Reaction_Time",
     "Accuracy",
     "Headshot_Ratio",
@@ -36,8 +53,12 @@ FEATURES = [
 # ── Load dataset ──────────────────────────────────────
 df = pd.read_csv(DATA_PATH)
 
-X = df[FEATURES].values
+X = df.loc[:, DATASET_FEATURES].astype(float)
+X.columns = FEATURES
 y = df["Label"].values
+
+if X.isna().any().any() or not np.isfinite(X.to_numpy()).all():
+    raise ValueError("Active training features must be present and finite")
 
 print("=" * 55)
 print(" Isolation Forest Training (Independent)")
@@ -49,7 +70,11 @@ print(f"Cheater (1): {(y == 1).sum()}")
 
 # ── Scaling (IMPORTANT) ───────────────────────────────
 scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+X_scaled = pd.DataFrame(
+    scaler.fit_transform(X),
+    columns=FEATURES,
+    index=X.index
+)
 
 # Save scaler
 scaler_path = os.path.join(MODEL_DIR, "scaler.pkl")
@@ -58,7 +83,7 @@ joblib.dump(scaler, scaler_path)
 print(f"\nScaler saved → {scaler_path}")
 
 # ── Train ONLY on normal data ─────────────────────────
-X_normal = X_scaled[y == 0]
+X_normal = X_scaled.loc[y == 0]
 print(f"\nTraining Isolation Forest on {len(X_normal)} normal players...")
 
 iso = IsolationForest(

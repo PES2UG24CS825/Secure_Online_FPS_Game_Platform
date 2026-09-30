@@ -30,6 +30,23 @@ MODEL_PATH = os.path.join(BASE_DIR, "random_forest.pkl")
 # FEATURES
 # ─────────────────────────────────────────────
 FEATURES = [
+    "accuracy",
+    "fire_rate",
+    "movement_speed",
+    "aim_smoothness",
+    "kdr",
+]
+
+DATASET_FEATURES = [
+    "Accuracy",
+    "Fire_Rate",
+    "Movement_Speed",
+    "Aim_Smoothness",
+    "KDR",
+]
+
+# Original seven-feature training order retained for future re-enablement.
+LEGACY_FEATURES = [
     "Reaction_Time",
     "Accuracy",
     "Headshot_Ratio",
@@ -63,7 +80,8 @@ df = df.sample(frac=1, random_state=42).reset_index(drop=True)
 # ─────────────────────────────────────────────
 # 2. PREPARE DATA
 # ─────────────────────────────────────────────
-X = df[FEATURES].values
+X = df.loc[:, DATASET_FEATURES].astype(float)
+X.columns = FEATURES
 y = df["Label"].values
 
 # ─────────────────────────────────────────────
@@ -100,7 +118,10 @@ model = RandomForestClassifier(
     n_jobs=-1
 )
 
-model.fit(X_train, y_train)
+model.fit(
+    pd.DataFrame(X_train, columns=FEATURES),
+    y_train
+)
 
 print("\nModel Training Completed ✅")
 
@@ -149,7 +170,7 @@ print(f"\nModel Saved → {MODEL_PATH}")
 # ─────────────────────────────────────────────
 print("\n=== Sample Prediction ===")
 
-sample = np.array([[0.32, 0.88, 0.55, 0.70, 0.62, 0.81, 2.1]])
+sample = X_test.iloc[[0]]
 
 pred = model.predict(sample)[0]
 result = "Cheater" if pred == 1 else "Normal"
