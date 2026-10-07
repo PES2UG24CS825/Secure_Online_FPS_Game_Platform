@@ -1,1202 +1,214 @@
-// ============================================================
-// SecureFPS Admin Control Center
-// ============================================================
-
-const ADMIN_SECTIONS = ["overview", "players", "security-events", "game-monitoring"];
-
-let currentAdmin = null;
-let toastTimer = null;
-
-
-// ============================================================
-// HELPERS
-// ============================================================
-
 function escapeHtml(value) {
-    return String(value ?? "").replace(/[&<>"']/g, (character) => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;"
-    }[character]));
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[character]);
 }
 
-function formatDate(value) {
-    if (!value) return "—";
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-        return "—";
-    }
-
-    return date.toLocaleString();
+function displayNumber(value) {
+  const number = Number(value);
+  return value == null || !Number.isFinite(number) ? "N/A" : number.toFixed(3);
 }
 
-function formatDateOnly(value) {
-    if (!value) return "—";
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-        return "—";
-    }
-
-    return date.toLocaleDateString();
+function displayDate(value) {
+  if (!value) return "N/A";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "N/A" : date.toLocaleString();
 }
 
-function getInitials(name) {
-    const value = String(name || "Admin").trim();
-
-    if (!value) {
-        return "A";
-    }
-
-    const parts = value.split(/\s+/);
-
-    if (parts.length === 1) {
-        return parts[0].slice(0, 2).toUpperCase();
-    }
-
-    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+function displayRiskScore(value) {
+  const score = Number(value);
+  return value == null || !Number.isFinite(score) ? "N/A" : `${score.toFixed(1)}/100`;
 }
 
-function showToast(message, isError = false) {
-    const toast = document.getElementById("adminToast");
+function renderGameplayAlerts(data) {
+  const banner = document.getElementById("gameplayAlertBanner");
+  const alertList = document.getElementById("gameplayAlerts");
+  const incompleteNotice = document.getElementById("analysisIncompleteNotice");
+  const alerts = Array.isArray(data.gameplay_alerts) ? data.gameplay_alerts.filter(Boolean) : [];
+  const analyses = Array.isArray(data.analyses) ? data.analyses.filter(Boolean) : [];
+  const pendingAlerts = alerts.filter((alert) => alert.review_status === "pending");
+  const incompleteAnalyses = analyses.filter((analysis) => analysis.status !== "success");
 
-    if (!toast) return;
+  if (pendingAlerts.length) {
+    const hasHigh = pendingAlerts.some((alert) => alert.severity === "high");
+    banner.className = `gameplay-alert-banner ${hasHigh ? "high" : "medium"}`;
+    banner.innerHTML = `<strong>GAMEPLAY ANOMALY DETECTED</strong><span>A potentially suspicious gameplay session requires admin review. ${pendingAlerts.length} pending alert${pendingAlerts.length === 1 ? "" : "s"}.</span>`;
+  } else if (alerts.length) {
+    banner.className = "gameplay-alert-banner reviewed";
+    banner.textContent = "No pending gameplay alerts. Reviewed alerts remain listed below.";
+  } else {
+    banner.className = "gameplay-alert-banner clear";
+    banner.textContent = "No suspicious gameplay alerts at this time.";
+  }
 
-    clearTimeout(toastTimer);
+  incompleteNotice.innerHTML = incompleteAnalyses.length
+    ? `<div class="gameplay-incomplete-notice">Analysis incomplete — model results unavailable. ${incompleteAnalyses.length} session${incompleteAnalyses.length === 1 ? "" : "s"} need attention.</div>`
+    : "";
 
-    toast.textContent = message;
-    toast.classList.toggle("error", isError);
-    toast.classList.add("show");
-
-    toastTimer = setTimeout(() => {
-        toast.classList.remove("show");
-    }, 3000);
+  alertList.innerHTML = alerts.map((alert) => {
+    const severity = ["high", "medium"].includes(alert.severity) ? alert.severity : "unknown";
+    const player = alert.player_name || alert.player_id || "N/A";
+    return `<article class="gameplay-alert-card ${severity}">
+      <h3>${alert.demo ? "REAL-TIME CHEATING ALERT" : "Potentially suspicious gameplay session requires admin review"}</h3>
+      ${alert.demo ? `<p>${escapeHtml(player)} — suspicious gameplay detected.</p>` : ""}
+      <div class="gameplay-alert-fields">
+        <span><strong>Player:</strong> ${escapeHtml(alert.demo ? alert.account_label || player : player)}</span>
+        <span><strong>Session:</strong> ${escapeHtml(alert.session_id || "N/A")}</span>
+        <span><strong>Risk Score:</strong> ${escapeHtml(displayRiskScore(alert.risk_score))}</span>
+        <span><strong>Random Forest:</strong> ${escapeHtml(alert.random_forest || "Unavailable")}</span>
+        <span><strong>Isolation Forest:</strong> ${escapeHtml(alert.isolation_forest || "Unavailable")}</span>
+        <span><strong>Severity:</strong> ${escapeHtml(severity)}</span>
+        <span><strong>Alert time:</strong> ${escapeHtml(displayDate(alert.created_at))}</span>
+        <span><strong>Review status:</strong> ${escapeHtml(alert.review_status || "unknown")}</span>
+      </div>
+    </article>`;
+  }).join("") || '<div class="empty">No gameplay alerts.</div>';
 }
 
-function riskClass(score) {
-    const value = Number(score) || 0;
+function renderDemoComparison(data) {
+  const banner = document.getElementById("demoComparisonBanner");
+  const comparison = document.getElementById("demoSessionComparison");
+  const analyses = Array.isArray(data.analyses) ? data.analyses.filter(Boolean) : [];
+  const alerts = Array.isArray(data.gameplay_alerts) ? data.gameplay_alerts.filter(Boolean) : [];
+  const alertBySession = new Map(alerts.map((alert) => [alert.session_id, alert]));
+  const demo = analyses.find((analysis) => analysis.demo === true);
+  const normal = analyses.find((analysis) =>
+    analysis.demo !== true && analysis.status === "success" && !alertBySession.has(analysis.session_id)
+  );
+  const demoAlert = demo ? alertBySession.get(demo.session_id) : null;
 
-    if (value >= 70) return "risk-high";
-    if (value >= 40) return "risk-medium";
+  if (!demo) {
+    banner.className = "gameplay-alert-banner reviewed";
+    banner.textContent = "Complete the development fixture to compare its actual model results.";
+  } else if (demo.status !== "success") {
+    banner.className = "gameplay-alert-banner reviewed";
+    banner.textContent = "Analysis incomplete — model results unavailable.";
+  } else if (demoAlert) {
+    banner.className = `gameplay-alert-banner ${demoAlert.severity === "high" ? "high" : "medium"}`;
+    banner.textContent = "GAMEPLAY ANOMALY DETECTED — This session has unusual gameplay behavior and requires admin review.";
+  } else {
+    banner.className = "gameplay-alert-banner clear";
+    banner.textContent = "No alert triggered for this test. The models did not meet the configured alert conditions.";
+  }
 
-    return "risk-low";
+  const renderSession = (title, analysis, isDemo) => {
+    if (!analysis) {
+      return `<article class="demo-session-card"><h3>${title}</h3><p class="empty">No matching saved session is available yet.</p></article>`;
+    }
+
+    const result = analysis.result || {};
+    const raw = analysis.raw_features || {};
+    const normalized = analysis.features || {};
+    const alert = alertBySession.get(analysis.session_id);
+    const complete = analysis.status === "success";
+    const player = isDemo
+      ? "Development fixture (no player account)"
+      : analysis.user_id || "N/A";
+    const featureRows = ["accuracy", "fire_rate", "movement_speed", "aim_smoothness", "kdr"]
+      .map((feature) => `<div><strong>${escapeHtml(feature)}</strong><span>${displayNumber(raw[feature])} raw / ${displayNumber(normalized[feature])} normalized</span></div>`)
+      .join("");
+
+    return `<article class="demo-session-card ${isDemo ? "demo" : "normal"}">
+      <h3>${title}</h3>
+      <div class="demo-session-meta"><span><strong>Player:</strong> ${escapeHtml(player)}</span><span><strong>Session:</strong> ${escapeHtml(analysis.session_id || "N/A")}</span><span><strong>Status:</strong> ${escapeHtml(analysis.status || "unknown")}</span></div>
+      <div class="demo-feature-list">${featureRows}</div>
+      <div class="demo-model-results">
+        <span><strong>Random Forest:</strong> ${escapeHtml(complete ? result.random_forest || "Unavailable" : "Analysis incomplete")}</span>
+        <span><strong>Isolation Forest:</strong> ${escapeHtml(complete ? result.isolation_forest || "Unavailable" : "Analysis incomplete")}</span>
+        <span><strong>Risk:</strong> ${escapeHtml(complete ? displayRiskScore(analysis.risk_score ?? result.risk_score) : "N/A")}</span>
+        <span><strong>Alert severity:</strong> ${escapeHtml(alert?.severity || "None")}</span>
+        <span><strong>Review status:</strong> ${escapeHtml(alert?.review_status || "Not required")}</span>
+      </div>
+    </article>`;
+  };
+
+  comparison.innerHTML = renderSession("Normal-player session", normal, false)
+    + renderSession("Cheater-like demo session", demo, true);
 }
 
+function renderDemoAccount(data) {
+  const panel = document.getElementById("demoAccountPanel");
+  const account = data.demo_account;
+  if (!account) {
+    panel.innerHTML = '<div class="empty">Demo account is not seeded.</div>';
+    return;
+  }
 
-// ============================================================
-// AUTHENTICATION
-// ============================================================
-
-async function checkAdminAuth() {
-    try {
-        const response = await api("/auth/me");
-
-        if (!response || !response.authenticated || !response.user) {
-            throw new Error("Authentication required.");
-        }
-
-        if (response.user.role !== "admin") {
-            window.location.replace("dashboard.html");
-            return null;
-        }
-
-        currentAdmin = response.user;
-
-        updateAdminProfile(response.user);
-
-        return response.user;
-
-    } catch (error) {
-        console.error("Admin authentication failed:", error);
-
-        window.location.replace("login.html");
-
-        return null;
-    }
+  const restricted = account.enforcement_state === "restricted";
+  const detectionStatus = account.detection_status || "not_evaluated";
+  const statusClass = detectionStatus === "success" ? (restricted ? "bad" : "good") : "gray";
+  const canReview = account.review_status === "pending";
+  const playerId = escapeHtml(account.player_id || "");
+  panel.innerHTML = `<div class="demo-account-card">
+    <div class="demo-account-heading"><strong>${escapeHtml(account.label || "DEMO CHEATER TEST ACCOUNT")}</strong><span class="badge ${statusClass}">${escapeHtml(restricted ? "restricted" : detectionStatus)}</span></div>
+    <div class="demo-account-fields">
+      <span><strong>Username:</strong> ${escapeHtml(account.username || "N/A")}</span>
+      <span><strong>Account type:</strong> ${escapeHtml(account.account_type || "N/A")}</span>
+      <span><strong>Current session:</strong> ${escapeHtml(account.session_id || "None")}</span>
+      <span><strong>Gameplay detection:</strong> ${escapeHtml(detectionStatus)}</span>
+      <span><strong>Risk score:</strong> ${escapeHtml(displayRiskScore(account.risk_score))}</span>
+      <span><strong>Random Forest:</strong> ${escapeHtml(account.random_forest || "Unavailable")}</span>
+      <span><strong>Isolation Forest:</strong> ${escapeHtml(account.isolation_forest || "Unavailable")}</span>
+      <span><strong>Alert severity:</strong> ${escapeHtml(account.alert_severity || "None")}</span>
+      <span><strong>Last evaluation:</strong> ${escapeHtml(displayDate(account.last_evaluation_at))}</span>
+      <span><strong>Enforcement:</strong> ${escapeHtml(account.enforcement_action || "none")} (${escapeHtml(account.enforcement_state || "monitoring")})</span>
+      <span><strong>Restricted until:</strong> ${escapeHtml(displayDate(account.restricted_until))}</span>
+      <span><strong>Review status:</strong> ${escapeHtml(account.review_status || "unknown")}</span>
+    </div>
+    <div class="demo-account-actions">
+      ${canReview ? `<button class="play-btn" type="button" data-demo-action="confirm-demo-alert" data-player-id="${playerId}">Mark alert reviewed</button>` : ""}
+      ${restricted ? `<button class="play-btn" type="button" data-demo-action="clear-demo-restriction" data-player-id="${playerId}">Clear temporary restriction</button>` : ""}
+    </div>
+  </div>`;
 }
 
-function updateAdminProfile(user) {
-    const nameElement = document.getElementById("adminName");
-    const emailElement = document.getElementById("adminEmail");
-    const avatarElement = document.getElementById("adminAvatar");
-    const sessionDetail = document.getElementById("sessionDetail");
-
-    if (nameElement) {
-        nameElement.textContent = user.name || "Security Admin";
-    }
-
-    if (emailElement) {
-        emailElement.textContent = user.email || "—";
-    }
-
-    if (avatarElement) {
-        avatarElement.textContent = getInitials(user.name);
-    }
-
-    if (sessionDetail) {
-        sessionDetail.textContent =
-            `${user.email || "Administrator"} • MFA enabled • Account ${user.status || "active"}`;
-    }
+async function loadAdmin() {
+  try {
+    const me = await api("/auth/me");
+    if (me.user.role !== "admin") { window.location.href = "dashboard.html"; return; }
+    document.getElementById("adminName").textContent = me.user.name;
+    document.getElementById("adminEmail").textContent = me.user.email;
+    const data = await api("/admin/overview");
+    document.getElementById("playerCount").textContent = data.players.length;
+    document.getElementById("eventCount").textContent = data.events.length;
+    document.getElementById("highCount").textContent = data.events.filter((event) => event.severity === "high").length;
+    document.getElementById("loginCount").textContent = data.login_count;
+    document.getElementById("players").innerHTML = data.players.map((player) => `<tr><td><strong>${player.name}</strong>${player.demo ? '<small>DEMO CHEATER TEST ACCOUNT</small>' : ""}<small>${player.email}</small></td><td>${player.role}</td><td><span class="badge good">${player.mfa_enabled ? "MFA enabled" : "Disabled"}</span></td><td>${player.created_at ? player.created_at.slice(0, 10) : "N/A"}</td><td><button class="play-btn" data-action="revoke" data-id="${player.id}">Revoke</button> <button class="play-btn danger-btn" data-action="delete" data-id="${player.id}">Delete</button></td></tr>`).join("") || '<tr><td colspan="5">No players registered.</td></tr>';
+    document.getElementById("events").innerHTML = data.events.map((event) => `<div class="list-row"><span>${event.type}</span><span class="badge ${event.severity === "high" ? "bad" : "warn"}">${event.severity}</span></div>`).join("") || '<div class="empty">No security events.</div>';
+    // Show only the five active model inputs, with raw and normalized values side by side.
+    const activeFeatures = ["accuracy", "fire_rate", "movement_speed", "aim_smoothness", "kdr"];
+    const analyses = Array.isArray(data.analyses) ? data.analyses.filter(Boolean) : [];
+    document.getElementById("analyses").innerHTML = analyses.map((analysis) => {
+      const raw = analysis.raw_features || {};
+      const normalized = analysis.features || {};
+      const missing = Array.isArray(analysis.missing_features) ? analysis.missing_features : [];
+      const status = analysis.status || "unknown";
+      const badge = status === "success" ? "good" : "gray";
+      const featureCells = activeFeatures.map((name) => `<td>${displayNumber(raw[name])} / ${displayNumber(normalized[name])}</td>`).join("");
+      const rfResult = status === "success" ? analysis.random_forest || "Unavailable" : "Analysis incomplete";
+      const ifResult = status === "success" ? analysis.isolation_forest || "Unavailable" : "Analysis incomplete";
+      const riskScore = status === "success" ? displayRiskScore(analysis.risk_score) : "N/A";
+      return `<tr><td>${escapeHtml(analysis.session_id || "N/A")}<small>${escapeHtml(analysis.user_id || "N/A")}</small></td><td>${escapeHtml(displayDate(analysis.created_at))}</td><td><span class="badge ${badge}">${escapeHtml(status)}</span><small>Missing: ${escapeHtml(missing.join(", ") || "None")}</small></td>${featureCells}<td>${escapeHtml(rfResult)}</td><td>${escapeHtml(ifResult)}</td><td>${escapeHtml(riskScore)}</td></tr>`;
+    }).join("") || '<tr><td colspan="11">No analyzed sessions.</td></tr>';
+    renderGameplayAlerts(data);
+    renderDemoComparison(data);
+    renderDemoAccount(data);
+  } catch (error) { window.location.href = "login.html"; }
 }
-
-
-// ============================================================
-// NAVIGATION
-// ============================================================
-
-function setupNavigation() {
-    document.querySelectorAll(".admin-nav-btn").forEach((button) => {
-        button.addEventListener("click", async () => {
-            const sectionName = button.dataset.section;
-
-            if (!ADMIN_SECTIONS.includes(sectionName)) {
-                return;
-            }
-
-            document.querySelectorAll(".admin-nav-btn").forEach((item) => {
-                item.classList.toggle(
-                    "active",
-                    item.dataset.section === sectionName
-                );
-            });
-
-            document.querySelectorAll(".admin-section").forEach((section) => {
-                section.classList.toggle(
-                    "active",
-                    section.id === sectionName
-                );
-            });
-
-            await loadSection(sectionName);
-        });
-    });
-}
-
-async function loadSection(sectionName) {
-    if (sectionName === "overview") {
-        await loadOverview();
-        return;
-    }
-
-    if (sectionName === "players") {
-        await loadPlayers();
-        return;
-    }
-
-    if (sectionName === "security-events") {
-        await loadSecurityEvents();
-        return;
-    }
-
-    if (sectionName === "game-monitoring") {
-        await loadGameMonitoring();
-    }
-}
-
-
-// ============================================================
-// OVERVIEW
-// ============================================================
-
-async function loadOverview() {
-    try {
-        const data = await api("/admin/overview");
-
-        const summary = data.summary || data.stats || {};
-
-        document.getElementById("playerCount").textContent =
-            summary.total_players ?? 0;
-
-        document.getElementById("sessionCount").textContent =
-            summary.active_sessions ?? 0;
-
-        document.getElementById("matchCount").textContent =
-            summary.matches_analyzed ?? 0;
-
-        document.getElementById("highCount").textContent =
-            summary.high_severity_events ?? 0;
-
-        renderRecentEvents(data.events || []);
-
-    } catch (error) {
-        console.error("Overview loading failed:", error);
-
-        document.getElementById("recentEvents").innerHTML = `
-            <div class="admin-empty">
-                <strong>Unable to load security activity</strong>
-                <span>${escapeHtml(error.message)}</span>
-            </div>
-        `;
-    }
-}
-
-function renderRecentEvents(events) {
-    const container = document.getElementById("recentEvents");
-
-    if (!container) return;
-
-    if (!events.length) {
-        container.innerHTML = `
-            <div class="admin-empty">
-                <strong>No security events recorded</strong>
-                <span>New authentication and security activity will appear here.</span>
-            </div>
-        `;
-
-        return;
-    }
-
-    container.innerHTML = `
-        <div class="admin-table-wrap">
-            <table class="admin-table">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Event</th>
-                        <th>Severity</th>
-                        <th>User</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-
-                <tbody>
-                    ${events.slice(0, 8).map((event) => `
-                        <tr>
-                            <td>
-                                ${escapeHtml(formatDate(event.timestamp))}
-                            </td>
-
-                            <td>
-                                <span class="event-type">
-                                    ${escapeHtml(
-                                        event.event_type ||
-                                        event.type ||
-                                        "Security event"
-                                    )}
-                                </span>
-                            </td>
-
-                            <td>
-                                <span class="severity-badge severity-${escapeHtml(
-                                    event.severity || "low"
-                                )}">
-                                    ${escapeHtml(event.severity || "low")}
-                                </span>
-                            </td>
-
-                            <td>
-                                ${escapeHtml(event.user || event.user_id || "System")}
-                            </td>
-
-                            <td>
-                                <span class="event-description">
-                                    ${escapeHtml(
-                                        event.description ||
-                                        "Security event recorded."
-                                    )}
-                                </span>
-                            </td>
-                        </tr>
-                    `).join("")}
-                </tbody>
-            </table>
-        </div>
-    `;
-}
-
-
-// ============================================================
-// PLAYERS
-// ============================================================
-
-async function loadPlayers() {
-    const container = document.getElementById("playersContainer");
-    const summary = document.getElementById("playersSummary");
-
-    if (!container) return;
-
-    container.innerHTML = `
-        <div class="admin-empty">
-            <strong>Loading player accounts</strong>
-            <span>Fetching current account data...</span>
-        </div>
-    `;
-
-    try {
-        const data = await api("/admin/players");
-
-        const players = Array.isArray(data.players)
-            ? data.players
-            : [];
-
-        if (summary) {
-            summary.textContent =
-                `${players.length} player account${players.length === 1 ? "" : "s"} registered`;
-        }
-
-        if (!players.length) {
-            container.innerHTML = `
-                <div class="admin-empty">
-                    <strong>No player accounts found</strong>
-                    <span>
-                        Create a player account and it will appear here automatically.
-                    </span>
-                </div>
-            `;
-
-            return;
-        }
-
-        container.innerHTML = `
-            <div class="admin-table-wrap">
-                <table class="admin-table">
-
-                    <thead>
-                        <tr>
-                            <th>Player</th>
-                            <th>Email</th>
-                            <th>MFA</th>
-                            <th>Status</th>
-                            <th>Risk</th>
-                            <th>Created</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-
-                    <tbody>
-                        ${players
-                            .map((player) => renderPlayerRow(player))
-                            .join("")}
-                    </tbody>
-
-                </table>
-            </div>
-        `;
-
-        attachPlayerActions();
-
-    } catch (error) {
-        console.error("Players loading failed:", error);
-
-        if (summary) {
-            summary.textContent = "Unable to load player accounts";
-        }
-
-        container.innerHTML = `
-            <div class="admin-empty">
-                <strong>Unable to load players</strong>
-                <span>${escapeHtml(error.message)}</span>
-            </div>
-        `;
-    }
-}
-
-function renderPlayerRow(player) {
-    const playerId = escapeHtml(player.id);
-
-    const playerName = escapeHtml(
-        player.username ||
-        player.name ||
-        "Player"
-    );
-
-    const playerEmail = escapeHtml(
-        player.email ||
-        "—"
-    );
-
-    const mfaEnabled =
-        player.mfa_status === "Enabled" ||
-        player.mfa_enabled === true;
-
-    const status =
-        player.account_status ||
-        player.status ||
-        "active";
-
-    const risk =
-        Number(player.risk_score || 0);
-
-    return `
-        <tr>
-
-            <td>
-                <div class="player-cell">
-                    <strong>${playerName}</strong>
-                    <small>${playerId}</small>
-                </div>
-            </td>
-
-            <td>
-                ${playerEmail}
-            </td>
-
-            <td>
-                <span class="mfa-badge ${
-                    mfaEnabled
-                        ? "mfa-enabled"
-                        : "mfa-disabled"
-                }">
-                    ${
-                        mfaEnabled
-                            ? "✓ Enabled"
-                            : "✕ Disabled"
-                    }
-                </span>
-            </td>
-
-            <td>
-                <span class="status-badge ${
-                    status === "active"
-                        ? "status-active"
-                        : "status-suspended"
-                }">
-                    ${escapeHtml(status)}
-                </span>
-            </td>
-
-            <td>
-                <span class="risk-value ${riskClass(risk)}">
-                    ${risk}
-                </span>
-            </td>
-
-            <td>
-                ${escapeHtml(formatDateOnly(player.created_at))}
-            </td>
-
-            <td>
-
-                <div class="table-actions">
-
-                    <button
-                        class="table-action"
-                        type="button"
-                        data-action="view"
-                        data-player-id="${playerId}">
-                        View
-                    </button>
-
-                    ${
-                        status === "active"
-                            ? `
-                                <button
-                                    class="table-action danger"
-                                    type="button"
-                                    data-action="suspend"
-                                    data-player-id="${playerId}"
-                                    data-player-name="${playerName}">
-                                    Suspend
-                                </button>
-                              `
-                            : `
-                                <button
-                                    class="table-action"
-                                    type="button"
-                                    data-action="activate"
-                                    data-player-id="${playerId}"
-                                    data-player-name="${playerName}">
-                                    Activate
-                                </button>
-                              `
-                    }
-
-                    <button
-                        class="table-action danger"
-                        type="button"
-                        data-action="delete"
-                        data-player-id="${playerId}"
-                        data-player-name="${playerName}">
-                        Delete
-                    </button>
-
-                </div>
-
-            </td>
-
-        </tr>
-    `;
-}
-
-function attachPlayerActions() {
-
-    document
-        .querySelectorAll("[data-action='view']")
-        .forEach((button) => {
-
-            button.addEventListener("click", () => {
-                viewPlayer(button.dataset.playerId);
-            });
-
-        });
-
-    document
-        .querySelectorAll("[data-action='suspend']")
-        .forEach((button) => {
-
-            button.addEventListener("click", () => {
-
-                updatePlayerStatus(
-                    button.dataset.playerId,
-                    "suspend",
-                    button.dataset.playerName
-                );
-
-            });
-
-        });
-
-    document
-        .querySelectorAll("[data-action='activate']")
-        .forEach((button) => {
-
-            button.addEventListener("click", () => {
-
-                updatePlayerStatus(
-                    button.dataset.playerId,
-                    "activate",
-                    button.dataset.playerName
-                );
-
-            });
-
-        });
-
-    document
-        .querySelectorAll("[data-action='delete']")
-        .forEach((button) => {
-
-            button.addEventListener("click", () => {
-
-                deletePlayer(
-                    button.dataset.playerId,
-                    button.dataset.playerName
-                );
-
-            });
-
-        });
-}
-
-
-// ============================================================
-// VIEW PLAYER
-// ============================================================
-
-async function viewPlayer(playerId) {
-
-    try {
-
-        const data = await api(
-            `/admin/players/${encodeURIComponent(playerId)}`
-        );
-
-        const user = data.user || {};
-        const gameplay = data.gameplay || {};
-        const security = data.security || {};
-
-        const message = [
-            `Player: ${user.username || user.name || "—"}`,
-            `Email: ${user.email || "—"}`,
-            `Status: ${user.account_status || user.status || "—"}`,
-            `Risk score: ${security.risk_score ?? 0}`,
-            `Matches: ${gameplay.total_matches ?? 0}`,
-            `Detections: ${security.detections?.length ?? 0}`,
-            `MFA: ${user.mfa_status || "—"}`
-        ].join("\n");
-
-        alert(message);
-
-    } catch (error) {
-
-        showToast(
-            `Unable to load player: ${error.message}`,
-            true
-        );
-
-    }
-}
-
-
-// ============================================================
-// SUSPEND / ACTIVATE
-// ============================================================
-
-async function updatePlayerStatus(
-    playerId,
-    action,
-    playerName
-) {
-
-    const actionText =
-        action === "suspend"
-            ? `Suspend ${playerName}?`
-            : `Activate ${playerName}?`;
-
-    if (!window.confirm(actionText)) {
-        return;
-    }
-
-    try {
-
-        await api(
-            `/admin/players/${encodeURIComponent(playerId)}/${action}`,
-            {
-                method: "POST"
-            }
-        );
-
-        showToast(
-            action === "suspend"
-                ? "Player suspended successfully."
-                : "Player activated successfully."
-        );
-
-        await loadPlayers();
-        await loadOverview();
-
-    } catch (error) {
-
-        showToast(
-            `Action failed: ${error.message}`,
-            true
-        );
-
-    }
-}
-
-
-// ============================================================
-// DELETE PLAYER
-// ============================================================
-
-async function deletePlayer(
-    playerId,
-    playerName
-) {
-
-    if (!window.confirm(
-        `Delete ${playerName} permanently?\n\n` +
-        `This removes the player's account and related security records.`
-    )) {
-        return;
-    }
-
-    try {
-
-        await api(
-            `/admin/players/${encodeURIComponent(playerId)}/delete`,
-            {
-                method: "POST"
-            }
-        );
-
-        showToast(
-            "Player account deleted."
-        );
-
-        await loadPlayers();
-        await loadOverview();
-
-    } catch (error) {
-
-        showToast(
-            `Delete failed: ${error.message}`,
-            true
-        );
-
-    }
-}
-
-
-// ============================================================
-// SECURITY EVENTS
-// ============================================================
-
-async function loadSecurityEvents() {
-
-    const container =
-        document.getElementById("eventsContainer");
-
-    const severity =
-        document.getElementById("severityFilter")?.value || "";
-
-    if (!container) {
-        return;
-    }
-
-    container.innerHTML = `
-        <div class="admin-empty">
-            <strong>Loading security events</strong>
-            <span>Fetching the audit trail...</span>
-        </div>
-    `;
-
-    try {
-
-        const path = severity
-            ? `/admin/security-events?severity=${encodeURIComponent(severity)}`
-            : "/admin/security-events";
-
-        const data = await api(path);
-
-        const events =
-            Array.isArray(data.events)
-                ? data.events
-                : [];
-
-        if (!events.length) {
-
-            container.innerHTML = `
-                <div class="admin-empty">
-                    <strong>No matching security events</strong>
-                    <span>
-                        There are no events for the selected severity.
-                    </span>
-                </div>
-            `;
-
-            return;
-        }
-
-        container.innerHTML = `
-            <div class="admin-table-wrap">
-
-                <table class="admin-table">
-
-                    <thead>
-                        <tr>
-                            <th>Timestamp</th>
-                            <th>Event</th>
-                            <th>Severity</th>
-                            <th>User</th>
-                            <th>Description</th>
-                        </tr>
-                    </thead>
-
-                    <tbody>
-
-                        ${events.map((event) => `
-
-                            <tr>
-
-                                <td>
-                                    ${escapeHtml(
-                                        formatDate(event.timestamp)
-                                    )}
-                                </td>
-
-                                <td>
-                                    <span class="event-type">
-                                        ${escapeHtml(
-                                            event.event_type ||
-                                            event.type ||
-                                            "Security event"
-                                        )}
-                                    </span>
-                                </td>
-
-                                <td>
-                                    <span class="severity-badge severity-${escapeHtml(
-                                        event.severity || "low"
-                                    )}">
-                                        ${escapeHtml(
-                                            event.severity || "low"
-                                        )}
-                                    </span>
-                                </td>
-
-                                <td>
-                                    ${escapeHtml(
-                                        event.user ||
-                                        event.user_id ||
-                                        "System"
-                                    )}
-                                </td>
-
-                                <td>
-                                    <span class="event-description">
-                                        ${escapeHtml(
-                                            event.description ||
-                                            "Security event recorded."
-                                        )}
-                                    </span>
-                                </td>
-
-                            </tr>
-
-                        `).join("")}
-
-                    </tbody>
-
-                </table>
-
-            </div>
-        `;
-
-    } catch (error) {
-
-        console.error(
-            "Security events loading failed:",
-            error
-        );
-
-        container.innerHTML = `
-            <div class="admin-empty">
-                <strong>
-                    Unable to load security events
-                </strong>
-
-                <span>
-                    ${escapeHtml(error.message)}
-                </span>
-            </div>
-        `;
-    }
-}
-
-
-// ============================================================
-// GAME MONITORING
-// ============================================================
-
-async function loadGameMonitoring() {
-
-    try {
-
-        const data =
-            await api("/admin/game-monitoring");
-
-        document.getElementById("activeGames").textContent =
-            data.active_games?.length ?? 0;
-
-        document.getElementById("totalMatches").textContent =
-            data.total_matches ?? 0;
-
-        document.getElementById("suspicionRate").textContent =
-            `${Number(
-                data.average_suspicion_rate ?? 0
-            ).toFixed(2)}%`;
-
-        document.getElementById("detectionCount").textContent =
-            data.detections ?? 0;
-
-        renderSupportedGames(
-            data.supported_games || []
-        );
-
-        renderActiveGames(
-            data.active_games || []
-        );
-
-    } catch (error) {
-
-        console.error(
-            "Game monitoring loading failed:",
-            error
-        );
-
-        document.getElementById(
-            "supportedGames"
-        ).innerHTML = `
-            <div class="admin-empty">
-
-                <strong>
-                    Unable to load monitoring data
-                </strong>
-
-                <span>
-                    ${escapeHtml(error.message)}
-                </span>
-
-            </div>
-        `;
-
-        document.getElementById(
-            "activeGamesList"
-        ).innerHTML = "";
-    }
-}
-
-function renderSupportedGames(games) {
-
-    const container =
-        document.getElementById("supportedGames");
-
-    if (!container) {
-        return;
-    }
-
-    if (!games.length) {
-
-        container.innerHTML = `
-            <div class="admin-empty">
-
-                <strong>
-                    No supported games connected
-                </strong>
-
-                <span>
-                    Connected games will appear here.
-                </span>
-
-            </div>
-        `;
-
-        return;
-    }
-
-    container.innerHTML =
-        games.map((game) => `
-
-            <article class="game-card">
-
-                <div class="game-card-top">
-
-                    <span class="game-code">
-                        ${escapeHtml(
-                            String(
-                                game.id ||
-                                "GAME"
-                            ).toUpperCase()
-                        )}
-                    </span>
-
-                    <span class="game-live">
-                        ● ${escapeHtml(
-                            game.status ||
-                            "available"
-                        )}
-                    </span>
-
-                </div>
-
-                <h3>
-                    ${escapeHtml(
-                        game.name ||
-                        "Supported game"
-                    )}
-                </h3>
-
-                <p>
-                    Connected to SecureFPS telemetry
-                    and security monitoring.
-                </p>
-
-                <div class="game-card-footer">
-
-                    <span>
-                        Monitoring status
-                    </span>
-
-                    <strong>
-                        ${escapeHtml(
-                            game.status ||
-                            "available"
-                        )}
-                    </strong>
-
-                </div>
-
-            </article>
-
-        `).join("");
-}
-
-function renderActiveGames(games) {
-
-    const container =
-        document.getElementById(
-            "activeGamesList"
-        );
-
-    if (!container) {
-        return;
-    }
-
-    if (!games.length) {
-
-        container.innerHTML = `
-            <div class="admin-empty">
-
-                <strong>
-                    No active gameplay
-                </strong>
-
-                <span>
-                    No matches are currently reporting telemetry.
-                </span>
-
-            </div>
-        `;
-
-        return;
-    }
-
-    container.innerHTML = `
-
-        <div class="admin-table-wrap">
-
-            <table class="admin-table">
-
-                <thead>
-
-                    <tr>
-                        <th>Match</th>
-                        <th>Game</th>
-                        <th>Player</th>
-                        <th>Started</th>
-                    </tr>
-
-                </thead>
-
-                <tbody>
-
-                    ${games.map((game) => `
-
-                        <tr>
-
-                            <td>
-                                ${escapeHtml(
-                                    game.match_id ||
-                                    "—"
-                                )}
-                            </td>
-
-                            <td>
-                                ${escapeHtml(
-                                    game.game_id ||
-                                    "—"
-                                )}
-                            </td>
-
-                            <td>
-                                ${escapeHtml(
-                                    game.player_id ||
-                                    "—"
-                                )}
-                            </td>
-
-                            <td>
-                                ${escapeHtml(
-                                    formatDate(
-                                        game.started_at
-                                    )
-                                )}
-                            </td>
-
-                        </tr>
-
-                    `).join("")}
-
-                </tbody>
-
-            </table>
-
-        </div>
-    `;
-}
-
-
-// ============================================================
-// LOGOUT
-// ============================================================
-
-function setupLogout() {
-
-    const button =
-        document.getElementById("logoutBtn");
-
-    if (!button) {
-        return;
-    }
-
-    button.addEventListener(
-        "click",
-        async () => {
-
-            button.disabled = true;
-            button.textContent = "Signing out...";
-
-            try {
-
-                await api(
-                    "/auth/logout",
-                    {
-                        method: "POST"
-                    }
-                );
-
-            } catch (error) {
-
-                console.error(
-                    "Logout failed:",
-                    error
-                );
-
-            } finally {
-
-                window.location.replace(
-                    "login.html"
-                );
-
-            }
-
-        }
-    );
-}
-
-
-// ============================================================
-// FILTERS
-// ============================================================
-
-function setupFilters() {
-
-    const filter =
-        document.getElementById(
-            "severityFilter"
-        );
-
-    if (!filter) {
-        return;
-    }
-
-    filter.addEventListener(
-        "change",
-        loadSecurityEvents
-    );
-}
-
-
-// ============================================================
-// INITIALIZATION
-// ============================================================
-
-async function initializeAdmin() {
-
-    setupNavigation();
-
-    setupLogout();
-
-    setupFilters();
-
-    const user =
-        await checkAdminAuth();
-
-    if (!user) {
-        return;
-    }
-
-    await loadOverview();
-}
-
-document.addEventListener(
-    "DOMContentLoaded",
-    initializeAdmin
-);
+document.getElementById("players").addEventListener("click", async (event) => { const button = event.target.closest("button[data-action]"); if (!button) return; await api(`/admin/players/${button.dataset.id}/${button.dataset.action}`, { method: "POST" }); loadAdmin(); });
+document.getElementById("playerViewBtn").addEventListener("click", () => { window.location.href = "dashboard.html"; });
+document.getElementById("logoutBtn").addEventListener("click", async () => { await api("/auth/logout", { method: "POST" }); window.location.href = "login.html"; });
+document.getElementById("refreshAdminBtn").addEventListener("click", loadAdmin);
+document.getElementById("demoAccountPanel").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-demo-action]");
+  if (!button) return;
+  await api(`/admin/players/${button.dataset.playerId}/${button.dataset.demoAction}`, { method: "POST" });
+  await loadAdmin();
+});
+loadAdmin();
+// Poll the existing overview endpoint while the admin page is visible; this is periodic refresh, not live streaming.
+setInterval(() => { if (document.visibilityState === "visible") loadAdmin(); }, 30000);
