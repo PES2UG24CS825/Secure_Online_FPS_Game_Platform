@@ -15,7 +15,7 @@ form.addEventListener("submit", async (event) => {
       method: "POST",
       body: JSON.stringify({ code: document.getElementById("code").value })
     });
-    window.location.href = data.user?.role === "admin" ? "admin.html?v=admin-fix-2" : "player.html?v=player-fix-2";
+    window.location.replace(data.user?.role === "admin" ? "admin.html?fresh=admin-fixed" : "player.html?fresh=player-fixed");
   } catch (error) {
     message.textContent = error.message;
     if (submitButton) {

@@ -4,7 +4,184 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>SecureFPS | Admin Control Center</title>
-  <link rel="stylesheet" href="css/styles.css?v=ui-v3">
+  <link rel="stylesheet" href="css/styles.css?v=rbac-v1">
+  <style>
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      color: #aaa;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-radius: 8px;
+      margin: 4px 0;
+    }
+
+    .nav-btn:hover {
+      color: #fff;
+      background: rgba(79, 140, 255, 0.1);
+    }
+
+    .nav-btn.active {
+      color: #4f8cff;
+      background: rgba(79, 140, 255, 0.15);
+      font-weight: 600;
+    }
+
+    .section {
+      display: none;
+    }
+
+    .section.active {
+      display: block;
+    }
+
+    .admin-table-wrap {
+      overflow-x: auto;
+      margin-top: 16px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      color: #aaa;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    td {
+      padding: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      color: #ddd;
+    }
+
+    tbody tr:hover {
+      background: rgba(79, 140, 255, 0.05);
+    }
+
+    .action-btn {
+      background: none;
+      border: 1px solid rgba(79, 140, 255, 0.4);
+      color: #4f8cff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      margin: 0 4px;
+      transition: all 0.2s;
+    }
+
+    .action-btn:hover {
+      background: rgba(79, 140, 255, 0.1);
+      border-color: #4f8cff;
+    }
+
+    .action-btn.danger {
+      border-color: rgba(255, 107, 107, 0.4);
+      color: #ff6b6b;
+    }
+
+    .action-btn.danger:hover {
+      background: rgba(255, 107, 107, 0.1);
+      border-color: #ff6b6b;
+    }
+
+    .severity-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .severity-low {
+      background: rgba(53, 212, 154, 0.2);
+      color: #35d49a;
+    }
+
+    .severity-medium {
+      background: rgba(255, 193, 7, 0.2);
+      color: #ffc107;
+    }
+
+    .severity-high {
+      background: rgba(255, 107, 107, 0.2);
+      color: #ff6b6b;
+    }
+
+    .severity-critical {
+      background: rgba(220, 53, 69, 0.2);
+      color: #dc3545;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #999;
+    }
+
+    .empty-state strong {
+      display: block;
+      margin-bottom: 8px;
+      color: #ccc;
+    }
+
+    .admin-sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 240px;
+      height: 100vh;
+      background: #07111f;
+      border-right: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 20px;
+      overflow-y: auto;
+      z-index: 100;
+    }
+
+    .admin-sidebar .brand {
+      margin-bottom: 32px;
+    }
+
+    .admin-sidebar nav {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .admin-main-wrapper {
+      margin-left: 240px;
+    }
+
+    @media (max-width: 900px) {
+      .admin-sidebar {
+        width: 100%;
+        height: auto;
+        position: static;
+        border-right: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .admin-main-wrapper {
+        margin-left: 0;
+      }
+
+      .admin-sidebar nav {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 8px;
+      }
+    }
+  </style>
 </head>
 <body class="dashboard-page admin-page">
   <main class="dashboard-main admin-main">
@@ -17,6 +194,6 @@
     <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">DEVELOPMENT TEST ACCOUNT</p><h2>DEMO CHEATER TEST ACCOUNT</h2></div></div><div id="demoAccountPanel"><div class="empty">Demo account is not seeded.</div></div></section>
     <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">GAME SESSION ANALYSIS</p><h2>Analyzed sessions</h2></div></div><div id="demoComparisonBanner" class="gameplay-alert-banner reviewed" role="status">Complete a normal session and the development fixture to compare actual model results.</div><div id="demoSessionComparison" class="demo-session-comparison"></div><div class="admin-table-wrap"><table><thead><tr><th>Session / Player</th><th>Created</th><th>Status / Missing</th><th>Accuracy raw / norm</th><th>Fire rate raw / norm</th><th>Movement raw / norm</th><th>Aim raw / norm</th><th>KDR raw / norm</th><th>Random forest</th><th>Isolation forest</th><th>Risk score</th></tr></thead><tbody id="analyses"><tr><td colspan="11">No analyzed sessions.</td></tr></tbody></table></div></section>
   </main>
-  <script src="js/api.js"></script><script src="js/admin.js"></script>
+  <script src="js/api.js?v=admin-fix-4"></script><script src="js/admin-fixed.js"></script>
 </body>
 </html>
