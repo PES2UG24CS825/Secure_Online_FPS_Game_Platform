@@ -166,19 +166,47 @@ function renderDemoAccount(data) {
   </div>`;
 }
 
+let adminLoading = false;
+let adminHasLoaded = false;
+let adminLiveEvents = null;
+let adminRefreshTimer = null;
+let adminRefreshDebounce = null;
+
+function connectAdminLiveEvents() {
+  if (adminLiveEvents || !window.EventSource) return;
+  adminLiveEvents = new EventSource(`${window.API_BASE}/live/events`, { withCredentials: true });
+  adminLiveEvents.addEventListener("update", () => {
+    clearTimeout(adminRefreshDebounce);
+    adminRefreshDebounce = setTimeout(loadAdmin, 250);
+  });
+  adminLiveEvents.onerror = () => {
+    const status = document.getElementById("adminLiveStatus");
+    if (status) {
+      status.className = "status-pill live-disconnected";
+      status.innerHTML = '<span class="status-dot"></span>Reconnecting · refresh active';
+    }
+  };
+}
+
 async function loadAdmin() {
+  if (adminLoading || document.visibilityState === "hidden") return;
+  adminLoading = true;
+  const liveStatus = document.getElementById("adminLiveStatus");
   try {
     const me = await api("/auth/me");
     if (me.user.role !== "admin") { window.location.href = "dashboard.html"; return; }
+    connectAdminLiveEvents();
     document.getElementById("adminName").textContent = me.user.name;
     document.getElementById("adminEmail").textContent = me.user.email;
     const data = await api("/admin/overview");
     document.getElementById("playerCount").textContent = data.players.length;
+    document.getElementById("matchCount").textContent = data.summary?.matches_analyzed ?? data.matches?.length ?? 0;
     document.getElementById("eventCount").textContent = data.events.length;
-    document.getElementById("highCount").textContent = data.events.filter((event) => event.severity === "high").length;
-    document.getElementById("loginCount").textContent = data.login_count;
-    document.getElementById("players").innerHTML = data.players.map((player) => `<tr><td><strong>${player.name}</strong>${player.demo ? '<small>DEMO CHEATER TEST ACCOUNT</small>' : ""}<small>${player.email}</small></td><td>${player.role}</td><td><span class="badge good">${player.mfa_enabled ? "MFA enabled" : "Disabled"}</span></td><td>${player.created_at ? player.created_at.slice(0, 10) : "N/A"}</td><td><button class="play-btn" data-action="revoke" data-id="${player.id}">Revoke</button> <button class="play-btn danger-btn" data-action="delete" data-id="${player.id}">Delete</button></td></tr>`).join("") || '<tr><td colspan="5">No players registered.</td></tr>';
-    document.getElementById("events").innerHTML = data.events.map((event) => `<div class="list-row"><span>${event.type}</span><span class="badge ${event.severity === "high" ? "bad" : "warn"}">${event.severity}</span></div>`).join("") || '<div class="empty">No security events.</div>';
+    document.getElementById("highCount").textContent = data.events.filter((event) => ["high", "critical"].includes(event.severity)).length;
+    document.getElementById("loginCount").textContent = data.login_count ?? 0;
+    document.getElementById("players").innerHTML = data.players.map((player) => `<tr><td><strong>${escapeHtml(player.name || "Player")}</strong>${player.demo ? '<small>DEMO TEST ACCOUNT</small>' : ""}<small>${escapeHtml(player.email || "")}</small></td><td>${escapeHtml(player.role || "player")}</td><td><span class="badge ${player.mfa_enabled ? "good" : "warn"}">${player.mfa_enabled ? "MFA enabled" : "Disabled"}</span></td><td>${escapeHtml(player.matches_played ?? 0)}</td><td>${escapeHtml(displayRiskScore(player.risk_score))}</td><td>${escapeHtml(player.last_login_ip || "No login recorded")}<small>${escapeHtml(displayDate(player.last_login))}</small></td><td>${escapeHtml(displayDate(player.created_at))}</td><td><button class="play-btn" data-action="revoke" data-id="${escapeHtml(player.id)}">Suspend</button> <button class="play-btn danger-btn" data-action="delete" data-id="${escapeHtml(player.id)}">Delete</button></td></tr>`).join("") || '<tr><td colspan="8">No players registered.</td></tr>';
+    document.getElementById("events").innerHTML = data.events.map((event) => `<div class="list-row"><div><strong>${escapeHtml(event.type || "Security event")}</strong><small>${escapeHtml(event.description || displayDate(event.created_at))}</small></div><span class="badge ${["high", "critical"].includes(event.severity) ? "bad" : event.severity === "medium" ? "warn" : "good"}">${escapeHtml(event.severity || "low")}</span></div>`).join("") || '<div class="empty">No security events.</div>';
+    document.getElementById("recentLogins").innerHTML = (data.recent_logins || []).map((entry) => `<tr><td>${escapeHtml(entry.player_name)}</td><td>${escapeHtml(entry.ip_address || "Unknown")}</td><td>${escapeHtml(displayDate(entry.timestamp))}</td><td>${escapeHtml(entry.authentication_method || "password+mfa")}</td></tr>`).join("") || '<tr><td colspan="4">No sign-ins recorded yet. New successful sign-ins will appear here.</td></tr>';
     // Show only the five active model inputs, with raw and normalized values side by side.
     const activeFeatures = ["accuracy", "fire_rate", "movement_speed", "aim_smoothness", "kdr"];
     const analyses = Array.isArray(data.analyses) ? data.analyses.filter(Boolean) : [];
@@ -194,11 +222,92 @@ async function loadAdmin() {
       const riskScore = status === "success" ? displayRiskScore(analysis.risk_score) : "N/A";
       return `<tr><td>${escapeHtml(analysis.session_id || "N/A")}<small>${escapeHtml(analysis.user_id || "N/A")}</small></td><td>${escapeHtml(displayDate(analysis.created_at))}</td><td><span class="badge ${badge}">${escapeHtml(status)}</span><small>Missing: ${escapeHtml(missing.join(", ") || "None")}</small></td>${featureCells}<td>${escapeHtml(rfResult)}</td><td>${escapeHtml(ifResult)}</td><td>${escapeHtml(riskScore)}</td></tr>`;
     }).join("") || '<tr><td colspan="11">No analyzed sessions.</td></tr>';
+    document.getElementById("allMatches").innerHTML = (data.matches || []).map((match) => `<tr><td>${escapeHtml(match.session_id || "N/A")}</td><td>${escapeHtml(match.player_name || match.player_id || "Unknown player")}</td><td>${escapeHtml(match.game || "FPS Microgame")}</td><td>${escapeHtml(displayDate(match.started_at))}</td><td>${escapeHtml(match.status || "unknown")}</td><td>${escapeHtml(displayRiskScore(match.risk_score))}</td></tr>`).join("") || '<tr><td colspan="6">No game sessions recorded.</td></tr>';
     renderGameplayAlerts(data);
     renderDemoComparison(data);
     renderDemoAccount(data);
-  } catch (error) { window.location.href = "login.html"; }
+    adminHasLoaded = true;
+    if (liveStatus) {
+      liveStatus.className = "status-pill live-connected";
+      liveStatus.innerHTML = `<span class="status-dot"></span>Live · updated ${escapeHtml(new Date().toLocaleTimeString())}`;
+    }
+  } catch (error) {
+    console.error("Admin live refresh failed", error);
+    if (error?.status === 401 || error?.status === 403) {
+      window.location.href = "login.html";
+      return;
+    }
+    if (liveStatus) {
+      liveStatus.className = "status-pill live-disconnected";
+      liveStatus.innerHTML = '<span class="status-dot"></span>API or database unavailable';
+    }
+    ["playerCount", "matchCount", "eventCount", "highCount", "loginCount"].forEach((id) => {
+      const metric = document.getElementById(id);
+      if (metric && ["—", "Loading"].includes(metric.textContent.trim())) metric.textContent = "Unavailable";
+    });
+    const unavailableRows = [
+      ["players", 8, "Player data unavailable. Check the Flask API and MongoDB."],
+      ["recentLogins", 4, "Sign-in history unavailable."],
+      ["analyses", 11, "Gameplay analysis unavailable."],
+      ["allMatches", 6, "Match history unavailable."]
+    ];
+    unavailableRows.forEach(([id, columns, message]) => {
+      const tableBody = document.getElementById(id);
+      if (tableBody && !adminHasLoaded) {
+        tableBody.innerHTML = `<tr><td colspan="${columns}">${escapeHtml(message)}</td></tr>`;
+      }
+    });
+    ["events", "gameplayAlerts", "demoAccountPanel", "demoSessionComparison"].forEach((id) => {
+      const section = document.getElementById(id);
+      if (section && !adminHasLoaded) {
+        section.textContent = "Data unavailable. Check the API and database connection.";
+      }
+    });
+  } finally {
+    adminLoading = false;
+  }
 }
+const adminSectionLabels = {
+  overview: "Admin overview",
+  players: "Player accounts",
+  security: "Security & access",
+  gameplay: "Game monitoring"
+};
+const adminSectionDescriptions = {
+  overview: "Live platform activity and security health.",
+  players: "Manage player accounts and review individual risk.",
+  security: "Review sign-ins, IP addresses, and security events.",
+  gameplay: "Inspect match telemetry and model analysis."
+};
+
+function showAdminSection(sectionName, updateHash = false) {
+  const section = adminSectionLabels[sectionName] ? sectionName : "overview";
+  document.querySelectorAll("[data-admin-view]").forEach((view) => {
+    const isActive = view.dataset.adminView === section;
+    view.classList.toggle("active", isActive);
+    view.setAttribute("aria-hidden", String(!isActive));
+  });
+  document.querySelectorAll("[data-admin-section]").forEach((button) => {
+    const isActive = button.dataset.adminSection === section;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-current", isActive ? "page" : "false");
+  });
+  const title = document.getElementById("adminPageTitle");
+  if (title) title.textContent = adminSectionLabels[section];
+  const subtitle = document.getElementById("adminPageSubtitle");
+  if (subtitle) subtitle.textContent = adminSectionDescriptions[section];
+  if (updateHash && window.location.hash !== `#${section}`) {
+    window.history.replaceState(null, "", `#${section}`);
+  }
+}
+
+document.getElementById("adminNavigation")?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-admin-section]");
+  if (button) showAdminSection(button.dataset.adminSection, true);
+});
+window.addEventListener("hashchange", () => showAdminSection(window.location.hash.slice(1)));
+showAdminSection(window.location.hash.slice(1));
+
 document.getElementById("players").addEventListener("click", async (event) => { const button = event.target.closest("button[data-action]"); if (!button) return; await api(`/admin/players/${button.dataset.id}/${button.dataset.action}`, { method: "POST" }); loadAdmin(); });
 document.getElementById("playerViewBtn").addEventListener("click", () => { window.location.href = "dashboard.html"; });
 document.getElementById("logoutBtn").addEventListener("click", async () => { await api("/auth/logout", { method: "POST" }); window.location.href = "login.html"; });
@@ -210,5 +319,5 @@ document.getElementById("demoAccountPanel").addEventListener("click", async (eve
   await loadAdmin();
 });
 loadAdmin();
-// Poll the existing overview endpoint while the admin page is visible; this is periodic refresh, not live streaming.
-setInterval(() => { if (document.visibilityState === "visible") loadAdmin(); }, 30000);
+// Keep a slower fallback refresh in case the event stream is interrupted.
+adminRefreshTimer = setInterval(loadAdmin, 15000);

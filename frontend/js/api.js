@@ -1,4 +1,6 @@
-const API_BASE = "http://127.0.0.1:5000/api";
+const API_HOST = window.location.hostname || "127.0.0.1";
+const API_BASE = `http://${API_HOST}:5000/api`;
+window.API_BASE = API_BASE;
 window.text = window.text || ((value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character])));
 window.dateText = window.dateText || ((value) => value ? new Date(value).toLocaleString() : "Unknown");
 
@@ -10,6 +12,10 @@ async function api(path, options = {}) {
   });
 
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.message || "Request failed");
+  if (!response.ok) {
+    const error = new Error(data.message || `Request failed (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }

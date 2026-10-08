@@ -3,8 +3,12 @@ import os
 import secrets
 import uuid
 import math
+import json
+import queue
+import threading
+import time
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, Response, jsonify, request, session, stream_with_context
 from bson import ObjectId
 
 from database.db import (
@@ -12,6 +16,7 @@ from database.db import (
     game_telemetry,
     game_sessions,
     security_events,
+    login_history,
     users,
 )
 
@@ -23,6 +28,76 @@ game_bp = Blueprint(
     __name__,
     url_prefix="/api"
 )
+
+_live_subscribers = {"admin": set()}
+_live_subscribers_lock = threading.Lock()
+_live_emit_times = {}
+
+
+def publish_live_update(user_id, session_id=None, event_type="game_update", force=False):
+    """Publish a small notification; dashboards fetch authoritative values from MongoDB."""
+    now = time.monotonic()
+    user_channel = str(user_id)
+    with _live_subscribers_lock:
+        queues = []
+        if force or now - _live_emit_times.get("admin", 0.0) >= 1.0:
+            _live_emit_times["admin"] = now
+            queues.extend(_live_subscribers.get("admin", set()))
+        if force or now - _live_emit_times.get(user_channel, 0.0) >= 1.0:
+            _live_emit_times[user_channel] = now
+            queues.extend(_live_subscribers.get(user_channel, set()))
+
+    payload = json.dumps({
+        "type": event_type,
+        "session_id": str(session_id) if session_id else None,
+        "updated_at": utc_now().isoformat(),
+    })
+    for subscriber in queues:
+        try:
+            subscriber.put_nowait(payload)
+        except queue.Full:
+            try:
+                subscriber.get_nowait()
+                subscriber.put_nowait(payload)
+            except (queue.Empty, queue.Full):
+                pass
+
+
+@game_bp.get("/live/events")
+def live_events():
+    user_id = get_current_user_object_id()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    account = users.find_one({"_id": user_id}, {"role": 1})
+    if not account:
+        return jsonify({"message": "Account not found."}), 401
+    channel = "admin" if account.get("role") == "admin" else str(user_id)
+    subscriber = queue.Queue(maxsize=50)
+    with _live_subscribers_lock:
+        _live_subscribers.setdefault(channel, set()).add(subscriber)
+
+    @stream_with_context
+    def event_stream():
+        try:
+            yield "event: ready\ndata: {}\n\n"
+            while True:
+                try:
+                    payload = subscriber.get(timeout=15)
+                    yield f"event: update\ndata: {payload}\n\n"
+                except queue.Empty:
+                    yield ": keep-alive\n\n"
+        finally:
+            with _live_subscribers_lock:
+                channel_subscribers = _live_subscribers.get(channel)
+                if channel_subscribers:
+                    channel_subscribers.discard(subscriber)
+
+    return Response(event_stream(), mimetype="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        "Connection": "keep-alive",
+    })
 
 
 # =========================================================
@@ -335,6 +410,8 @@ def start_game():
             "message": "Could not create game session."
         }), 500
 
+    publish_live_update(user_id, session_id, "game_started", force=True)
+
     print()
     print("==========================================")
     print("[SecureFPS] GAME SESSION CREATED")
@@ -562,44 +639,38 @@ def receive_game_event():
     analysis = None
     realtime_detection = None
 
-    if (
-        event_type != "game_completed"
-        and game_session.get("demo_mode") is True
-        and demo_runtime_enabled()
-    ):
-        demo_account = users.find_one({
-            "_id": user_id,
-            "role": "player",
-            "demo": True,
-            "account_type": "demo_test",
-            "username": DEMO_ACCOUNT_USERNAME,
-            "email": DEMO_ACCOUNT_EMAIL
-        })
-        if demo_account:
-            game_sessions.update_one(
-                {
-                    "session_id": session_id,
-                    "user_id": user_id,
-                    "status": "active",
-                    "demo_mode": True
-                },
-                {"$inc": {"event_count": 1}}
-            )
-            current_game_session = game_sessions.find_one({
+    realtime_enabled = os.getenv("GAMEPLAY_REALTIME_ENABLED", "1").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+    if event_type != "game_completed" and realtime_enabled:
+        game_sessions.update_one(
+            {
                 "session_id": session_id,
                 "user_id": user_id,
-                "status": "active",
-                "demo_mode": True
-            })
-            min_events = demo_int_setting("DEMO_REALTIME_MIN_EVENTS", 24)
-            window_size = demo_int_setting("DEMO_REALTIME_WINDOW_EVENTS", 100)
-            interval = demo_float_setting("DEMO_REALTIME_EVAL_INTERVAL_SECONDS", 0.25)
+                "status": "active"
+            },
+            {"$inc": {"event_count": 1}}
+        )
+        current_game_session = game_sessions.find_one({
+            "session_id": session_id,
+            "user_id": user_id,
+            "status": "active"
+        })
+        min_events = demo_int_setting("GAMEPLAY_REALTIME_MIN_EVENTS", 24)
+        window_size = demo_int_setting("GAMEPLAY_REALTIME_WINDOW_EVENTS", 100)
+        interval = demo_float_setting("GAMEPLAY_REALTIME_INTERVAL_SECONDS", 5.0)
 
-            if (
-                current_game_session
-                and current_game_session.get("event_count", 0) >= min_events
-                and demo_window_has_stable_samples(user_id, session_id, window_size)
-            ):
+        if current_game_session and current_game_session.get("event_count", 0) >= min_events:
+            last_evaluation = current_game_session.get("last_realtime_analysis_at")
+            if last_evaluation and last_evaluation.tzinfo is None:
+                last_evaluation = last_evaluation.replace(tzinfo=timezone.utc)
+            elapsed = (
+                (utc_now() - last_evaluation).total_seconds()
+                if last_evaluation
+                else interval
+            )
+
+            if elapsed >= interval:
                 window_raw_features = extract_features(
                     user_id,
                     session_id,
@@ -611,16 +682,8 @@ def receive_game_event():
                     for feature in FEATURES
                     if window_features.get(feature) is None
                 ]
-                last_evaluation = current_game_session.get("last_realtime_analysis_at")
-                if last_evaluation and last_evaluation.tzinfo is None:
-                    last_evaluation = last_evaluation.replace(tzinfo=timezone.utc)
-                elapsed = (
-                    (utc_now() - last_evaluation).total_seconds()
-                    if last_evaluation
-                    else interval
-                )
 
-                if not window_missing and elapsed >= interval:
+                if not window_missing:
                     claim_time = utc_now()
                     last_allowed = claim_time - timedelta(seconds=interval)
                     claim = game_sessions.update_one(
@@ -628,7 +691,6 @@ def receive_game_event():
                             "session_id": session_id,
                             "user_id": user_id,
                             "status": "active",
-                            "demo_mode": True,
                             "$or": [
                                 {"last_realtime_analysis_at": {"$exists": False}},
                                 {"last_realtime_analysis_at": {"$lte": last_allowed}}
@@ -715,6 +777,12 @@ def receive_game_event():
     if realtime_detection:
         response["realtime_detection"] = realtime_detection
 
+    publish_live_update(
+        user_id,
+        session_id,
+        "analysis_complete" if analysis else event_type,
+        force=bool(analysis) or event_type == "game_completed",
+    )
     return jsonify(response), 201
 
 
@@ -1139,6 +1207,8 @@ def end_game():
         user_id,
         session_id
     )
+
+    publish_live_update(user_id, session_id, "match_completed", force=True)
 
     return jsonify({
         "success": True,
@@ -1821,6 +1891,33 @@ def admin_overview():
         )
     )
 
+    player_ids = [player["_id"] for player in players]
+    latest_login_by_player = {}
+    for login in login_history.find({"user_id": {"$in": player_ids}, "type": "login_success"}) \
+            .sort("created_at", -1):
+        latest_login_by_player.setdefault(login.get("user_id"), login)
+
+    latest_analysis_by_session = {}
+    for analysis in game_events.find(
+        {"analysis_type": "game_session"}
+    ).sort("created_at", -1):
+        if analysis.get("session_id"):
+            latest_analysis_by_session.setdefault(analysis["session_id"], analysis)
+    all_game_sessions = list(game_sessions.find().sort("started_at", -1))
+    matches_played_by_player = {}
+    for game_session in all_game_sessions:
+        player_id = game_session.get("user_id")
+        if player_id is not None:
+            player_key = str(player_id)
+            matches_played_by_player[player_key] = matches_played_by_player.get(player_key, 0) + 1
+    recent_logins = list(login_history.find({"type": "login_success"})
+                         .sort("created_at", -1).limit(100))
+    today_start = utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
+    login_count_today = login_history.count_documents({
+        "type": "login_success",
+        "created_at": {"$gte": today_start},
+    })
+
     events = list(
         security_events.find()
         .sort(
@@ -2036,6 +2133,23 @@ def admin_overview():
                 "demo": player.get("demo", False),
                 "demo_label": player.get("demo_label"),
                 "demo_restriction_status": player.get("demo_restriction_status"),
+                "matches_played": matches_played_by_player.get(str(player["_id"]), 0),
+                "risk_score": next((
+                    analysis.get("risk_score", (analysis.get("result") or {}).get("risk_score"))
+                    for analysis in latest_analysis_by_session.values()
+                    if analysis.get("user_id") == player["_id"]
+                ), None),
+                "last_login": (
+                    latest_login_by_player[player["_id"]]["created_at"].isoformat()
+                    if latest_login_by_player.get(player["_id"], {}).get("created_at")
+                    else None
+                ),
+                "last_login_ip": (
+                    latest_login_by_player[player["_id"]].get("ip_address",
+                        latest_login_by_player[player["_id"]].get("ip", "Unknown"))
+                    if latest_login_by_player.get(player["_id"])
+                    else "No login recorded"
+                ),
 
                 "created_at":
                     (
@@ -2061,7 +2175,9 @@ def admin_overview():
                     event.get(
                         "severity",
                         "low"
-                    )
+                    ),
+                "created_at": event["created_at"].isoformat() if event.get("created_at") else None,
+                "description": event.get("description", ""),
             }
 
             for event in events
@@ -2135,9 +2251,39 @@ def admin_overview():
         ],
 
         "demo_account": demo_account_status,
-
-        "login_count":
-            0
+        "login_count": login_count_today,
+        "recent_logins": [
+            {
+                "player_id": str(login.get("user_id", "")),
+                "player_name": player_names.get(str(login.get("user_id", "")), "Unknown player"),
+                "timestamp": login["created_at"].isoformat() if login.get("created_at") else None,
+                "ip_address": login.get("ip_address", login.get("ip", "Unknown")),
+                "authentication_method": login.get("authentication_method", "password+mfa"),
+            }
+            for login in recent_logins
+        ],
+        "matches": [
+            {
+                "session_id": game_session.get("session_id"),
+                "player_id": str(game_session.get("user_id", "")),
+                "player_name": player_names.get(str(game_session.get("user_id", "")), "Unknown player"),
+                "game": game_session.get("game", "FPS Microgame"),
+                "status": game_session.get("status", "unknown"),
+                "started_at": game_session["started_at"].isoformat() if game_session.get("started_at") else None,
+                "risk_score": (
+                    (latest_analysis_by_session.get(game_session.get("session_id")) or {}).get("risk_score")
+                    if (latest_analysis_by_session.get(game_session.get("session_id")) or {}).get("risk_score") is not None
+                    else (((latest_analysis_by_session.get(game_session.get("session_id")) or {}).get("result") or {}).get("risk_score"))
+                ),
+            }
+            for game_session in all_game_sessions
+        ],
+        "summary": {
+            "total_players": len(players),
+            "active_sessions": game_sessions.count_documents({"status": "active"}),
+            "matches_analyzed": len(all_game_sessions),
+            "high_severity_events": sum(1 for event in events if event.get("severity") in {"high", "critical"}),
+        },
     })
 
 

@@ -135,65 +135,82 @@
       color: #ccc;
     }
 
-    .admin-sidebar {
-      position: fixed;
-      left: 0;
-      top: 0;
-      width: 240px;
-      height: 100vh;
-      background: #07111f;
-      border-right: 1px solid rgba(255, 255, 255, 0.1);
-      padding: 20px;
-      overflow-y: auto;
-      z-index: 100;
-    }
+    .admin-sidebar { position:fixed; inset:0 auto 0 0; width:240px; height:100vh; box-sizing:border-box; padding:24px 18px; overflow-y:auto; z-index:100; background:#07111f; border-right:1px solid rgba(255,255,255,.1); }
+    .admin-sidebar .brand { margin-bottom:34px; }
+    .admin-sidebar nav { display:grid; gap:6px; }
+    .admin-nav-btn { display:flex; align-items:center; gap:12px; width:100%; padding:12px 13px; border:1px solid transparent; border-radius:10px; color:#8fa0b6; background:transparent; font:inherit; font-size:13px; text-align:left; cursor:pointer; transition:background .18s ease,color .18s ease,border-color .18s ease; }
+    .admin-nav-btn:hover { color:#eaf2ff; background:rgba(79,140,255,.08); }
+    .admin-nav-btn.active { color:#fff; background:#112843; border-color:rgba(79,140,255,.22); box-shadow:inset 3px 0 #5e9cff; }
+    .admin-nav-icon { display:grid; place-items:center; width:24px; height:24px; border-radius:7px; color:#78a9f5; background:rgba(79,140,255,.1); font-size:14px; }
+    .admin-main-wrapper { margin-left:240px; width:calc(100% - 240px); min-width:0; }
+    .admin-main-wrapper .dashboard-main { width:100%; max-width:none; margin:0; padding:30px 38px 50px; box-sizing:border-box; }
+    .admin-section { display:none; }
+    .admin-section.active { display:block; }
+    .admin-section > .admin-table-panel:first-child { margin-top:0; }
+    .admin-section .admin-table-panel { margin-top:16px; }
+    .admin-section-heading { margin:0 0 16px; }
+    .admin-section-heading h2 { margin:0; font-size:20px; }
+    .admin-section-heading p { margin:5px 0 0; color:#8fa0b6; font-size:12px; }
 
-    .admin-sidebar .brand {
-      margin-bottom: 32px;
-    }
+    .admin-page .stats-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 
-    .admin-sidebar nav {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .admin-main-wrapper {
-      margin-left: 240px;
+    @media (max-width: 1100px) {
+      .admin-page .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
     @media (max-width: 900px) {
-      .admin-sidebar {
-        width: 100%;
-        height: auto;
-        position: static;
-        border-right: none;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      }
+      .admin-page { display:block; }
+      .admin-sidebar { position:static; width:100%; height:auto; border-right:0; border-bottom:1px solid rgba(255,255,255,.1); }
+      .admin-sidebar .brand { margin-bottom:16px; }
+      .admin-sidebar nav { grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); }
+      .admin-main-wrapper { margin:0; width:100%; }
+      .admin-main-wrapper .dashboard-main { padding:24px; }
+    }
 
-      .admin-main-wrapper {
-        margin-left: 0;
-      }
-
-      .admin-sidebar nav {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 8px;
-      }
+    @media (max-width: 600px) {
+      .admin-page .stats-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body class="dashboard-page admin-page">
+  <aside class="admin-sidebar">
+    <div class="brand"><div class="brand-mark">SF</div><div><strong>SecureFPS</strong><small>Security operations</small></div></div>
+    <nav id="adminNavigation" aria-label="Admin sections">
+      <button class="admin-nav-btn active" type="button" data-admin-section="overview"><span class="admin-nav-icon">◫</span>Overview</button>
+      <button class="admin-nav-btn" type="button" data-admin-section="players"><span class="admin-nav-icon">♙</span>Players</button>
+      <button class="admin-nav-btn" type="button" data-admin-section="security"><span class="admin-nav-icon">⌕</span>Security &amp; access</button>
+      <button class="admin-nav-btn" type="button" data-admin-section="gameplay"><span class="admin-nav-icon">▤</span>Game monitoring</button>
+    </nav>
+  </aside>
+  <div class="admin-main-wrapper">
   <main class="dashboard-main admin-main">
-    <header class="topbar"><div><p class="eyebrow">SECURITY OPERATIONS</p><h1>Admin control center</h1><p class="muted admin-subtitle">Monitor player access, review risk events, and control sessions.</p></div><div><span class="status-pill"><span class="status-dot"></span>Refreshes every 30s</span><button id="playerViewBtn" class="play-btn admin-player-view" type="button">Player view</button><button id="logoutBtn" class="ghost-btn admin-logout" type="button">Sign out</button></div></header>
-    <section class="panel admin-session"><div class="avatar">SA</div><div><p class="eyebrow">SIGNED-IN ADMINISTRATOR</p><h2 id="adminName">Security Admin</h2><p class="muted" id="adminEmail"></p></div><div class="admin-session-time"><span class="muted">Current session</span><strong>Active</strong><small>IP 127.0.0.1</small></div></section>
-    <section class="stats-grid"><article class="stat-card"><span>Players</span><strong id="playerCount">0</strong><small>Registered accounts</small></article><article class="stat-card"><span>Security events</span><strong id="eventCount">0</strong><small>Audit trail</small></article><article class="stat-card"><span>High severity</span><strong id="highCount">0</strong><small>Needs review</small></article><article class="stat-card"><span>Logins today</span><strong id="loginCount">0</strong><small>Successful access</small></article></section>
-    <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">PLAYER ACCESS + BEHAVIOUR</p><h2>Player accounts</h2></div><button class="play-btn" type="button" disabled>Add player</button></div><div class="admin-table-wrap"><table><thead><tr><th>Player</th><th>Role</th><th>MFA</th><th>Created</th><th>Actions</th></tr></thead><tbody id="players"></tbody></table></div></section>
-    <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">AUDIT TRAIL</p><h2>Security events</h2></div></div><div id="events" class="list"><div class="empty">No security events.</div></div></section>
-    <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">MODEL REVIEW QUEUE</p><h2>Gameplay security alerts</h2></div><button id="refreshAdminBtn" class="play-btn" type="button">Refresh</button></div><div id="gameplayAlertBanner" class="gameplay-alert-banner clear" role="status" aria-live="polite">No suspicious gameplay alerts at this time.</div><div id="analysisIncompleteNotice"></div><div id="gameplayAlerts" class="gameplay-alert-list"></div></section>
-    <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">DEVELOPMENT TEST ACCOUNT</p><h2>DEMO CHEATER TEST ACCOUNT</h2></div></div><div id="demoAccountPanel"><div class="empty">Demo account is not seeded.</div></div></section>
-    <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">GAME SESSION ANALYSIS</p><h2>Analyzed sessions</h2></div></div><div id="demoComparisonBanner" class="gameplay-alert-banner reviewed" role="status">Complete a normal session and the development fixture to compare actual model results.</div><div id="demoSessionComparison" class="demo-session-comparison"></div><div class="admin-table-wrap"><table><thead><tr><th>Session / Player</th><th>Created</th><th>Status / Missing</th><th>Accuracy raw / norm</th><th>Fire rate raw / norm</th><th>Movement raw / norm</th><th>Aim raw / norm</th><th>KDR raw / norm</th><th>Random forest</th><th>Isolation forest</th><th>Risk score</th></tr></thead><tbody id="analyses"><tr><td colspan="11">No analyzed sessions.</td></tr></tbody></table></div></section>
+    <header class="topbar"><div><p class="eyebrow">SECURITY OPERATIONS</p><h1 id="adminPageTitle">Admin overview</h1><p class="muted admin-subtitle" id="adminPageSubtitle">Live platform activity and security health.</p></div><div><span class="status-pill" id="adminLiveStatus"><span class="status-dot"></span>Connecting to live data…</span><button id="playerViewBtn" class="play-btn admin-player-view" type="button">Player view</button><button id="logoutBtn" class="ghost-btn admin-logout" type="button">Sign out</button></div></header>
+    <section class="panel admin-session"><div class="avatar">SA</div><div><p class="eyebrow">SIGNED-IN ADMINISTRATOR</p><h2 id="adminName">Security Admin</h2><p class="muted" id="adminEmail"></p></div><div class="admin-session-time"><span class="muted">Current session</span><strong>Active</strong><small>Administrator session</small></div></section>
+
+    <section class="admin-section active" id="admin-overview" data-admin-view="overview">
+      <section class="stats-grid"><article class="stat-card"><span>Players</span><strong id="playerCount">—</strong><small>Registered accounts</small></article><article class="stat-card"><span>Recorded matches</span><strong id="matchCount">—</strong><small>FPS Microgame sessions</small></article><article class="stat-card"><span>Security events</span><strong id="eventCount">—</strong><small>Audit trail</small></article><article class="stat-card"><span>High severity</span><strong id="highCount">—</strong><small>Needs review</small></article><article class="stat-card"><span>Logins today</span><strong id="loginCount">—</strong><small>Successful access</small></article></section>
+      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">MODEL REVIEW QUEUE</p><h2>Gameplay security alerts</h2></div><button id="refreshAdminBtn" class="play-btn" type="button">Refresh</button></div><div id="gameplayAlertBanner" class="gameplay-alert-banner clear" role="status" aria-live="polite">No suspicious gameplay alerts at this time.</div><div id="analysisIncompleteNotice"></div><div id="gameplayAlerts" class="gameplay-alert-list"></div></section>
+    </section>
+
+    <section class="admin-section" id="admin-players" data-admin-view="players">
+      <div class="admin-section-heading"><h2>Player accounts</h2><p>Review player status, gameplay risk, and access controls.</p></div>
+      <section class="panel admin-table-panel"><div class="admin-table-wrap"><table><thead><tr><th>Player</th><th>Role</th><th>MFA</th><th>Matches</th><th>Risk score</th><th>Last login IP</th><th>Created</th><th>Actions</th></tr></thead><tbody id="players"><tr><td colspan="8">Loading player accounts…</td></tr></tbody></table></div></section>
+    </section>
+
+    <section class="admin-section" id="admin-security" data-admin-view="security">
+      <div class="admin-section-heading"><h2>Security &amp; access</h2><p>Successful sign-ins and recorded security events.</p></div>
+      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">ACCOUNT ACCESS AUDIT</p><h2>Recent player sign-ins</h2></div></div><div class="admin-table-wrap"><table><thead><tr><th>Player</th><th>IP address</th><th>Time</th><th>Authentication</th></tr></thead><tbody id="recentLogins"><tr><td colspan="4">No sign-ins recorded.</td></tr></tbody></table></div></section>
+      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">AUDIT TRAIL</p><h2>Security events</h2></div></div><div id="events" class="list"><div class="empty">No security events.</div></div></section>
+    </section>
+
+    <section class="admin-section" id="admin-gameplay" data-admin-view="gameplay">
+      <div class="admin-section-heading"><h2>Game monitoring</h2><p>Gameplay analysis, review fixtures, and match history.</p></div>
+      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">DEVELOPMENT TEST ACCOUNT</p><h2>DEMO CHEATER TEST ACCOUNT</h2></div></div><div id="demoAccountPanel"><div class="empty">Demo account is not seeded.</div></div></section>
+      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">GAME SESSION ANALYSIS</p><h2>Analyzed sessions</h2></div></div><div id="demoComparisonBanner" class="gameplay-alert-banner reviewed" role="status">Complete a normal session and the development fixture to compare actual model results.</div><div id="demoSessionComparison" class="demo-session-comparison"></div><div class="admin-table-wrap"><table><thead><tr><th>Session / Player</th><th>Created</th><th>Status / Missing</th><th>Accuracy raw / norm</th><th>Fire rate raw / norm</th><th>Movement raw / norm</th><th>Aim raw / norm</th><th>KDR raw / norm</th><th>Random forest</th><th>Isolation forest</th><th>Risk score</th></tr></thead><tbody id="analyses"><tr><td colspan="11">No analyzed sessions.</td></tr></tbody></table></div></section>
+      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">GAME HISTORY</p><h2>All player game sessions</h2></div></div><div class="admin-table-wrap"><table><thead><tr><th>Session</th><th>Player</th><th>Game</th><th>Started</th><th>Status</th><th>Risk score</th></tr></thead><tbody id="allMatches"><tr><td colspan="6">No game sessions recorded.</td></tr></tbody></table></div></section>
+    </section>
   </main>
-  <script src="js/api.js?v=admin-fix-4"></script><script src="js/admin-fixed.js"></script>
+  </div>
+  <script src="js/api.js?v=realtime-live-2"></script><script src="js/admin.js?v=admin-sections-1"></script>
 </body>
 </html>

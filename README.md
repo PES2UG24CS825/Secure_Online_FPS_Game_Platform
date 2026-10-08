@@ -57,10 +57,14 @@ The feature order must match:
 reaction_time, accuracy, headshot_ratio, fire_rate, movement_speed, aim_smoothness, kdr
 
 ## 5. Unity
-Build your Unity game as WebGL and place it under:
-frontend/unity-games/<game-name>/
+The single supported game is the FPS Microgame. Its Unity project is `unity-games/FPS_Microgame`; the WebGL build loaded by the platform is `frontend/public/games/FPS_Microgame/`.
 
-Then replace the launch button alert in frontend/js/dashboard.js with the URL/page that hosts your Unity WebGL build.
+## Live dashboard and risk analysis
+The player and admin dashboards subscribe to the authenticated `/api/live/events` server-sent event stream. Gameplay telemetry, match completion, detections, and risk results notify the dashboards immediately. A 15-second refresh remains as a recovery path if the stream disconnects.
+
+Live analysis starts after 24 telemetry events and runs at most once every five seconds when all five model inputs are measurable. Configure this with `GAMEPLAY_REALTIME_ENABLED`, `GAMEPLAY_REALTIME_MIN_EVENTS`, `GAMEPLAY_REALTIME_WINDOW_EVENTS`, and `GAMEPLAY_REALTIME_INTERVAL_SECONDS` in `backend/.env`.
+
+MongoDB uses `MONGO_DB` when set, or `DB_NAME` from the example configuration. Keep the backend and MongoDB running while playing; dashboards read saved sessions and analysis from MongoDB.
 
 ## Security notes
 - Do not store plaintext passwords.

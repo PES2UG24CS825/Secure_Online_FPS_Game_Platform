@@ -180,9 +180,24 @@
       font-size: 14px;
     }
 
+    .overview-insight { display:grid; grid-template-columns:minmax(240px,.9fr) minmax(300px,1.1fr); align-items:center; gap:24px; min-height:154px; margin:0 0 18px; padding:22px 26px; overflow:hidden; border:1px solid rgba(87,148,231,.34); border-radius:18px; background:radial-gradient(ellipse at 88% 0%,rgba(61,112,205,.22),transparent 43%),linear-gradient(112deg,#102943,#0c192a 68%,#111f34); box-shadow:0 16px 38px rgba(0,0,0,.18); }
+    .overview-insight-copy { display:flex; align-items:flex-start; gap:14px; }
+    .overview-insight-mark { display:grid; place-items:center; width:42px; height:42px; flex:0 0 auto; border:1px solid rgba(115,165,255,.32); border-radius:13px; color:#91b9ff; background:rgba(73,124,213,.15); font-size:20px; }
+    .overview-insight-copy h2 { margin:1px 0 6px; color:#f2f7ff; font-size:18px; letter-spacing:-.02em; }
+    .overview-insight-copy p { max-width:390px; margin:0; color:#9bb5d3; font-size:12px; line-height:1.6; }
+    .overview-trend { min-width:0; padding:14px 16px 10px; border:1px solid rgba(126,161,204,.16); border-radius:14px; background:rgba(6,17,29,.38); }
+    .overview-trend-head { display:flex; align-items:center; justify-content:space-between; gap:10px; color:#9bb5d3; font-size:11px; }
+    .overview-trend-head strong { color:#dceaff; font-size:11px; }
+    .overview-trend-chart { display:flex; align-items:flex-end; gap:9px; height:58px; margin-top:12px; }
+    .overview-trend-bar { position:relative; flex:1; min-width:8px; max-width:34px; height:var(--bar-height); min-height:5px; border-radius:6px 6px 2px 2px; background:linear-gradient(180deg,#6da2ff,#4267c4); box-shadow:0 0 16px rgba(79,132,231,.16); }
+    .overview-trend-bar[data-level="medium"] { background:linear-gradient(180deg,#f2bb68,#bd7743); }
+    .overview-trend-bar[data-level="high"] { background:linear-gradient(180deg,#f17c78,#bc4f68); }
+    .overview-trend-empty { align-self:center; color:#718ba9; font-size:11px; }
+    .overview-trend-foot { display:flex; justify-content:space-between; margin-top:8px; color:#6f89a8; font-size:9px; }
+
     .player-page .stats-grid {
       display: grid !important;
-      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+      grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
       gap: 14px !important;
       margin: 0 !important;
     }
@@ -219,102 +234,20 @@
       font-size: 11px;
     }
 
-    .player-overview-lower {
-      display: grid;
-      grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.75fr);
-      gap: 16px;
-      margin-top: 16px;
-    }
-
-    .overview-panel,
-    .overview-security {
-      border: 1px solid var(--player-border);
-      border-radius: var(--player-radius);
-      background: rgba(12, 26, 44, 0.88);
-      box-shadow: var(--player-shadow);
-    }
-
-    .overview-panel {
-      min-height: 270px;
-      padding: 22px;
-    }
-
-    .overview-security {
-      padding: 22px;
-    }
-
-    .overview-panel-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 18px;
-    }
-
-    .overview-panel-header h2,
-    .overview-security h2 {
-      margin: 0;
-      font-size: 18px;
-    }
-
-    .overview-panel-header a {
-      color: var(--player-blue);
-      font-size: 12px;
-      text-decoration: none;
-    }
-
-    .overview-mini-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }
-
-    .overview-mini-card {
-      padding: 16px;
-      min-height: 100px;
-      border: 1px solid var(--player-border);
-      border-radius: 12px;
-      background: rgba(255, 255, 255, 0.018);
-    }
-
-    .overview-mini-card span {
-      display: block;
-      color: var(--player-muted);
-      font-size: 11px;
-    }
-
-    .overview-mini-card strong {
-      display: block;
-      margin-top: 12px;
-      font-size: 17px;
-    }
-
-    .security-summary-list {
-      display: grid;
-      gap: 0;
-      margin-top: 18px;
-    }
-
-    .security-summary-row {
-      display: flex;
-      justify-content: space-between;
-      gap: 16px;
-      padding: 14px 0;
-      border-bottom: 1px solid var(--player-border);
-    }
-
-    .security-summary-row:last-child {
-      border-bottom: 0;
-    }
-
-    .security-summary-row span {
-      color: var(--player-muted);
-      font-size: 12px;
-    }
-
-    .security-summary-row strong {
-      font-size: 12px;
-    }
+    .player-page .ip-stat { overflow-wrap:anywhere; font-size:17px !important; }
+    .dashboard-panels { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(300px,.85fr); gap:16px; margin-top:18px; }
+    .dashboard-notice { margin:0 0 16px; padding:13px 16px; border:1px solid #7e5631; border-radius:10px; background:#2a2119; color:#f0c58d; font-size:13px; }
+    .dashboard-notice[hidden] { display:none; }
+    .dashboard-panel { min-width:0; padding:22px; border:1px solid var(--player-border); border-radius:var(--player-radius); background:linear-gradient(155deg,rgba(15,31,50,.98),rgba(10,23,39,.98)); box-shadow:var(--player-shadow); }
+    .dashboard-panel-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+    .dashboard-panel-head h2 { margin:0; font-size:16px; }
+    .dashboard-panel-caption { color:#829cba; font-size:11px; }
+    .overview-match-list,.overview-detection-list { display:grid; gap:10px; }
+    .overview-match-row,.overview-detection-row { padding:13px 14px; border:1px solid var(--player-border); border-radius:11px; background:#0b1929; }
+    .overview-match-row { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    .overview-match-row strong,.overview-detection-row strong { display:block; font-size:13px; }
+    .overview-match-row small,.overview-detection-row small { display:block; margin-top:5px; color:var(--player-muted); font-size:11px; }
+    .overview-detection-row p { margin:7px 0 0; color:var(--player-muted); font-size:12px; }
 
     /* ---------- Page headings ---------- */
 
@@ -342,9 +275,11 @@
 
     .player-game-grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(250px, 1fr));
+      grid-template-columns: minmax(250px, 420px);
       gap: 18px;
     }
+
+    .player-page .ip-stat strong { overflow-wrap: anywhere; font-size: 16px; }
 
     .player-page .game-card {
       overflow: hidden;
@@ -380,6 +315,23 @@
       background: var(--player-panel);
       box-shadow: var(--player-shadow);
     }
+
+    .match-grid { display:grid; width:100%; grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr)); gap:14px; padding:16px; }
+    .match-card { min-width:0; padding:19px; border:1px solid var(--player-border); border-radius:15px; background:linear-gradient(145deg,#102139,#0b1727); box-shadow:var(--player-shadow); }
+    .match-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding-bottom:15px; border-bottom:1px solid var(--player-border); }
+    .match-card-kicker { color:var(--player-blue); font-size:9px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+    .match-card h3 { margin:6px 0 0; font-size:15px; }
+    .match-card-date { margin-top:5px; color:var(--player-muted); font-size:11px; }
+    .match-stat-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; padding:15px 0; }
+    .match-stat { padding:10px; border-radius:9px; background:rgba(255,255,255,.035); }
+    .match-stat span { display:block; color:var(--player-muted); font-size:10px; }
+    .match-stat strong { display:block; margin-top:6px; font-size:15px; }
+    .match-risk { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:13px; border-top:1px solid var(--player-border); }
+    .match-risk span { color:var(--player-muted); font-size:11px; }
+    .match-risk strong { font-size:13px; }
+    .match-analysis-note { margin:12px 0 0; color:var(--player-muted); font-size:11px; line-height:1.5; }
+    .match-empty,.detection-empty { grid-column:1/-1; min-height:130px; display:grid; place-content:center; gap:7px; padding:22px; border:1px dashed var(--player-border-strong); border-radius:14px; color:var(--player-muted); text-align:center; }
+    .match-empty strong,.detection-empty strong { color:#e7f0fc; font-size:13px; }
 
     .match-table {
       width: 100%;
@@ -471,7 +423,8 @@
 
     .detection-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      width:100%;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%,340px), 1fr));
       gap: 14px;
     }
 
@@ -495,6 +448,8 @@
       margin: 0;
       font-size: 15px;
     }
+    .detection-card p { color:var(--player-muted); font-size:12px; line-height:1.55; }
+    .detection-meta { display:flex; justify-content:space-between; gap:12px; color:var(--player-muted); font-size:11px; }
 
     .severity {
       padding: 5px 9px;
@@ -551,6 +506,11 @@
       font-weight: 750;
     }
 
+    .security-card-value-small {
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
     .security-card-meta {
       margin-top: 8px;
       color: #7698bd;
@@ -559,6 +519,7 @@
 
     .security-history {
       margin-top: 16px;
+      grid-column: 1 / -1;
       padding: 21px;
       border: 1px solid var(--player-border);
       border-radius: var(--player-radius);
@@ -587,6 +548,31 @@
       box-shadow: var(--player-shadow);
     }
 
+    .profile-banner { height:142px; border:1px solid rgba(255,255,255,.08); border-radius:14px; background-size:cover; background-position:center; }
+    .profile-banner[data-banner="midnight"] { background-image:linear-gradient(115deg,#172d4a,#3e57a7 52%,#111d35); }
+    .profile-banner[data-banner="arctic"] { background-image:linear-gradient(115deg,#16445a,#327ca0 52%,#25375f); }
+    .profile-banner[data-banner="ember"] { background-image:linear-gradient(115deg,#482b30,#a34d3d 52%,#24243b); }
+    .profile-banner[data-banner="forest"] { background-image:linear-gradient(115deg,#183b37,#38776b 52%,#1b2940); }
+    .profile-avatar { position:relative; margin-top:-38px; border:4px solid var(--player-panel); }
+    .appearance-group { margin-top:18px; }
+    .appearance-group h3 { margin:0 0 10px; font-size:12px; color:#dce9fb; }
+    .appearance-options { display:flex; flex-wrap:wrap; gap:9px; }
+    .appearance-option { border:1px solid var(--player-border); border-radius:10px; padding:8px; background:#0a1726; color:#e8f1ff; cursor:pointer; }
+    .appearance-option[aria-pressed="true"] { border-color:var(--player-blue); box-shadow:0 0 0 2px rgba(79,140,255,.15); }
+    .banner-option { width:92px; height:42px; background-image:var(--banner-swatch); }
+    .banner-option[data-banner="midnight"] { --banner-swatch:linear-gradient(115deg,#172d4a,#3e57a7,#111d35); }
+    .banner-option[data-banner="arctic"] { --banner-swatch:linear-gradient(115deg,#16445a,#327ca0,#25375f); }
+    .banner-option[data-banner="ember"] { --banner-swatch:linear-gradient(115deg,#482b30,#a34d3d,#24243b); }
+    .banner-option[data-banner="forest"] { --banner-swatch:linear-gradient(115deg,#183b37,#38776b,#1b2940); }
+    .avatar-option { min-width:58px; min-height:48px; font-size:16px; font-weight:800; }
+    .appearance-actions { display:flex; align-items:center; gap:12px; margin-top:18px; }
+    .appearance-status { color:var(--player-muted); font-size:11px; }
+    .appearance-upload { display:inline-flex; align-items:center; justify-content:center; min-height:42px; margin-top:10px; padding:0 13px; border:1px dashed #456489; border-radius:10px; color:#b9d4f7; background:rgba(13,30,50,.7); font-size:12px; font-weight:700; cursor:pointer; transition:border-color .18s ease,background .18s ease; }
+    .appearance-upload:hover { border-color:#76aaff; background:rgba(54,97,157,.18); }
+    .appearance-upload input { position:absolute; width:1px; height:1px; overflow:hidden; opacity:0; }
+    .appearance-upload:focus-within { outline:2px solid var(--player-blue); outline-offset:2px; }
+    .appearance-hint { margin:7px 0 0; color:#819bb9; font-size:11px; }
+
     .profile-identity {
       display: flex;
       align-items: center;
@@ -606,6 +592,7 @@
       font-size: 24px;
       font-weight: 800;
     }
+    .profile-avatar.has-profile-image,.avatar.has-profile-image { background-size:cover !important; background-position:center !important; color:transparent !important; }
 
     .profile-identity h3 {
       margin: 0;
@@ -674,13 +661,12 @@
         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
       }
 
-      .player-overview-lower,
       .profile-grid {
         grid-template-columns: 1fr;
       }
 
       .player-game-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: minmax(250px, 420px);
       }
     }
 
@@ -711,13 +697,9 @@
         flex-direction: column;
       }
 
-      .match-shell {
-        overflow-x: auto;
-      }
-
-      .match-table {
-        min-width: 720px;
-      }
+      .dashboard-panels { grid-template-columns:1fr; }
+      .overview-insight { grid-template-columns:1fr; gap:16px; padding:20px; }
+      .match-grid { padding:12px; grid-template-columns:1fr; }
     }
   </style>
 </head>
@@ -809,127 +791,76 @@
           </h1>
 
           <p class="player-overview-subtitle">
-            Your gameplay and account security overview
+            FPS Microgame matches, risk score, and sign-in details
           </p>
         </div>
 
-        <div class="status-pill">
-          <span class="status-dot"></span>
-          Protected
-        </div>
+        <span class="status-pill" id="playerLiveStatus" role="status">Connecting…</span>
 
       </div>
+
+
+      <section class="overview-insight" aria-label="Match risk trend">
+        <div class="overview-insight-copy">
+          <div class="overview-insight-mark" aria-hidden="true">⌁</div>
+          <div>
+            <h2>Your matches, at a glance</h2>
+            <p id="overviewInsightText">SecureFPS tracks match activity and reviews gameplay signals as your sessions finish.</p>
+          </div>
+        </div>
+        <div class="overview-trend">
+          <div class="overview-trend-head"><span>Recent match risk</span><strong id="overviewTrendValue">Waiting for analysis</strong></div>
+          <div class="overview-trend-chart" id="overviewRiskTrend" role="img" aria-label="Recent match risk trend"><span class="overview-trend-empty">Match analysis appears here</span></div>
+          <div class="overview-trend-foot"><span>OLDER</span><span>RECENT</span></div>
+        </div>
+      </section>
 
 
       <section class="stats-grid">
 
         <article class="stat-card">
-          <span>Matches analyzed</span>
-          <strong id="matchesCount">0</strong>
-          <small>Gameplay telemetry</small>
+          <span>Matches played</span>
+          <strong id="matchesCount">—</strong>
+          <small>FPS Microgame sessions</small>
         </article>
 
         <article class="stat-card">
-          <span>Security alerts</span>
-          <strong id="alertsCount">0</strong>
-          <small>Requires attention</small>
+          <span>Current risk score</span>
+          <strong id="riskScore">Pending</strong>
+          <small>Latest completed analysis</small>
+        </article>
+
+        <article class="stat-card">
+          <span>Latest login IP</span>
+          <strong id="lastLoginIp" class="ip-stat">Not recorded</strong>
+          <small>Address observed by the server</small>
         </article>
 
         <article class="stat-card">
           <span>Authentication</span>
-          <strong id="mfaStatus">2FA</strong>
+          <strong id="mfaStatus">Loading</strong>
           <small>Authenticator status</small>
         </article>
 
         <article class="stat-card">
           <span>Account status</span>
-          <strong id="accountStatus" class="success-text">
-            Protected
-          </strong>
-          <small>Secure session active</small>
+          <strong id="accountStatus">Loading</strong>
+          <small>Current account state</small>
         </article>
 
       </section>
 
+      <div id="dashboardNotice" class="dashboard-notice" role="status" hidden></div>
 
-      <div class="player-overview-lower">
-
-        <section class="overview-panel">
-
-          <div class="overview-panel-header">
-            <h2>Gameplay activity</h2>
-
-            <a href="#matches" data-section="matches">
-              View matches →
-            </a>
-          </div>
-
-          <div class="overview-mini-grid">
-
-            <div class="overview-mini-card">
-              <span>Matches analyzed</span>
-              <strong id="overviewMatches">0</strong>
-            </div>
-
-            <div class="overview-mini-card">
-              <span>Security alerts</span>
-              <strong id="overviewAlerts">0</strong>
-            </div>
-
-            <div class="overview-mini-card">
-              <span>Current risk score</span>
-              <strong id="riskScore">0</strong>
-            </div>
-
-            <div class="overview-mini-card">
-              <span>Detection status</span>
-              <strong id="overviewDetectionStatus">
-                No active alerts
-              </strong>
-            </div>
-
-          </div>
-
+      <div class="dashboard-panels">
+        <section class="dashboard-panel">
+          <div class="dashboard-panel-head"><h2>Recent matches</h2><span class="dashboard-panel-caption">Latest sessions</span></div>
+          <div id="overviewMatchList" class="overview-match-list"><div class="match-empty">Loading match history…</div></div>
         </section>
-
-
-        <section class="overview-security">
-
-          <p class="eyebrow">
-            ACCOUNT SECURITY
-          </p>
-
-          <h2>
-            Security status
-          </h2>
-
-          <div class="security-summary-list">
-
-            <div class="security-summary-row">
-              <span>Authentication</span>
-              <strong id="overviewMfa">
-                Protected
-              </strong>
-            </div>
-
-            <div class="security-summary-row">
-              <span>Account</span>
-              <strong id="overviewAccountStatus">
-                Active
-              </strong>
-            </div>
-
-            <div class="security-summary-row">
-              <span>Risk</span>
-              <strong id="overviewRisk">
-                0
-              </strong>
-            </div>
-
-          </div>
-
+        <section class="dashboard-panel">
+          <div class="dashboard-panel-head"><h2>Security review</h2><span class="dashboard-panel-caption">Recent gameplay signals</span></div>
+          <div id="overviewDetectionList" class="overview-detection-list"><div class="detection-empty">Loading security events…</div></div>
         </section>
-
       </div>
 
     </section>
@@ -946,10 +877,10 @@
         <div>
           <p class="eyebrow">GAME HUB</p>
 
-          <h2>Available FPS games</h2>
+          <h2>FPS Microgame</h2>
 
           <p class="page-description">
-            Select a game to start playing and generate gameplay telemetry.
+            Launch the FPS Microgame to record a match and gameplay telemetry.
           </p>
         </div>
 
@@ -1015,37 +946,8 @@
       </div>
 
 
-      <div class="match-shell">
-
-        <table class="match-table">
-
-          <thead>
-            <tr>
-              <th>Result</th>
-              <th>Mode</th>
-              <th>Eliminations</th>
-              <th>Time</th>
-              <th>Security</th>
-            </tr>
-          </thead>
-
-          <tbody id="matchesList">
-
-            <!-- Existing player.js should replace/populate this
-                 area using real backend match data. -->
-
-            <tr>
-              <td colspan="5">
-                <div class="empty">
-                  No match records available.
-                </div>
-              </td>
-            </tr>
-
-          </tbody>
-
-        </table>
-
+      <div id="matchesList" class="match-grid">
+        <div class="match-empty"><strong>No matches yet</strong><span>Play the FPS Microgame to create your first match record.</span></div>
       </div>
 
     </section>
@@ -1072,14 +974,8 @@
       </div>
 
 
-      <div
-        id="detectionsList"
-        class="detection-grid">
-
-        <div class="empty">
-          No detection records available.
-        </div>
-
+      <div id="detectionsList" class="detection-grid">
+        <div class="detection-empty"><strong>No detections recorded</strong><span>Security analysis appears here after a match is completed.</span></div>
       </div>
 
     </section>
@@ -1196,6 +1092,8 @@
 
         <section class="profile-card">
 
+          <div class="profile-banner" id="profileBanner" data-banner="midnight" aria-label="Profile banner preview"></div>
+
           <div class="profile-identity">
 
             <div
@@ -1228,6 +1126,39 @@
 
 
         <section class="profile-card">
+
+          <div class="appearance-group">
+            <h3>Banner background</h3>
+            <div class="appearance-options" id="bannerOptions" role="group" aria-label="Choose banner background">
+              <button class="appearance-option banner-option" type="button" data-banner="midnight" aria-label="Midnight banner" aria-pressed="true"></button>
+              <button class="appearance-option banner-option" type="button" data-banner="arctic" aria-label="Arctic banner" aria-pressed="false"></button>
+              <button class="appearance-option banner-option" type="button" data-banner="ember" aria-label="Ember banner" aria-pressed="false"></button>
+              <button class="appearance-option banner-option" type="button" data-banner="forest" aria-label="Forest banner" aria-pressed="false"></button>
+            </div>
+            <label class="appearance-upload">Upload your banner
+              <input id="bannerUpload" type="file" accept="image/png,image/jpeg,image/webp">
+            </label>
+            <p class="appearance-hint">Choose a wide image. It is cropped to fit your profile banner.</p>
+          </div>
+
+          <div class="appearance-group">
+            <h3>Avatar</h3>
+            <div class="appearance-options" id="avatarOptions" role="group" aria-label="Choose avatar">
+              <button class="appearance-option avatar-option" type="button" data-avatar="initial" aria-pressed="true">S</button>
+              <button class="appearance-option avatar-option" type="button" data-avatar="shield" aria-pressed="false">⬡</button>
+              <button class="appearance-option avatar-option" type="button" data-avatar="target" aria-pressed="false">◎</button>
+              <button class="appearance-option avatar-option" type="button" data-avatar="bolt" aria-pressed="false">ϟ</button>
+            </div>
+            <label class="appearance-upload">Upload profile photo
+              <input id="avatarUpload" type="file" accept="image/png,image/jpeg,image/webp">
+            </label>
+            <p class="appearance-hint">Square images work best. JPG, PNG, or WebP up to 10 MB.</p>
+          </div>
+
+          <div class="appearance-actions">
+            <button class="play-btn" id="saveAppearance" type="button">Save appearance</button>
+            <span class="appearance-status" id="appearanceStatus" role="status"></span>
+          </div>
 
           <div
             id="profileContent"
@@ -1265,8 +1196,8 @@
 
 
   <!-- Existing application logic -->
-  <script src="js/api.js"></script>
-  <script src="js/player.js"></script>
+  <script src="js/api.js?v=realtime-live-2"></script>
+  <script src="js/player.js?v=overview-trend-1"></script>
 
 
   <!-- ============================================================
