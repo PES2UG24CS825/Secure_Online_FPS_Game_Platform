@@ -1,8 +1,19 @@
+import base64
+import binascii
 from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request, session
 from bson import ObjectId
 
-from database.db import users, matches, security_events, login_history, sessions_db
+from database.db import (
+    game_events,
+    game_sessions,
+    game_telemetry,
+    users,
+    matches,
+    security_events,
+    login_history,
+    sessions_db,
+)
 
 player_bp = Blueprint("player", __name__, url_prefix="/api/player")
 
@@ -14,11 +25,17 @@ def get_user_role():
     if not user_id:
         return None
     user = users.find_one({"_id": ObjectId(user_id)})
-    return user.get("role") if user else None
+    # Accounts created before roles were persisted are player accounts.
+    return user.get("role", "player") if user else None
 
 @player_bp.before_request
 def check_player_access():
-    if get_user_role() not in ("player", "admin"):
+    # Browsers send OPTIONS preflights before cross-origin JSON requests.
+    # Let Flask-CORS answer those without requiring a player session; the
+    # actual GET/POST/PUT requests still go through the role check below.
+    if request.method == "OPTIONS":
+        return None
+    if get_user_role() != "player":
         return jsonify({"message": "Player access required."}), 403
 
 @player_bp.get("/profile")
@@ -34,8 +51,71 @@ def get_profile():
         "name": user["name"],
         "email": user["email"],
         "mfa_enabled": user.get("mfa_enabled", False),
-        "created_at": user["created_at"].isoformat(),
+        "created_at": user["created_at"].isoformat() if user.get("created_at") else None,
+        "profile_customization": user.get("profile_customization", {
+            "avatar": "initial",
+            "banner": "midnight",
+        }),
     })
+
+
+@player_bp.put("/profile/customization")
+def update_profile_customization():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    data = request.get_json(silent=True) or {}
+    avatar = data.get("avatar")
+    banner = data.get("banner")
+    avatar_image = data.get("avatar_image") or None
+    banner_image = data.get("banner_image") or None
+    allowed_avatars = {"initial", "shield", "target", "bolt"}
+    allowed_banners = {"midnight", "arctic", "ember", "forest"}
+    if avatar_image:
+        avatar = "custom"
+    if banner_image:
+        banner = "custom"
+    if avatar not in allowed_avatars | {"custom"} or banner not in allowed_banners | {"custom"}:
+        return jsonify({"message": "Choose an available avatar and banner."}), 400
+
+    def valid_image_data(value):
+        if value is None:
+            return True
+        if not isinstance(value, str) or len(value) > 720_000:
+            return False
+        try:
+            header, encoded = value.split(",", 1)
+            if header not in {"data:image/jpeg;base64", "data:image/png;base64", "data:image/webp;base64"}:
+                return False
+            raw = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error):
+            return False
+        if len(raw) > 512_000:
+            return False
+        signatures = {
+            "data:image/jpeg;base64": raw.startswith(b"\xff\xd8\xff"),
+            "data:image/png;base64": raw.startswith(b"\x89PNG\r\n\x1a\n"),
+            "data:image/webp;base64": len(raw) >= 12 and raw[:4] == b"RIFF" and raw[8:12] == b"WEBP",
+        }
+        return signatures.get(header, False)
+
+    if not valid_image_data(avatar_image) or not valid_image_data(banner_image):
+        return jsonify({"message": "Upload a valid JPG, PNG, or WebP image under 512 KB."}), 400
+
+    customization = {
+        "avatar": avatar,
+        "banner": banner,
+        "avatar_image": avatar_image,
+        "banner_image": banner_image,
+    }
+    result = users.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {"profile_customization": customization}},
+    )
+    if not result.matched_count:
+        return jsonify({"message": "Player account not found."}), 404
+    return jsonify({"message": "Profile appearance saved.", "profile_customization": customization})
 
 @player_bp.get("/matches")
 def get_matches():
@@ -44,26 +124,57 @@ def get_matches():
         return jsonify({"message": "Authentication required."}), 401
     
     user_oid = ObjectId(user_id)
-    player_matches = list(matches.find({"user_id": user_oid}).sort("created_at", -1))
+    player_matches = list(game_sessions.find({"user_id": user_oid}).sort("started_at", -1))
+    analyses = {}
+    for item in game_events.find(
+        {"user_id": user_oid, "analysis_type": "game_session"}
+    ).sort("created_at", -1):
+        if item.get("session_id"):
+            analyses.setdefault(item["session_id"], item)
+
+    def event_count(session_id, event_type):
+        return game_telemetry.count_documents({
+            "user_id": user_oid,
+            "session_id": session_id,
+            "event_type": event_type,
+        })
+
+    result_matches = []
+    for game_session in player_matches:
+        session_id = game_session.get("session_id", "")
+        analysis = analyses.get(session_id, {})
+        result = analysis.get("result") or {}
+        raw = analysis.get("raw_features") or {}
+        started_at = game_session.get("started_at") or game_session.get("created_at")
+        ended_at = game_session.get("ended_at")
+        duration = None
+        if started_at and ended_at:
+            if started_at.tzinfo is None and ended_at.tzinfo is not None:
+                started_at = started_at.replace(tzinfo=ended_at.tzinfo)
+            elif ended_at.tzinfo is None and started_at.tzinfo is not None:
+                ended_at = ended_at.replace(tzinfo=started_at.tzinfo)
+            duration = max(0, int((ended_at - started_at).total_seconds()))
+        kills = event_count(session_id, "enemy_killed")
+        deaths = event_count(session_id, "player_death")
+        result_matches.append({
+            "id": session_id,
+            "match_id": session_id[:8] if session_id else str(game_session.get("_id", ""))[-8:],
+            "date": started_at.isoformat() if started_at else None,
+            "duration": duration,
+            "game": game_session.get("game", "FPS Microgame"),
+            "status": game_session.get("status", "unknown"),
+            "kills": kills,
+            "deaths": deaths,
+            "kd": round(kills / max(deaths, 1), 2),
+            "accuracy": round(float(raw.get("accuracy", 0) or 0) * 100, 1),
+            "risk_score": analysis.get("risk_score", result.get("risk_score")),
+            "analysis_status": analysis.get("status", "pending"),
+            "missing_features": analysis.get("missing_features", []),
+            "analysis_error": analysis.get("error"),
+        })
     
     return jsonify({
-        "matches": [
-            {
-                "id": str(m["_id"]),
-                "date": m["created_at"].isoformat(),
-                "duration": m.get("duration", 0),
-                "kills": m.get("kills", 0),
-                "deaths": m.get("deaths", 0),
-                "kd": round(m.get("kills", 0) / max(m.get("deaths", 1), 1), 2),
-                "headshots": m.get("headshots", 0),
-                "headshot_percentage": m.get("headshot_percentage", 0),
-                "accuracy": m.get("accuracy", 0),
-                "shots_fired": m.get("shots_fired", 0),
-                "shots_hit": m.get("shots_hit", 0),
-                "risk_score": m.get("risk_score", 0),
-            }
-            for m in player_matches
-        ]
+        "matches": result_matches,
     })
 
 @player_bp.get("/detections")
@@ -82,12 +193,64 @@ def get_detections():
                 "type": d.get("type", "unknown"),
                 "severity": d.get("severity", "low"),
                 "confidence": d.get("confidence", 0),
-                "timestamp": d["created_at"].isoformat(),
+                "timestamp": d["created_at"].isoformat() if d.get("created_at") else None,
                 "description": d.get("description", ""),
                 "status": d.get("status", "detected"),
+                "risk_score": d.get("risk_score"),
             }
             for d in detections
         ]
+    })
+
+@player_bp.get("/security")
+def get_security_summary():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    user_oid = ObjectId(user_id)
+    user = users.find_one({"_id": user_oid}) or {}
+    recent_login = login_history.find_one(
+        {"user_id": user_oid, "type": "login_success"},
+        sort=[("created_at", -1)],
+    )
+    logins = list(login_history.find(
+        {"user_id": user_oid, "type": "login_success"}
+    ).sort("created_at", -1).limit(50))
+    active_sessions = list(sessions_db.find(
+        {"user_id": user_oid, "is_active": True}
+    ).sort("last_activity", -1).limit(20))
+    latest_analysis = game_events.find_one(
+        {"user_id": user_oid, "analysis_type": "game_session", "status": "success"},
+        sort=[("created_at", -1)],
+    ) or {}
+    latest_result = latest_analysis.get("result") or {}
+    risk_score = latest_analysis.get("risk_score", latest_result.get("risk_score"))
+
+    return jsonify({
+        "mfa_status": "enabled" if user.get("mfa_enabled") else "disabled",
+        "account_status": "suspended" if user.get("revoked") else "active",
+        "risk_score": risk_score,
+        "last_login": recent_login["created_at"].isoformat() if recent_login and recent_login.get("created_at") else None,
+        "active_sessions": [
+            {
+                "ip_address": item.get("ip_address", item.get("ip", "Unknown")),
+                "device": item.get("device", "Unknown device"),
+                "created_at": item["created_at"].isoformat() if item.get("created_at") else None,
+                "last_activity": item.get("last_activity", item.get("created_at")).isoformat()
+                    if item.get("last_activity", item.get("created_at")) else None,
+            }
+            for item in active_sessions
+        ],
+        "login_history": [
+            {
+                "timestamp": item["created_at"].isoformat() if item.get("created_at") else None,
+                "ip_address": item.get("ip_address", item.get("ip", "Unknown")),
+                "authentication_method": item.get("authentication_method", "password+mfa"),
+                "success": item.get("status", "success") == "success",
+            }
+            for item in logins
+        ],
     })
 
 @player_bp.get("/security-events")
@@ -110,6 +273,31 @@ def get_security_events():
                 "status": e.get("status", "success"),
             }
             for e in events
+        ]
+    })
+
+@player_bp.get("/login-history")
+def get_login_history():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    user_oid = ObjectId(user_id)
+    history = list(
+        login_history.find({"user_id": user_oid}).sort("created_at", -1).limit(50)
+    )
+    return jsonify({
+        "login_history": [
+            {
+                "timestamp": item["created_at"].isoformat()
+                if item.get("created_at") else None,
+                "ip_address": item.get("ip_address", item.get("ip", "Unknown")),
+                "authentication_method": item.get(
+                    "authentication_method", "password+mfa"
+                ),
+                "success": item.get("status", "success") == "success",
+            }
+            for item in history
         ]
     })
 

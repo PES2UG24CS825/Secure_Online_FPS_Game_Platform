@@ -19,7 +19,7 @@ loginForm.addEventListener("submit", async (event) => {
       })
     });
     if (data.mfa_required) {
-      window.location.replace("mfa-fixed.html");
+      window.location.replace("mfa-fixed.html?fresh=admin-role-check-2");
       return;
     }
     message.textContent = data.message || "Unable to continue sign-in.";

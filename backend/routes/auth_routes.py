@@ -8,7 +8,7 @@ import qrcode
 from flask import Blueprint, jsonify, request, session
 from pymongo.errors import DuplicateKeyError
 
-from database.db import users
+from database.db import login_history, sessions_db, users
 from services.auth import PASSWORD_RULES_MESSAGE, hash_password, validate_password, verify_password
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
@@ -35,6 +35,7 @@ def signup():
         "password_hash": hash_password(password),
         "mfa_secret": secret,
         "mfa_enabled": True,
+        "role": "player",
         "created_at": utcnow(),
     }
 
@@ -127,7 +128,31 @@ def verify_mfa():
 
     session.clear()
     session["user_id"] = str(user["_id"])
-    session["login_at"] = utcnow().isoformat()
+    logged_in_at = utcnow()
+    session["login_at"] = logged_in_at.isoformat()
+
+    # Record the network address only after password and MFA both succeed.
+    ip_address = request.remote_addr or "Unknown"
+    session_record = {
+        "user_id": user["_id"],
+        "ip": ip_address,
+        "ip_address": ip_address,
+        "device": request.user_agent.string[:250],
+        "created_at": logged_in_at,
+        "last_activity": logged_in_at,
+        "is_active": True,
+    }
+    session_result = sessions_db.insert_one(session_record)
+    session["auth_session_record_id"] = str(session_result.inserted_id)
+    login_history.insert_one({
+        "user_id": user["_id"],
+        "type": "login_success",
+        "status": "success",
+        "ip": ip_address,
+        "ip_address": ip_address,
+        "authentication_method": "password+mfa",
+        "created_at": logged_in_at,
+    })
 
     return jsonify({"message": "MFA verified. Login successful."})
 
@@ -156,5 +181,12 @@ def me():
 
 @auth_bp.post("/logout")
 def logout():
+    record_id = session.get("auth_session_record_id")
+    if record_id:
+        from bson import ObjectId
+        sessions_db.update_one(
+            {"_id": ObjectId(record_id)},
+            {"$set": {"is_active": False, "last_activity": utcnow()}},
+        )
     session.clear()
     return jsonify({"message": "Logged out successfully."})

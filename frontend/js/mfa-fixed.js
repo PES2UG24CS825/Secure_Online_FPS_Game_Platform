@@ -11,11 +11,15 @@ form.addEventListener("submit", async (event) => {
   }
 
   try {
-    const data = await api("/auth/verify-mfa", {
+    await api("/auth/verify-mfa", {
       method: "POST",
       body: JSON.stringify({ code: document.getElementById("code").value })
     });
-    window.location.replace(data.user?.role === "admin" ? "admin.html?fresh=admin-fixed" : "player.html?fresh=player-fixed");
+    const identity = await api("/auth/me");
+    const destination = identity.user?.role === "admin"
+      ? "admin.html?fresh=admin-mfa-route-1"
+      : "player.html?fresh=player-fixed";
+    window.location.replace(destination);
   } catch (error) {
     message.textContent = error.message;
     if (submitButton) {

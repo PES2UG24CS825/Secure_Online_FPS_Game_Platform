@@ -61,6 +61,15 @@
             height: 100%;
             border: none;
         }
+
+        .game-status {
+            min-height: 100%;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            color: #d1d5db;
+            text-align: center;
+        }
     </style>
 </head>
 
@@ -69,22 +78,112 @@
     <div class="header">
         <h2>🎮 FPS Microgame</h2>
 
-        <button class="back-button"
-            onclick="window.location.href='player.html'">
+        <button class="back-button" id="backToDashboard" type="button">
             ← Dashboard
         </button>
     </div>
 
     <div class="game-wrapper">
         <div class="game-container">
-
             <iframe
-                src="public/games/FPS_Microgame/index.html"
+                id="gameFrame"
+                title="FPS Microgame"
                 allow="fullscreen">
             </iframe>
-
+            <div class="game-status" id="gameStatus" role="status">
+                Creating a secure game session...
+            </div>
         </div>
     </div>
+
+    <script>
+        const gameFrame = document.getElementById("gameFrame");
+        const gameStatus = document.getElementById("gameStatus");
+        const backButton = document.getElementById("backToDashboard");
+        let gameSessionId = null;
+        let ending = false;
+        let ended = false;
+
+        async function finishGame() {
+            if (ending) return;
+            ending = true;
+            backButton.disabled = true;
+            backButton.textContent = "Saving match…";
+
+            try {
+                if (gameSessionId) {
+                    const response = await fetch("http://127.0.0.1:5000/api/game/end", {
+                        method: "POST",
+                        credentials: "include",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ session_id: gameSessionId })
+                    });
+                    if (!response.ok) {
+                        const data = await response.json().catch(() => ({}));
+                        throw new Error(data.message || "Match results could not be saved.");
+                    }
+                }
+                ended = true;
+                window.location.href = "player.html#matches";
+            } catch (error) {
+                gameStatus.style.display = "grid";
+                gameStatus.textContent = `${error.message} Your match is saved as in progress.`;
+                backButton.disabled = false;
+                backButton.textContent = "← Back to dashboard";
+                ending = false;
+            }
+        }
+
+        backButton.addEventListener("click", finishGame);
+
+        window.addEventListener("pagehide", () => {
+            if (!gameSessionId || ended || ending) return;
+            fetch("http://127.0.0.1:5000/api/game/end", {
+                method: "POST",
+                credentials: "include",
+                keepalive: true,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ session_id: gameSessionId })
+            }).catch(() => {});
+        });
+
+        async function loadSecureGame() {
+            try {
+                const response = await fetch("http://127.0.0.1:5000/api/game/start", {
+                    method: "POST",
+                    credentials: "include"
+                });
+                const data = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        window.location.href = "login.html";
+                        return;
+                    }
+                    throw new Error(data.message || `Session request failed (${response.status}).`);
+                }
+
+                if (!data.session_id || !data.game_token) {
+                    throw new Error("The server did not return secure game session credentials.");
+                }
+                gameSessionId = data.session_id;
+
+                const gameUrl = new URL("public/games/FPS_Microgame/index.html", window.location.href);
+                gameUrl.searchParams.set("session_id", data.session_id);
+                gameUrl.searchParams.set("game_token", data.game_token);
+                gameFrame.src = gameUrl.toString();
+                gameFrame.style.display = "block";
+                gameStatus.style.display = "none";
+            } catch (error) {
+                gameFrame.style.display = "none";
+                gameStatus.textContent = `${error.message} Make sure the backend is running and you are logged in.`;
+                console.error("[SecureFPS] Could not start game session:", error);
+            }
+        }
+
+        gameFrame.style.display = "none";
+        loadSecureGame();
+    </script>
 
 </body>
 </html>

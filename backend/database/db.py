@@ -11,15 +11,21 @@ MONGO_URI = os.getenv(
 
 DB_NAME = os.getenv(
     "MONGO_DB",
-    "secure_fps"
+    os.getenv("DB_NAME", "secure_fps")
 )
 
-client = MongoClient(MONGO_URI)
+client = MongoClient(
+    MONGO_URI,
+    serverSelectionTimeoutMS=int(os.getenv("MONGO_SERVER_SELECTION_TIMEOUT_MS", "5000")),
+)
 
 db = client[DB_NAME]
 
 # Collections
 users = db["users"]
+matches = db["matches"]
+login_history = db["login_history"]
+sessions_db = db["sessions"]
 
 # Raw gameplay telemetry coming from Unity
 game_telemetry = db["game_telemetry"]
@@ -32,6 +38,8 @@ game_sessions = db["game_sessions"]
 
 # Security alerts
 security_events = db["security_events"]
+# Backwards-compatible name used by older integrations.
+detections = security_events
 
 
 def test_connection():

@@ -4,9 +4,10 @@ from datetime import datetime, timezone
 import pyotp
 from flask import Flask
 from flask_cors import CORS
-from database.db import users
+from database.db import test_connection, users
 from routes.auth_routes import auth_bp
 from routes.game_routes import game_bp
+from routes.player_routes import player_bp
 from services.auth import hash_password, validate_password
 
 app = Flask(__name__)
@@ -19,12 +20,21 @@ app.config.update(
 
 CORS(
     app,
-    resources={r"/api/*": {"origins": [os.getenv("FRONTEND_ORIGIN", "http://127.0.0.1:5500")]}},
+    resources={
+        r"/api/*": {
+            "origins": [
+                os.getenv("FRONTEND_ORIGIN", "http://127.0.0.1:5500"),
+                "http://localhost:5500",
+                "http://127.0.0.1:5500",
+            ]
+        }
+    },
     supports_credentials=True,
 )
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(game_bp)
+app.register_blueprint(player_bp)
 
 
 def ensure_default_admin():
@@ -48,9 +58,11 @@ def ensure_default_admin():
                     "password_hash": hash_password(password),
                     "mfa_secret": mfa_secret,
                     "mfa_enabled": True,
-                    "role": "admin",
                     "created_at": datetime.now(timezone.utc)
-                }
+                },
+                # The configured administrator email is the authority for
+                # the admin role. Repair older accounts created as players.
+                "$set": {"role": "admin"}
             },
             upsert=True
         )
@@ -61,13 +73,17 @@ def ensure_default_admin():
     if result.upserted_id:
         print("[SecureFPS] Default admin account created:", email)
     else:
-        print("[SecureFPS] Existing account preserved for admin email:", email)
+        print("[SecureFPS] Configured administrator account ready:", email)
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    connected = test_connection()
+    return {
+        "status": "ok" if connected else "unavailable",
+        "database": "connected" if connected else "unavailable",
+    }, (200 if connected else 503)
 
 if __name__ == "__main__":
     # Development defaults are documented credentials; override them in deployment.
     ensure_default_admin()
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(host="127.0.0.1", port=5000, debug=True, threaded=True)
