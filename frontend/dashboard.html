@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+
   <meta charset="UTF-8">
 
   <meta
@@ -9,175 +10,208 @@
     content="width=device-width, initial-scale=1"
   >
 
-  <title>SecureFPS | Player Dashboard</title>
+  <title>SecureFPS | Dashboard</title>
 
   <link
     rel="stylesheet"
-    href="css/styles.css?v=rbac-v1"
+    href="css/styles.css?v=ui-v4"
   >
 
   <style>
+
     /* =====================================================
        UNITY GAME SECTION
     ===================================================== */
 
-    .nav-btn {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 16px;
-      color: #aaa;
-      cursor: pointer;
-      transition: all 0.2s;
-      border-radius: 8px;
-      margin: 4px 0;
-    }
-
-    .nav-btn:hover {
-      color: #fff;
-      background: rgba(79, 140, 255, 0.1);
-    }
-
-    .nav-btn.active {
-      color: #4f8cff;
-      background: rgba(79, 140, 255, 0.15);
-      font-weight: 600;
-    }
-
-    .section {
-      display: none;
-    }
-
-    .section.active {
-      display: block;
-    }
-
-    .matches-table,
-    .detections-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 16px;
-    }
-
-    .matches-table th,
-    .detections-table th {
-      text-align: left;
-      padding: 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      color: #aaa;
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-
-    .matches-table td,
-    .detections-table td {
-      padding: 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      color: #ddd;
-    }
-
-    .matches-table tbody tr:hover,
-    .detections-table tbody tr:hover {
-      background: rgba(79, 140, 255, 0.05);
-    }
-
-    .severity-badge {
-      display: inline-block;
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-
-    .severity-low {
-      background: rgba(53, 212, 154, 0.2);
-      color: #35d49a;
-    }
-
-    .severity-medium {
-      background: rgba(255, 193, 7, 0.2);
-      color: #ffc107;
-    }
-
-    .severity-high {
-      background: rgba(255, 107, 107, 0.2);
-      color: #ff6b6b;
-    }
-
-    .severity-critical {
-      background: rgba(220, 53, 69, 0.2);
-      color: #dc3545;
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 40px 20px;
-      color: #999;
-    }
-
-    .empty-state strong {
-      display: block;
-      margin-bottom: 8px;
-      color: #ccc;
-    }
-
     #gameSection {
+
       display: none;
+
       margin-top: 24px;
+
     }
+
 
     .game-header {
+
       display: flex;
+
       justify-content: space-between;
+
       align-items: center;
+
       gap: 20px;
+
       margin-bottom: 16px;
+
     }
+
 
     .game-header h2 {
+
       margin: 4px 0 0;
+
     }
+
 
     .game-frame-container {
+
+      position: relative;
+
       width: 100%;
+
       height: 700px;
+
       background: #000;
+
       border-radius: 12px;
+
       overflow: hidden;
-      border: 1px solid rgba(255, 255, 255, 0.12);
+
+      border: 1px solid
+        rgba(255, 255, 255, 0.12);
+
     }
+
 
     #gameFrame {
+
       width: 100%;
+
       height: 100%;
+
       border: none;
+
       display: block;
+
       background: #000;
+
     }
+
 
     .game-loading {
+
       display: none;
-      padding: 15px;
-      text-align: center;
+
+      position: absolute;
+
+      inset: 0;
+
+      z-index: 5;
+
+      align-items: center;
+
+      justify-content: center;
+
+      flex-direction: column;
+
+      background: #000;
+
       color: #aaa;
+
     }
+
+
+    .game-loading.active {
+
+      display: flex;
+
+    }
+
+
+    .game-loading-spinner {
+
+      width: 38px;
+
+      height: 38px;
+
+      border: 3px solid
+        rgba(255, 255, 255, 0.2);
+
+      border-top-color: #fff;
+
+      border-radius: 50%;
+
+      animation:
+        securefps-spin
+        0.8s linear infinite;
+
+      margin-bottom: 15px;
+
+    }
+
 
     .game-error {
+
       display: none;
+
       padding: 15px;
+
       margin-bottom: 15px;
+
       border-radius: 8px;
-      background: rgba(255, 50, 50, 0.1);
+
+      background:
+        rgba(255, 50, 50, 0.1);
+
       color: #ff7777;
+
     }
 
-    @media (max-width: 900px) {
-      .game-frame-container {
-        height: 500px;
-      }
+
+    .game-error.active {
+
+      display: block;
+
     }
+
+
+    @keyframes securefps-spin {
+
+      from {
+
+        transform: rotate(0deg);
+
+      }
+
+      to {
+
+        transform: rotate(360deg);
+
+      }
+
+    }
+
+
+    @media (max-width: 900px) {
+
+      .game-frame-container {
+
+        height: 500px;
+
+      }
+
+    }
+
+
+    @media (max-width: 600px) {
+
+      .game-frame-container {
+
+        height: 400px;
+
+      }
+
+      .game-header {
+
+        align-items: flex-start;
+
+        flex-direction: column;
+
+      }
+
+    }
+
   </style>
 
 </head>
@@ -199,8 +233,15 @@
       </div>
 
       <div>
-        <strong>SecureFPS</strong>
-        <small>Gaming Security</small>
+
+        <strong>
+          SecureFPS
+        </strong>
+
+        <small>
+          Gaming Security
+        </small>
+
       </div>
 
     </div>
@@ -208,35 +249,34 @@
 
     <nav>
 
-      <div
-        class="nav-btn active"
-        data-section="overview">
-        📊 Overview
-      </div>
+      <a
+        class="active"
+        href="#overview">
 
-      <div
-        class="nav-btn"
-        data-section="games">
-        🎮 Game Hub
-      </div>
+        Overview
 
-      <div
-        class="nav-btn"
-        data-section="matches">
-        📈 Matches
-      </div>
+      </a>
 
-      <div
-        class="nav-btn"
-        data-section="detections">
-        🚨 Detections
-      </div>
 
-      <div
-        class="nav-btn"
-        data-section="account">
-        🔐 Account Security
-      </div>
+      <a href="#games">
+
+        Game Hub
+
+      </a>
+
+
+      <a href="#detections">
+
+        Detections
+
+      </a>
+
+
+      <a href="#security">
+
+        Account Security
+
+      </a>
 
     </nav>
 
@@ -248,17 +288,25 @@
         <div
           class="avatar"
           id="avatar">
+
           P
+
         </div>
+
 
         <div>
 
           <strong id="sideName">
+
             Player
+
           </strong>
 
+
           <small id="sideEmail">
+
             player
+
           </small>
 
         </div>
@@ -287,150 +335,195 @@
 
   <main class="dashboard-main">
 
-    <!-- OVERVIEW SECTION -->
-    <section
-      id="overview"
-      class="section active">
 
-      <header
-        class="topbar">
+    <!-- ===================================================
+         TOP BAR
+    ==================================================== -->
 
-        <div>
+    <header
+      class="topbar"
+      id="overview">
 
-          <p class="eyebrow">
-            PLAYER CONSOLE
-          </p>
+      <div>
 
-          <h1 id="welcome">
-            Welcome back
-          </h1>
+        <p class="eyebrow">
 
-        </div>
+          PLAYER CONSOLE
+
+        </p>
 
 
-        <div class="status-pill">
+        <h1 id="welcome">
 
-          <span class="status-dot"></span>
+          Welcome back
 
-          Platform protected
+        </h1>
 
-        </div>
-
-      </header>
+      </div>
 
 
-      <section class="stats-grid">
+      <div class="status-pill">
 
-        <article class="stat-card">
+        <span class="status-dot"></span>
 
-          <span>
-            Matches analyzed
-          </span>
+        Platform protected
 
-          <strong id="matches">
-            0
-          </strong>
+      </div>
 
-          <small>
-            Gameplay telemetry
-          </small>
-
-        </article>
+    </header>
 
 
-        <article class="stat-card">
 
-          <span>
-            Security alerts
-          </span>
+    <!-- ===================================================
+         STATISTICS
+    ==================================================== -->
 
-          <strong id="alerts">
-            0
-          </strong>
-
-          <small>
-            Requires attention
-          </small>
-
-        </article>
+    <section class="stats-grid">
 
 
-        <article class="stat-card">
+      <article class="stat-card">
 
-          <span>
-            Authentication
-          </span>
+        <span>
 
-          <strong>
-            2FA
-          </strong>
+          Matches analyzed
 
-          <small>
-            Authenticator enabled
-          </small>
-
-        </article>
+        </span>
 
 
-        <article class="stat-card">
+        <strong id="matches">
 
-          <span>
-            Account status
-          </span>
+          0
 
-          <strong class="success-text">
-            Protected
-          </strong>
+        </strong>
 
-          <small>
-            Secure session active
-          </small>
 
-        </article>
+        <small>
 
-      </section>
+          Gameplay telemetry
 
-      <section style="margin-top: 32px;">
+        </small>
 
-        <h2 style="margin-bottom: 16px;">
-          Recent detections
-        </h2>
+      </article>
 
-        <div
-          id="recentDetections"
-          style="background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 20px;">
 
-          <p class="muted">
-            No suspicious activity detected.
-          </p>
 
-        </div>
+      <article class="stat-card">
 
-      </section>
+        <span>
+
+          Security alerts
+
+        </span>
+
+
+        <strong id="alerts">
+
+          0
+
+        </strong>
+
+
+        <small>
+
+          Requires attention
+
+        </small>
+
+      </article>
+
+
+
+      <article class="stat-card">
+
+        <span>
+
+          Authentication
+
+        </span>
+
+
+        <strong>
+
+          2FA
+
+        </strong>
+
+
+        <small>
+
+          Authenticator enabled
+
+        </small>
+
+      </article>
+
+
+
+      <article class="stat-card">
+
+        <span>
+
+          Account status
+
+        </span>
+
+
+        <strong class="success-text">
+
+          Protected
+
+        </strong>
+
+
+        <small>
+
+          Secure session active
+
+        </small>
+
+      </article>
 
     </section>
 
 
-    <!-- GAME HUB SECTION -->
+
+    <!-- ===================================================
+         GAME HUB
+    ==================================================== -->
+
     <section
       id="games"
       class="section">
 
-      <header class="topbar">
+
+      <div class="section-title">
 
         <div>
 
           <p class="eyebrow">
+
             GAME HUB
+
           </p>
 
-          <h1>
+
+          <h2>
+
             Available FPS games
-          </h1>
+
+          </h2>
 
         </div>
 
-      </header>
+
+        <span class="muted">
+
+          Unity WebGL
+
+        </span>
+
+      </div>
+
 
 
       <div class="game-grid">
@@ -442,33 +535,48 @@
 
         <article class="game-card featured">
 
+
           <div class="game-art art-one">
 
             <span>
+
               FPS 01
+
             </span>
 
           </div>
 
 
+
           <div class="game-info">
 
             <span class="tag">
+
               AVAILABLE
+
             </span>
 
 
             <h3>
+
               FPS Microgame
+
             </h3>
 
 
             <p>
+
               Unity FPS Microgame with
               behavioural telemetry and
               security analysis.
+
             </p>
 
+
+            <!-- IMPORTANT:
+                 dashboard.js searches for:
+                 .play-btn[data-game]
+            -->
 
             <button
               id="fpsMicrogameBtn"
@@ -479,8 +587,132 @@
               Play Game
 
               <span>
+
                 →
+
               </span>
+
+            </button>
+
+          </div>
+
+        </article>
+
+
+
+        <!-- =================================================
+             MULTIPLAYER FPS
+        ================================================== -->
+
+        <article class="game-card">
+
+
+          <div class="game-art art-two">
+
+            <span>
+
+              FPS 02
+
+            </span>
+
+          </div>
+
+
+
+          <div class="game-info">
+
+            <span class="tag">
+
+              PROTOTYPE
+
+            </span>
+
+
+            <h3>
+
+              Multiplayer FPS
+
+            </h3>
+
+
+            <p>
+
+              Multiplayer FPS environment
+              for gameplay testing.
+
+            </p>
+
+
+            <button
+              class="play-btn"
+              data-game="multiplayer-fps"
+              type="button">
+
+              Play Game
+
+              <span>
+
+                →
+
+              </span>
+
+            </button>
+
+          </div>
+
+        </article>
+
+
+
+        <!-- =================================================
+             SECURITY LAB
+        ================================================== -->
+
+        <article class="game-card">
+
+
+          <div class="game-art art-three">
+
+            <span>
+
+              FPS 03
+
+            </span>
+
+          </div>
+
+
+
+          <div class="game-info">
+
+            <span class="tag">
+
+              COMING SOON
+
+            </span>
+
+
+            <h3>
+
+              Security Lab
+
+            </h3>
+
+
+            <p>
+
+              Experimental environment
+              for anomaly detection.
+
+            </p>
+
+
+            <button
+              class="play-btn disabled"
+              type="button"
+              disabled>
+
+              Coming soon
 
             </button>
 
@@ -494,278 +726,219 @@
     </section>
 
 
-    <!-- MATCHES SECTION -->
-    <section
-      id="matches"
-      class="section">
 
-      <header class="topbar">
+    <!-- ===================================================
+         UNITY FPS MICROGAME
+    ==================================================== -->
+
+    <section
+      id="gameSection"
+      class="panel">
+
+
+      <div class="game-header">
+
 
         <div>
 
           <p class="eyebrow">
-            MATCH STATISTICS
+
+            UNITY WEBGL
+
           </p>
 
-          <h1>
-            Your gameplay history
-          </h1>
+
+          <h2>
+
+            FPS Microgame
+
+          </h2>
 
         </div>
 
-      </header>
+
+        <button
+          id="closeGameBtn"
+          class="ghost-btn"
+          type="button">
+
+          ← Back to Dashboard
+
+        </button>
+
+      </div>
 
 
-      <div id="matchesContainer">
 
-        <table class="matches-table">
+      <!-- =================================================
+           LOADING MESSAGE
+      ================================================== -->
 
-          <thead>
+      <div
+        id="gameLoading"
+        class="game-loading">
 
-            <tr>
-
-              <th>Date</th>
-
-              <th>Duration</th>
-
-              <th>Kills</th>
-
-              <th>Deaths</th>
-
-              <th>KD Ratio</th>
-
-              <th>Accuracy</th>
-
-              <th>Risk Score</th>
-
-            </tr>
-
-          </thead>
-
-          <tbody id="matchesTableBody">
-
-          </tbody>
-
-        </table>
-
-        <div id="matchesEmpty" class="empty-state" style="display: none;">
-
-          <strong>
-            No matches analyzed yet
-          </strong>
-
-          <p>
-            Play FPS games to start analyzing your gameplay.
-          </p>
-
+        <div
+          class="game-loading-spinner">
         </div>
+
+
+        <p>
+
+          Creating secure game session...
+
+        </p>
+
+      </div>
+
+
+
+      <!-- =================================================
+           ERROR MESSAGE
+      ================================================== -->
+
+      <div
+        id="gameError"
+        class="game-error">
+
+        Unable to load the Unity game.
+
+      </div>
+
+
+
+      <!-- =================================================
+           UNITY IFRAME
+      ================================================== -->
+
+      <div class="game-frame-container">
+
+        <iframe
+          id="gameFrame"
+          title="SecureFPS FPS Microgame"
+          src="about:blank"
+          allow="fullscreen; autoplay"
+          allowfullscreen>
+        </iframe>
 
       </div>
 
     </section>
 
 
-    <!-- DETECTIONS SECTION -->
-    <section
-      id="detections"
-      class="section">
 
-      <header class="topbar">
-
-        <div>
-
-          <p class="eyebrow">
-            SECURITY DETECTIONS
-          </p>
-
-          <h1>
-            Suspicious activity log
-          </h1>
-
-        </div>
-
-      </header>
-
-
-      <div id="detectionsContainer">
-
-        <table class="detections-table">
-
-          <thead>
-
-            <tr>
-
-              <th>Timestamp</th>
-
-              <th>Type</th>
-
-              <th>Severity</th>
-
-              <th>Confidence</th>
-
-              <th>Description</th>
-
-            </tr>
-
-          </thead>
-
-          <tbody id="detectionsTableBody">
-
-          </tbody>
-
-        </table>
-
-        <div id="detectionsEmpty" class="empty-state" style="display: none;">
-
-          <strong>
-            No suspicious gameplay detected
-          </strong>
-
-          <p>
-            Keep playing to build your security profile.
-          </p>
-
-        </div>
-
-      </div>
-
-    </section>
-
-
-    <!-- ACCOUNT SECURITY SECTION -->
-    <section
-      id="account"
-      class="section">
-
-      <header class="topbar">
-
-        <div>
-
-          <p class="eyebrow">
-            ACCOUNT SECURITY
-          </p>
-
-          <h1>
-            Your security status
-          </h1>
-
-        </div>
-
-      </header>
-
-
-      <section class="stats-grid">
-
-        <article class="stat-card">
-
-          <span>
-            Two-Factor Authentication
-          </span>
-
-          <strong class="success-text">
-            Enabled
-          </strong>
-
-          <small>
-            Authenticator app configured
-          </small>
-
-        </article>
-
-        <article class="stat-card">
-
-          <span>
-            Active Sessions
-          </span>
-
-          <strong id="activeSessions">
-            1
-          </strong>
-
-          <small>
-            Current session only
-          </small>
-
-        </article>
-
-        <article class="stat-card">
-
-          <span>
-            Last Login
-          </span>
-
-          <strong id="lastLogin">
-            Today
-          </strong>
-
-          <small>
-            From current location
-          </small>
-
-        </article>
-
-        <article class="stat-card">
-
-          <span>
-            Risk Score
-          </span>
-
-          <strong id="riskScore">
-            Low
-          </strong>
-
-          <small>
-            Safe gameplay detected
-          </small>
-
-        </article>
-
-      </section>
-
-      <section style="margin-top: 32px;">
-
-        <h2 style="margin-bottom: 16px;">
-          Login history
-        </h2>
-
-        <div id="loginHistory" style="background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 20px;">
-
-          <p class="muted">
-            Loading login history...
-          </p>
-
-        </div>
-
-      </section>
-
-    </section>
+    <!-- ===================================================
+         DETECTIONS + SECURITY
+    ==================================================== -->
 
     <section class="content-grid">
-      <article class="panel">
+
+
+      <!-- =================================================
+           ML DETECTIONS
+      ================================================== -->
+
+      <article
+        id="detections"
+        class="panel">
+
+
         <div class="section-title">
+
+
           <div>
-            <p class="eyebrow">MATCH HISTORY</p>
-            <h2>Recent matches</h2>
+
+            <p class="eyebrow">
+
+              ML SECURITY
+
+            </p>
+
+
+            <h2>
+
+              Recent detections
+
+            </h2>
+
           </div>
+
+
+          <span class="model-badge">
+
+            RF + IF
+
+          </span>
+
         </div>
-        <div id="matchesList" class="list">
-          <div class="empty">Loading matches...</div>
+
+
+
+        <div
+          id="detectionsList"
+          class="list">
+
+          <div class="empty">
+
+            No gameplay detections yet.
+
+          </div>
+
         </div>
+
       </article>
 
-      <article class="panel">
+
+
+      <!-- =================================================
+           SECURITY ALERTS
+      ================================================== -->
+
+      <article
+        id="security"
+        class="panel">
+
+
         <div class="section-title">
+
+
           <div>
-            <p class="eyebrow">SESSION HISTORY</p>
-            <h2>Login history</h2>
+
+            <p class="eyebrow">
+
+              ACCOUNT SECURITY
+
+            </p>
+
+
+            <h2>
+
+              Security activity
+
+            </h2>
+
           </div>
+
         </div>
-        <div id="loginHistoryList" class="list">
-          <div class="empty">Loading login history...</div>
+
+
+
+        <div
+          id="alertsList"
+          class="list">
+
+          <div class="empty">
+
+            No security alerts.
+
+          </div>
+
         </div>
+
       </article>
+
+
     </section>
-
 
 
   </main>
@@ -776,194 +949,8 @@
        JAVASCRIPT
   ====================================================== -->
 
-  <script src="js/api.js"></script>
-
-  <script>
-    // Check authentication and admin access
-    async function checkAuth() {
-      try {
-        const data = await api("/auth/me");
-        if (data.user.role === 'admin') {
-          window.location.href = 'admin.html';
-          return false;
-        }
-        return data.user;
-      } catch (err) {
-        console.error('Auth check error:', err);
-        window.location.href = 'login.html';
-        return false;
-      }
-    }
-
-    // Navigation handling
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-        btn.classList.add('active');
-        const section = document.getElementById(btn.dataset.section);
-        if (section) {
-          section.classList.add('active');
-          loadSectionData(btn.dataset.section);
-        }
-      });
-    });
-
-    // Load user profile
-    async function loadProfile(user) {
-      document.getElementById('welcome').textContent = `Welcome, ${user.name}`;
-      document.getElementById('sideName').textContent = user.name;
-      document.getElementById('sideEmail').textContent = user.email;
-      document.getElementById('avatar').textContent = user.name.charAt(0).toUpperCase();
-    }
-
-    // Load section-specific data
-    async function loadSectionData(section) {
-      if (section === 'overview') loadOverview();
-      else if (section === 'matches') loadMatches();
-      else if (section === 'detections') loadDetections();
-      else if (section === 'account') loadAccountSecurity();
-    }
-
-    // Load overview data
-    async function loadOverview() {
-      try {
-        const res = await fetch('/api/dashboard');
-        if (res.ok) {
-          const data = await res.json();
-          document.getElementById('matches').textContent = data.stats.matches_analyzed;
-          document.getElementById('alerts').textContent = data.stats.alerts;
-        }
-      } catch (err) {
-        console.error('Error loading overview:', err);
-      }
-    }
-
-    // Load matches
-    async function loadMatches() {
-      try {
-        const res = await fetch('/api/player/matches');
-        if (!res.ok) throw new Error('Failed to load matches');
-        const data = await res.json();
-        const tbody = document.getElementById('matchesTableBody');
-        const empty = document.getElementById('matchesEmpty');
-
-        if (data.matches.length === 0) {
-          document.getElementById('matchesContainer').style.display = 'none';
-          empty.style.display = 'block';
-          return;
-        }
-
-        tbody.innerHTML = data.matches.map(m => `
-          <tr>
-            <td>${new Date(m.date).toLocaleDateString()}</td>
-            <td>${m.duration}s</td>
-            <td>${m.kills}</td>
-            <td>${m.deaths}</td>
-            <td>${m.kd.toFixed(2)}</td>
-            <td>${m.accuracy}%</td>
-            <td>${m.risk_score}</td>
-          </tr>
-        `).join('');
-        document.getElementById('matchesContainer').style.display = 'block';
-        empty.style.display = 'none';
-      } catch (err) {
-        console.error('Error loading matches:', err);
-      }
-    }
-
-    // Load detections
-    async function loadDetections() {
-      try {
-        const res = await fetch('/api/player/detections');
-        if (!res.ok) throw new Error('Failed to load detections');
-        const data = await res.json();
-        const tbody = document.getElementById('detectionsTableBody');
-        const empty = document.getElementById('detectionsEmpty');
-
-        if (data.detections.length === 0) {
-          document.getElementById('detectionsContainer').style.display = 'none';
-          empty.style.display = 'block';
-          return;
-        }
-
-        tbody.innerHTML = data.detections.map(d => `
-          <tr>
-            <td>${new Date(d.timestamp).toLocaleString()}</td>
-            <td>${d.type}</td>
-            <td><span class="severity-badge severity-${d.severity}">${d.severity}</span></td>
-            <td>${d.confidence}%</td>
-            <td>${d.description}</td>
-          </tr>
-        `).join('');
-        document.getElementById('detectionsContainer').style.display = 'block';
-        empty.style.display = 'none';
-      } catch (err) {
-        console.error('Error loading detections:', err);
-      }
-    }
-
-    // Load account security
-    async function loadAccountSecurity() {
-      try {
-        const res = await fetch('/api/player/account-status');
-        if (!res.ok) throw new Error('Failed to load account security');
-        const data = await res.json();
-        
-        document.getElementById('activeSessions').textContent = data.active_sessions;
-        document.getElementById('lastLogin').textContent = data.last_login 
-          ? new Date(data.last_login).toLocaleDateString()
-          : 'Never';
-        const riskLevel = data.risk_score <= 20 ? 'Low' : data.risk_score <= 50 ? 'Medium' : 'High';
-        document.getElementById('riskScore').textContent = riskLevel;
-
-        const res2 = await fetch('/api/player/security-events');
-        if (res2.ok) {
-          const events = await res2.json();
-          const historyDiv = document.getElementById('loginHistory');
-          if (events.events.length === 0) {
-            historyDiv.innerHTML = '<p class="muted">No login history available.</p>';
-          } else {
-            historyDiv.innerHTML = events.events.map(e => `
-              <div style="padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                <strong>${e.type}</strong><br>
-                <small style="color: #aaa;">${new Date(e.timestamp).toLocaleString()}</small><br>
-                <small style="color: #666;">IP: ${e.ip}</small>
-              </div>
-            `).join('');
-          }
-        }
-      } catch (err) {
-        console.error('Error loading account security:', err);
-      }
-    }
-
-    // Logout handler
-    document.getElementById('logoutBtn').addEventListener('click', async () => {
-      try {
-        await api('/auth/logout', { method: 'POST' });
-        window.location.href = 'login.html';
-      } catch (err) {
-        console.error('Logout error:', err);
-        window.location.href = 'login.html';
-      }
-    });
-
-    // Game button handler
-    document.getElementById('fpsMicrogameBtn').addEventListener('click', () => {
-      window.location.href = 'game.html';
-    });
-
-    // Initialize
-    (async () => {
-      const user = await checkAuth();
-      if (user) {
-        await loadProfile(user);
-        loadOverview();
-      }
-    })();
-  </script>
-
+  <script src="js/api.js?v=secure-api-v2"></script>
+  <script src="js/dashboard.js?v=secure-game-v3"></script>
 
 </body>
 
