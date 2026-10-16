@@ -37,12 +37,29 @@ LEGACY_FEATURES = [
     "kdr",
 ]
 
-# Risk = 100 * (0.70 * RF cheater probability + 0.30 * IF anomaly signal).
-# The IF component is 1 for anomaly and 0 for normal; weights must sum to 1.
+# Risk uses the continuous model outputs, not display labels.
 RISK_SCORE_WEIGHTS = {
-    "random_forest": 0.70,
-    "isolation_forest": 0.30,
+    "random_forest": 0.60,
+    "isolation_forest": 0.40,
 }
+
+
+def normalize_isolation_decision(decision):
+    """Map Isolation Forest's signed decision function to an anomaly probability."""
+    value = float(np.asarray(decision).reshape(-1)[0])
+    if not np.isfinite(value):
+        raise ValueError("Isolation Forest decision function is not finite")
+    return float(1.0 / (1.0 + np.exp(np.clip(value, -60.0, 60.0))))
+
+
+def calculate_risk_score(rf_probability, isolation_anomaly_score):
+    values = (float(rf_probability), float(isolation_anomaly_score))
+    if not all(np.isfinite(value) and 0 <= value <= 1 for value in values):
+        raise ValueError("Risk inputs must be finite values between 0 and 1")
+    return round(100.0 * (
+        RISK_SCORE_WEIGHTS["random_forest"] * values[0]
+        + RISK_SCORE_WEIGHTS["isolation_forest"] * values[1]
+    ), 2)
 
 def _feature_contract_error(model_name, artifact, actual_features):
     expected_count = getattr(artifact, "n_features_in_", None)
@@ -86,6 +103,9 @@ def predict(features: dict):
         "risk_score": None,
         "random_forest_status": None,
         "isolation_forest_status": None,
+        "random_forest_probability": None,
+        "isolation_forest_anomaly_score": None,
+        "isolation_forest_decision": None,
     }
     rf_cheater_probability = None
 
@@ -116,6 +136,7 @@ def predict(features: dict):
                             result["random_forest_status"] = "invalid_risk_probability"
                     else:
                         result["random_forest_status"] = "risk_probability_unavailable"
+                    result["random_forest_probability"] = rf_cheater_probability
                 else:
                     result["random_forest_status"] = "risk_probability_unavailable"
             except Exception as exc:
@@ -152,6 +173,9 @@ def predict(features: dict):
                     if iso_pred not in (-1, 1):
                         raise ValueError(f"Unexpected Isolation Forest output: {iso_pred}")
                     result["isolation_forest"] = "anomaly" if iso_pred == -1 else "normal"
+                    decision = iso_model.decision_function(scaled_frame)
+                    result["isolation_forest_decision"] = float(np.asarray(decision).reshape(-1)[0])
+                    result["isolation_forest_anomaly_score"] = normalize_isolation_decision(decision)
                 except Exception as exc:
                     print("[SecureFPS] Isolation Forest prediction failed:", exc)
                     result["isolation_forest_status"] = "prediction_error"
@@ -168,15 +192,9 @@ def predict(features: dict):
         if weights_total != 1.0:
             raise ValueError("RISK_SCORE_WEIGHTS must sum to 1.0")
 
-        isolation_anomaly_signal = float(
-            result["isolation_forest"] == "anomaly"
-        )
-        result["risk_score"] = round(
-            100.0 * (
-                RISK_SCORE_WEIGHTS["random_forest"] * rf_cheater_probability
-                + RISK_SCORE_WEIGHTS["isolation_forest"] * isolation_anomaly_signal
-            ),
-            2
+        result["risk_score"] = calculate_risk_score(
+            rf_cheater_probability,
+            result["isolation_forest_anomaly_score"],
         )
 
     return result

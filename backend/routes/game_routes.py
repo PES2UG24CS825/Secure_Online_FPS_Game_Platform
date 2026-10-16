@@ -18,6 +18,8 @@ from database.db import (
     security_events,
     login_history,
     users,
+    reward_transactions,
+    support_tickets,
 )
 
 from models.ml_model import predict, FEATURES
@@ -296,6 +298,13 @@ def is_admin():
             "role": "admin"
         })
     )
+
+
+def current_admin():
+    user_id = get_current_user_object_id()
+    if not user_id:
+        return None
+    return users.find_one({"_id": user_id, "role": {"$in": ["admin", "moderator", "super_admin"]}})
 
 
 def utc_now():
@@ -710,6 +719,8 @@ def receive_game_event():
                             "status": analysis.get("status"),
                             "random_forest": (analysis.get("result") or {}).get("random_forest"),
                             "isolation_forest": (analysis.get("result") or {}).get("isolation_forest"),
+                            "random_forest_probability": (analysis.get("result") or {}).get("random_forest_probability"),
+                            "isolation_forest_anomaly_score": (analysis.get("result") or {}).get("isolation_forest_anomaly_score"),
                             "random_forest_status": (analysis.get("result") or {}).get("random_forest_status"),
                             "isolation_forest_status": (analysis.get("result") or {}).get("isolation_forest_status"),
                             "risk_score": analysis.get("risk_score"),
@@ -747,6 +758,16 @@ def receive_game_event():
         )
 
         if completion.modified_count:
+            users.update_one({"_id": user_id}, {"$inc": {"rewards.coins": 20, "rewards.xp": 50}})
+            reward_transactions.insert_one({
+                "user_id": user_id,
+                "type": "match_completed",
+                "description": "Completed an FPS Microgame match",
+                "coins": 20,
+                "xp": 50,
+                "session_id": session_id,
+                "created_at": utc_now(),
+            })
             analysis = analyze_game_session(
                 user_id,
                 session_id
@@ -1063,6 +1084,9 @@ def analyze_game_session(
             "risk_score": result["risk_score"],
             "random_forest": result["random_forest"],
             "isolation_forest": result["isolation_forest"],
+            "random_forest_probability": result.get("random_forest_probability"),
+            "isolation_forest_anomaly_score": result.get("isolation_forest_anomaly_score"),
+            "result": result,
             "features": features,
             "raw_features": raw_features,
             "active_features": FEATURES,
@@ -1203,6 +1227,18 @@ def end_game():
             "message": "Game session already completed."
         }), 200
 
+    match_reward = {"coins": 20, "xp": 50}
+    users.update_one({"_id": user_id}, {"$inc": {"rewards.coins": match_reward["coins"], "rewards.xp": match_reward["xp"]}})
+    reward_transactions.insert_one({
+        "user_id": user_id,
+        "type": "match_completed",
+        "description": "Completed an FPS Microgame match",
+        "coins": match_reward["coins"],
+        "xp": match_reward["xp"],
+        "session_id": session_id,
+        "created_at": utc_now(),
+    })
+
     analysis = analyze_game_session(
         user_id,
         session_id
@@ -1213,7 +1249,8 @@ def end_game():
     return jsonify({
         "success": True,
         "session_id": session_id,
-        "analysis": analysis
+        "analysis": analysis,
+        "reward": match_reward,
     }), 200
 
 
@@ -1867,10 +1904,83 @@ def dashboard():
 # ADMIN OVERVIEW
 # =========================================================
 
+@game_bp.get("/admin/support/tickets")
+def admin_support_tickets():
+    if not is_admin():
+        return jsonify({"message": "Admin access required."}), 403
+    tickets = list(support_tickets.find().sort("created_at", -1).limit(100))
+    return jsonify({"tickets": [{
+        "id": str(ticket["_id"]),
+        "player_name": ticket.get("player_name", "Player"),
+        "player_email": ticket.get("player_email", ""),
+        "category": ticket.get("category", "other"),
+        "message": ticket.get("message", ""),
+        "status": ticket.get("status", "open"),
+        "admin_reply": ticket.get("admin_reply", ""),
+        "attachment": {"name": ticket["attachment"].get("name"), "mime_type": ticket["attachment"].get("mime_type")} if ticket.get("attachment") else None,
+        "created_at": ticket["created_at"].isoformat() if ticket.get("created_at") else None,
+    } for ticket in tickets]})
+
+
+@game_bp.get("/admin/support/tickets/<ticket_id>/attachment")
+def admin_support_attachment(ticket_id):
+    if not is_admin():
+        return jsonify({"message": "Admin access required."}), 403
+    try:
+        ticket_oid = ObjectId(ticket_id)
+    except Exception:
+        return jsonify({"message": "Invalid support ticket."}), 400
+    ticket = support_tickets.find_one({"_id": ticket_oid}, {"attachment": 1})
+    attachment = (ticket or {}).get("attachment")
+    if not attachment:
+        return jsonify({"message": "This ticket has no image attachment."}), 404
+    return jsonify(attachment)
+
+
+@game_bp.post("/admin/support/tickets/<ticket_id>/reply")
+def reply_to_support_ticket(ticket_id):
+    if not is_admin():
+        return jsonify({"message": "Admin access required."}), 403
+    try:
+        ticket_oid = ObjectId(ticket_id)
+    except Exception:
+        return jsonify({"message": "Invalid support ticket."}), 400
+    reply = str((request.get_json(silent=True) or {}).get("reply", "")).strip()
+    if not reply or len(reply) > 3000:
+        return jsonify({"message": "Enter a reply up to 3000 characters."}), 400
+    result = support_tickets.update_one(
+        {"_id": ticket_oid},
+        {"$set": {"admin_reply": reply, "status": "answered", "replied_at": utc_now(), "admin_user_id": get_current_user_object_id()}},
+    )
+    if not result.matched_count:
+        return jsonify({"message": "Support ticket not found."}), 404
+    ticket = support_tickets.find_one({"_id": ticket_oid}, {"user_id": 1}) or {}
+    publish_live_update(ticket.get("user_id"), None, "support_reply", force=True)
+    return jsonify({"message": "Reply sent to player."})
+
+
+@game_bp.post("/admin/support/tickets/<ticket_id>/resolve")
+def resolve_support_ticket(ticket_id):
+    if not is_admin():
+        return jsonify({"message": "Admin access required."}), 403
+    try:
+        ticket_oid = ObjectId(ticket_id)
+    except Exception:
+        return jsonify({"message": "Invalid support ticket."}), 400
+    result = support_tickets.update_one(
+        {"_id": ticket_oid},
+        {"$set": {"status": "resolved", "resolved_at": utc_now(), "admin_user_id": get_current_user_object_id()}},
+    )
+    if not result.matched_count:
+        return jsonify({"message": "Support ticket not found."}), 404
+    ticket = support_tickets.find_one({"_id": ticket_oid}, {"user_id": 1}) or {}
+    publish_live_update(ticket.get("user_id"), None, "support_resolved", force=True)
+    return jsonify({"message": "Support ticket marked resolved."})
+
 @game_bp.get("/admin/overview")
 def admin_overview():
 
-    if not is_admin():
+    if not current_admin():
 
         return jsonify({
             "message":
@@ -1910,7 +2020,7 @@ def admin_overview():
         if player_id is not None:
             player_key = str(player_id)
             matches_played_by_player[player_key] = matches_played_by_player.get(player_key, 0) + 1
-    recent_logins = list(login_history.find({"type": "login_success"})
+    recent_logins = list(login_history.find({"type": {"$in": ["login_success", "login_failed"]}})
                          .sort("created_at", -1).limit(100))
     today_start = utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
     login_count_today = login_history.count_documents({
@@ -1975,6 +2085,7 @@ def admin_overview():
                 "active_features": 1,
                 "missing_features": 1,
                 "status": 1,
+                "error": 1,
                 "result": 1,
                 "risk_score": 1,
                 "demo": 1,
@@ -2197,6 +2308,7 @@ def admin_overview():
                 "active_features": analysis.get("active_features", []),
                 "missing_features": analysis.get("missing_features", []),
                 "status": analysis.get("status", "ml_error"),
+                "error": analysis.get("error"),
                 "demo": analysis.get("demo", False),
                 "demo_label": analysis.get("demo_label"),
                 "alert_status": analysis.get("alert_status"),
@@ -2234,6 +2346,8 @@ def admin_overview():
                     "isolation_forest",
                     (alert.get("result") or {}).get("isolation_forest")
                 ),
+                "random_forest_probability": (alert.get("result") or {}).get("random_forest_probability"),
+                "isolation_forest_anomaly_score": (alert.get("result") or {}).get("isolation_forest_anomaly_score"),
                 "severity": alert.get("severity", "medium"),
                 "created_at": (
                     alert["created_at"].isoformat()
@@ -2255,9 +2369,17 @@ def admin_overview():
         "recent_logins": [
             {
                 "player_id": str(login.get("user_id", "")),
-                "player_name": player_names.get(str(login.get("user_id", "")), "Unknown player"),
+                "player_name": player_names.get(
+                    str(login.get("user_id", "")),
+                    "Failed - unknown account" if login.get("reason") == "unknown_account" else "Unknown player"
+                ),
                 "timestamp": login["created_at"].isoformat() if login.get("created_at") else None,
                 "ip_address": login.get("ip_address", login.get("ip", "Unknown")),
+                "location": "Local" if login.get("ip_address", login.get("ip")) in {"127.0.0.1", "::1"} else login.get("ip_address", login.get("ip", "Unknown")),
+                "result": "Success" if login.get("status") == "success" else "Failed",
+                "reason": login.get("reason") or ("authenticated" if login.get("status") == "success" else "unknown"),
+                "device": login.get("device") or login.get("user_agent") or "Unknown device",
+                "risk_score": login.get("risk_score"),
                 "authentication_method": login.get("authentication_method", "password+mfa"),
             }
             for login in recent_logins
@@ -2285,6 +2407,62 @@ def admin_overview():
             "high_severity_events": sum(1 for event in events if event.get("severity") in {"high", "critical"}),
         },
     })
+
+
+@game_bp.post("/admin/gameplay/seed-demo")
+def seed_admin_demo():
+    if not current_admin():
+        return jsonify({"message": "Admin access required."}), 403
+    if os.getenv("APP_ENV", "").strip().lower() not in {"development", "dev", "local"}:
+        return jsonify({"message": "Demo data is available only in development mode."}), 403
+
+    fixture = users.find_one({"email": "admin-fixture@example.test"})
+    if not fixture:
+        fixture = {
+            "name": "Development Fixture",
+            "email": "admin-fixture@example.test",
+            "role": "player",
+            "demo": True,
+            "account_type": "demo_test",
+            "created_at": utc_now(),
+        }
+        fixture["_id"] = users.insert_one(fixture).inserted_id
+
+    created_sessions = []
+    for label, accuracy, speed in (("normal", 0.55, 2.5), ("cheater", 0.98, 0.5)):
+        session_id = f"admin-demo-{label}-{uuid.uuid4()}"
+        started_at = utc_now()
+        game_sessions.insert_one({
+            "session_id": session_id,
+            "user_id": fixture["_id"],
+            "status": "completed",
+            "demo_mode": label == "cheater",
+            "started_at": started_at,
+            "ended_at": started_at + timedelta(seconds=4),
+        })
+        telemetry = [
+            {"event_type": "game_started", "telemetry": {}, "created_at": started_at},
+            {"event_type": "player_behavior", "telemetry": {"speed": speed}, "created_at": started_at + timedelta(seconds=1)},
+            {"event_type": "aim_behavior", "telemetry": {"rotation_change": (1 / max(accuracy, 0.01)) - 1}, "created_at": started_at + timedelta(seconds=1.2)},
+        ]
+        for index in range(10):
+            shot_time = started_at + timedelta(seconds=1.5 + index * 0.1)
+            telemetry.append({"event_type": "weapon_fire", "telemetry": {}, "created_at": shot_time})
+            if index < round(10 * accuracy):
+                telemetry.append({"event_type": "enemy_hit", "telemetry": {}, "created_at": shot_time + timedelta(milliseconds=5)})
+        telemetry.append({"event_type": "game_completed", "telemetry": {}, "created_at": started_at + timedelta(seconds=3)})
+        game_telemetry.insert_many([
+            {"user_id": fixture["_id"], "session_id": session_id, "demo": label == "cheater", **event}
+            for event in telemetry
+        ])
+        result = analyze_game_session(fixture["_id"], session_id)
+        game_events.update_one(
+            {"session_id": session_id, "analysis_type": "game_session"},
+            {"$set": {"demo": label == "cheater", "demo_label": f"{label}-development-fixture"}},
+            upsert=True,
+        )
+        created_sessions.append({"session_id": session_id, "label": label, "analysis": result})
+    return jsonify({"success": True, "sessions": created_sessions}), 201
 
 
 # =========================================================
@@ -2430,4 +2608,91 @@ def admin_player_action(
     return jsonify({
         "message":
             f"Player {action} complete."
+    }), 200
+
+
+@game_bp.post("/admin/gameplay/alerts/<session_id>/review")
+def review_gameplay_alert(session_id):
+    reviewer = current_admin()
+    if not reviewer:
+        return jsonify({"message": "Admin access required."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    action = str(payload.get("action", "")).strip().lower()
+    note = str(payload.get("note", "")).strip()
+    allowed_actions = {
+        "approve": "reviewed",
+        "warn": "warned",
+        "suspend": "suspended",
+        "ban": "banned",
+        "escalate": "escalated",
+    }
+    if action not in allowed_actions:
+        return jsonify({"message": "Unsupported review action."}), 400
+    if not note:
+        return jsonify({"message": "A review note is required."}), 400
+    if reviewer.get("role") == "moderator" and action in {"suspend", "ban"}:
+        return jsonify({"message": "Moderators cannot suspend or ban accounts."}), 403
+
+    alert = security_events.find_one({
+        "type": "gameplay_anomaly",
+        "session_id": session_id,
+    })
+    if not alert:
+        return jsonify({"message": "Gameplay alert not found."}), 404
+
+    reviewed_at = utc_now()
+    reviewer_id = reviewer["_id"]
+    status = allowed_actions[action]
+    security_events.update_one(
+        {"_id": alert["_id"]},
+        {"$set": {
+            "review_status": status,
+            "review_action": action,
+            "review_note": note,
+            "reviewed_at": reviewed_at,
+            "reviewed_by": reviewer_id,
+        }}
+    )
+    if action in {"suspend", "ban"}:
+        users.update_one(
+            {"_id": alert.get("user_id")},
+            {"$set": {
+                "revoked": action == "ban",
+                "account_status": "suspended" if action == "suspend" else "banned",
+                "account_status_updated_at": reviewed_at,
+            }}
+        )
+
+    security_events.insert_one({
+        "type": "gameplay_alert_review",
+        "action": action,
+        "note": note,
+        "alert_id": alert["_id"],
+        "session_id": session_id,
+        "user_id": alert.get("user_id"),
+        "actor_user_id": reviewer_id,
+        "created_at": reviewed_at,
+    })
+    return jsonify({"success": True, "review_status": status}), 200
+
+
+@game_bp.post("/admin/gameplay/analyses/<session_id>/retry")
+def retry_gameplay_analysis(session_id):
+    reviewer = current_admin()
+    if not reviewer:
+        return jsonify({"message": "Admin access required."}), 403
+
+    analysis = game_events.find_one({
+        "analysis_type": "game_session",
+        "session_id": session_id,
+    })
+    if not analysis:
+        return jsonify({"message": "Analysis session not found."}), 404
+
+    result = analyze_game_session(analysis.get("user_id"), session_id)
+    return jsonify({
+        "success": True,
+        "session_id": session_id,
+        "analysis": result,
     }), 200

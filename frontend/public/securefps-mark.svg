@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">SecureFPS</title>
+  <path d="M32 4 59 14v19c0 13-10 22-27 29C15 55 5 46 5 33V14L32 4Z" fill="#6D28D9"/>
+  <path d="M32 4 59 14v19c0 13-10 22-27 29V4Z" fill="#8B5CF6"/>
+  <path d="M32 16v8m0 16v8M17 32h8m14 0h8" fill="none" stroke="#1B1730" stroke-linecap="square" stroke-width="3.5"/>
+  <circle cx="32" cy="32" r="10.5" fill="none" stroke="#1B1730" stroke-width="3.5"/>
+  <circle cx="32" cy="32" r="3" fill="#1B1730"/>
+</svg>

@@ -52,7 +52,7 @@ document.getElementById("players").addEventListener("click", async (event) => {
   if (["view", "matches", "detections"].includes(action)) {
     const detail = await api(`/admin/players/${button.dataset.id}`);
     const content = action === "view" ? detail.user : action === "matches" ? detail.gameplay : detail.security.detections;
-    window.alert(JSON.stringify(content, null, 2));
+    window.showAppAlert(JSON.stringify(content, null, 2), { title: "Player details" });
     return;
   }
   await api(`/admin/players/${button.dataset.id}/${action}`, { method: "POST" });

@@ -40,13 +40,17 @@ The local admin account is created automatically on startup. Defaults are:
 Set `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `ADMIN_MFA_SECRET` before deployment to replace these development credentials.
 
 ## 3. Frontend
-From the frontend directory:
+From the repository root directory (`Secure_Online_FPS_Game_Platform`), run:
 ```bash
 python -m http.server 5500
 ```
 
-Open:
-http://127.0.0.1:5500/login.html
+Open the group project login page:
+`http://127.0.0.1:5500/frontend/login.html`
+
+Do not run the static server from inside the `frontend` directory, because
+that would make `/frontend/login.html` return 404. Keep the backend running
+on port 5000 while signing in.
 
 ## 4. ML models
 Put your trained files here:

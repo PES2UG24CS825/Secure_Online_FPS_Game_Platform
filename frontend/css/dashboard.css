@@ -1,20 +1,20 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --bg: #020d1d;
-  --bg-2: #061a2d;
-  --panel: rgba(11, 25, 39, 0.92);
-  --panel-2: rgba(15, 29, 45, 0.96);
-  --panel-3: rgba(17, 32, 50, 0.9);
-  --line: rgba(140, 174, 220, 0.18);
-  --text: #edf4ff;
-  --muted: #8ea5c5;
-  --accent: #56a6ff;
-  --accent-2: #3ec6ff;
-  --green: #32d79a;
-  --red: #ff5b6e;
-  --amber: #f7c66b;
-  --shadow: rgba(0, 0, 0, 0.26);
+  --bg: #DEDCEE;
+  --bg-2: #E9E7F5;
+  --panel: #E9E7F5;
+  --panel-2: #D6D3EA;
+  --panel-3: #F0EFF9;
+  --line: #C3BFE0;
+  --text: #1B1730;
+  --muted: #53507A;
+  --accent: #6D28D9;
+  --accent-2: #4C1D95;
+  --green: #15803D;
+  --red: #B91C1C;
+  --amber: #B45309;
+  --shadow: rgba(27, 23, 48, 0.12);
 }
 
 * { box-sizing: border-box; }
@@ -29,8 +29,8 @@ html, body {
 
 body {
   background:
-    radial-gradient(circle at 15% 12%, rgba(19, 53, 83, 0.8), transparent 24%),
-    radial-gradient(circle at 82% 70%, rgba(11, 53, 73, 0.45), transparent 30%),
+    radial-gradient(circle at 15% 12%, rgba(109, 40, 217, 0.10), transparent 24%),
+    radial-gradient(circle at 82% 70%, rgba(76, 29, 149, 0.08), transparent 30%),
     var(--bg);
 }
 

@@ -1,12 +1,14 @@
 import base64
 import io
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import pyotp
 import qrcode
 from flask import Blueprint, jsonify, request, session
 from pymongo.errors import DuplicateKeyError
+
+AUTH_SESSION_IDLE_TIMEOUT_SECONDS = int(os.getenv("AUTH_SESSION_IDLE_TIMEOUT_SECONDS", "120"))
 
 from database.db import login_history, sessions_db, users
 from services.auth import PASSWORD_RULES_MESSAGE, hash_password, validate_password, verify_password
@@ -94,13 +96,82 @@ def login():
 
     user = users.find_one({"email": email})
     if not user or not verify_password(password, user["password_hash"]):
+        login_history.insert_one({
+            "user_id": user["_id"] if user else None,
+            "identifier": email,
+            "type": "login_failed",
+            "status": "failed",
+            "reason": "invalid_password" if user else "unknown_account",
+            "ip_address": request.remote_addr or "Unknown",
+            "device": request.user_agent.string[:250],
+            "user_agent": request.user_agent.string[:250],
+            "created_at": utcnow(),
+        })
         return jsonify({"message": "Invalid email or password."}), 401
+
+    # The user's pointer is the authoritative lock. Historical session rows
+    # can remain active after older clients logged out without a session id.
+    active_record_id = user.get("active_auth_session_id")
+    session_takeover = False
+    if active_record_id:
+        from bson import ObjectId
+        try:
+            active_record = sessions_db.find_one({
+                "_id": ObjectId(active_record_id),
+                "user_id": user["_id"],
+                "is_active": True,
+            }, {"_id": 1, "last_activity": 1})
+        except Exception:
+            active_record = None
+        if active_record:
+            last_activity = active_record.get("last_activity")
+            if isinstance(last_activity, str):
+                try:
+                    last_activity = datetime.fromisoformat(last_activity.replace("Z", "+00:00"))
+                except ValueError:
+                    last_activity = None
+            if last_activity and last_activity.tzinfo is None:
+                last_activity = last_activity.replace(tzinfo=timezone.utc)
+            is_recent = bool(
+                last_activity
+                and utcnow() - last_activity <= timedelta(seconds=AUTH_SESSION_IDLE_TIMEOUT_SECONDS)
+            )
+            if is_recent:
+                login_history.insert_one({
+                    "user_id": user["_id"],
+                    "identifier": email,
+                    "type": "login_failed",
+                    "status": "failed",
+                    "reason": "active_session",
+                    "ip_address": request.remote_addr or "Unknown",
+                    "device": request.user_agent.string[:250],
+                    "user_agent": request.user_agent.string[:250],
+                    "created_at": utcnow(),
+                })
+                return jsonify({
+                    "message": "This account is already signed in in another browser. Log out there before signing in here."
+                }), 409
+            else:
+                sessions_db.update_one(
+                    {"_id": ObjectId(active_record_id), "user_id": user["_id"]},
+                    {"$set": {"is_active": False, "last_activity": utcnow()}},
+                )
+        if not session_takeover:
+            users.update_one(
+                {"_id": user["_id"], "active_auth_session_id": active_record_id},
+                {"$unset": {"active_auth_session_id": ""}},
+            )
 
     session.clear()
     session["mfa_pending_user"] = str(user["_id"])
     session["mfa_attempts"] = 0
+    session["mfa_takeover"] = session_takeover
 
-    return jsonify({"message": "Password verified. MFA required.", "mfa_required": True})
+    return jsonify({
+        "message": "Password verified. MFA required.",
+        "mfa_required": True,
+        "replace_other_session": session_takeover,
+    })
 
 @auth_bp.post("/verify-mfa")
 def verify_mfa():
@@ -124,12 +195,20 @@ def verify_mfa():
 
     if not pyotp.TOTP(user["mfa_secret"]).verify(code, valid_window=1):
         session["mfa_attempts"] = attempts + 1
+        login_history.insert_one({
+            "user_id": user["_id"],
+            "identifier": user.get("email"),
+            "type": "login_failed",
+            "status": "failed",
+            "reason": "invalid_mfa",
+            "ip_address": request.remote_addr or "Unknown",
+            "device": request.user_agent.string[:250],
+            "user_agent": request.user_agent.string[:250],
+            "created_at": utcnow(),
+        })
         return jsonify({"message": "Invalid MFA code."}), 401
 
-    session.clear()
-    session["user_id"] = str(user["_id"])
     logged_in_at = utcnow()
-    session["login_at"] = logged_in_at.isoformat()
 
     # Record the network address only after password and MFA both succeed.
     ip_address = request.remote_addr or "Unknown"
@@ -143,7 +222,44 @@ def verify_mfa():
         "is_active": True,
     }
     session_result = sessions_db.insert_one(session_record)
-    session["auth_session_record_id"] = str(session_result.inserted_id)
+    session_record_id = str(session_result.inserted_id)
+    if session.get("mfa_takeover"):
+        claim = users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"active_auth_session_id": session_record_id}},
+        )
+    else:
+        claim = users.update_one(
+            {
+                "_id": user["_id"],
+                "$or": [
+                    {"active_auth_session_id": {"$exists": False}},
+                    {"active_auth_session_id": None},
+                ],
+            },
+            {"$set": {"active_auth_session_id": session_record_id}},
+        )
+    if claim.modified_count != 1:
+        sessions_db.update_one(
+            {"_id": session_result.inserted_id},
+            {"$set": {"is_active": False, "last_activity": utcnow()}},
+        )
+        session.clear()
+        return jsonify({
+            "message": "This account is already signed in in another browser. Log out there before signing in here."
+        }), 409
+
+    # Retire legacy/orphaned active rows after the new browser has claimed the
+    # account, so their stale cookies cannot continue to pass session checks.
+    sessions_db.update_many(
+        {"user_id": user["_id"], "is_active": True, "_id": {"$ne": session_result.inserted_id}},
+        {"$set": {"is_active": False, "last_activity": utcnow()}},
+    )
+
+    session.clear()
+    session["user_id"] = str(user["_id"])
+    session["login_at"] = logged_in_at.isoformat()
+    session["auth_session_record_id"] = session_record_id
     login_history.insert_one({
         "user_id": user["_id"],
         "type": "login_success",
@@ -151,6 +267,8 @@ def verify_mfa():
         "ip": ip_address,
         "ip_address": ip_address,
         "authentication_method": "password+mfa",
+        "device": request.user_agent.string[:250],
+        "user_agent": request.user_agent.string[:250],
         "created_at": logged_in_at,
     })
 
@@ -182,11 +300,24 @@ def me():
 @auth_bp.post("/logout")
 def logout():
     record_id = session.get("auth_session_record_id")
+    user_id = session.get("user_id")
     if record_id:
         from bson import ObjectId
-        sessions_db.update_one(
-            {"_id": ObjectId(record_id)},
-            {"$set": {"is_active": False, "last_activity": utcnow()}},
-        )
+        try:
+            record_oid = ObjectId(record_id)
+            sessions_db.update_one(
+                {"_id": record_oid},
+                {"$set": {"is_active": False, "last_activity": utcnow()}},
+            )
+        except Exception:
+            pass
+        if user_id:
+            try:
+                users.update_one(
+                    {"_id": ObjectId(user_id), "active_auth_session_id": record_id},
+                    {"$unset": {"active_auth_session_id": ""}},
+                )
+            except Exception:
+                pass
     session.clear()
     return jsonify({"message": "Logged out successfully."})

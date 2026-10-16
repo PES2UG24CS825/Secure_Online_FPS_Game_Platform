@@ -606,6 +606,8 @@ if (logoutBtn) {
                     "[SecureFPS] Logout error:",
                     error
                 );
+                window.showAppAlert(error.message || "The server could not end this session. Check the backend connection and try again.", { title: "Could not sign out", tone: "error" });
+                return;
 
             }
 
