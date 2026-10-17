@@ -40,6 +40,8 @@ game_sessions = db["game_sessions"]
 security_events = db["security_events"]
 # Backwards-compatible name used by older integrations.
 detections = security_events
+support_tickets = db["support_tickets"]
+reward_transactions = db["reward_transactions"]
 
 
 def test_connection():

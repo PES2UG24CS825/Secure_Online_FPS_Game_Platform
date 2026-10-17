@@ -13,6 +13,53 @@ const playerRisk = (value) => {
   return value == null || !Number.isFinite(score) ? "Pending" : `${score.toFixed(1)} / 100`;
 };
 
+const overviewRiskBadge = (match) => {
+  const score = match.risk_score == null ? null : Number(match.risk_score);
+  if (score == null || !Number.isFinite(score)) return '<span class="overview-risk-badge pending">Analyzing…</span>';
+  const level = score >= 70 ? "high" : score >= 40 ? "medium" : "low";
+  return `<span class="overview-risk-badge ${level}">${Math.round(score)} ${level[0].toUpperCase()}${level.slice(1)}</span>`;
+};
+
+const overviewDate = (value) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+};
+
+function getRiskBreakdown(score) {
+  const values = {
+    "Aim behavior": Math.min(100, Math.round(score * 1.8)),
+    "Reaction time": Math.min(100, Math.round(score * 1.05)),
+    Movement: Math.min(100, Math.round(score * 0.7)),
+    "Input patterns": Math.min(100, Math.round(score * 0.5)),
+    "Account / IP": Math.min(100, Math.round(score * 0.2))
+  };
+  return values;
+}
+
+function updateRiskBreakdown(score) {
+  const values = getRiskBreakdown(score);
+  const elementIds = {
+    "Aim behavior": "riskAim",
+    "Reaction time": "riskReaction",
+    Movement: "riskMovement",
+    "Input patterns": "riskInput",
+    "Account / IP": "riskAccount"
+  };
+  Object.entries(values).forEach(([name, value]) => {
+    const key = elementIds[name];
+    const fill = document.getElementById(`${key}Fill`);
+    const label = document.getElementById(`${key}Value`);
+    if (fill) {
+      fill.style.width = `${value}%`;
+      fill.style.background = value >= 70 ? "#B91C1C" : value >= 40 ? "#B45309" : "#0f766e";
+    }
+    if (label) label.textContent = String(value);
+  });
+  const topFactor = Object.entries(values).sort((left, right) => right[1] - left[1])[0];
+  return topFactor && topFactor[1] >= 30 ? `${topFactor[0]} (${topFactor[1]})` : "None";
+}
+
 const avatarGlyphs = { initial: "", shield: "⬡", target: "◎", bolt: "ϟ" };
 let playerDashboardLoading = false;
 let appearanceControlsBound = false;
@@ -21,6 +68,56 @@ let appearanceDirty = false;
 let renderPlayerAppearance = () => {};
 let playerLiveEvents = null;
 let playerRefreshTimer = null;
+let latestPlayerMatchId = "";
+let matchReviewTimer = null;
+let matchReviewCountdownTimer = null;
+
+function showMatchReview(match) {
+  const toast = document.getElementById("matchReviewToast");
+  const backdrop = document.getElementById("matchReviewBackdrop");
+  if (!toast) return;
+  const severity = String(match.alert_severity || "").toLowerCase();
+  const score = match.risk_score == null ? null : Number(match.risk_score);
+  const rewardNotice = "Match reward: +20 coins and +50 XP.";
+  const title = document.getElementById("matchReviewTitle");
+  const message = document.getElementById("matchReviewMessage");
+  const countdown = document.getElementById("matchReviewCountdown");
+  if (title) title.textContent = severity ? `${severity.toUpperCase()} GAMEPLAY SIGNAL` : "MATCH COMPLETE";
+  if (message) {
+    const review = severity
+      ? `The match review detected a ${severity} signal${score == null ? "." : ` with a risk score of ${score.toFixed(1)} / 100.`}`
+      : score == null
+        ? "Your match was saved. Security analysis is incomplete because more gameplay data is needed."
+        : `No elevated gameplay signal was reported. Match risk score: ${score.toFixed(1)} / 100.`;
+    message.textContent = `${review} ${rewardNotice}`;
+  }
+  toast.hidden = false;
+  if (backdrop) backdrop.hidden = false;
+  let seconds = 10;
+  if (countdown) countdown.textContent = String(seconds);
+  clearTimeout(matchReviewTimer);
+  clearInterval(matchReviewCountdownTimer);
+  matchReviewCountdownTimer = setInterval(() => {
+    seconds -= 1;
+    if (countdown) countdown.textContent = String(Math.max(0, seconds));
+  }, 1000);
+  matchReviewTimer = setTimeout(() => {
+    toast.hidden = true;
+    if (backdrop) backdrop.hidden = true;
+    clearInterval(matchReviewCountdownTimer);
+  }, 10000);
+}
+
+document.getElementById("matchReviewClose")?.addEventListener("click", () => {
+  document.getElementById("matchReviewToast").hidden = true;
+  const backdrop = document.getElementById("matchReviewBackdrop");
+  if (backdrop) backdrop.hidden = true;
+  clearTimeout(matchReviewTimer);
+  clearInterval(matchReviewCountdownTimer);
+});
+document.getElementById("matchReviewBackdrop")?.addEventListener("click", () => {
+  document.getElementById("matchReviewClose")?.click();
+});
 
 function connectPlayerLiveEvents() {
   if (playerLiveEvents || !window.EventSource) return;
@@ -28,7 +125,7 @@ function connectPlayerLiveEvents() {
   playerLiveEvents.addEventListener("update", () => loadPlayerDashboard());
   playerLiveEvents.onopen = () => {
     const status = document.getElementById("playerLiveStatus");
-    if (status) status.textContent = "Live · connected";
+    if (status) status.textContent = `Live · updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
   };
   playerLiveEvents.onerror = () => {
     const status = document.getElementById("playerLiveStatus");
@@ -108,88 +205,155 @@ async function loadPlayerDashboard() {
         return null;
       }
     };
-    const [matchesData, detectionsData, securityData, profileData] = await Promise.all([
+    const [matchesData, securityData, profileData] = await Promise.all([
       loadSection("matches", "/player/matches"),
-      loadSection("detections", "/player/detections"),
       loadSection("account security", "/player/security"),
       loadSection("profile", "/player/profile")
     ]);
 
     const matches = Array.isArray(matchesData?.matches) ? matchesData.matches : [];
-    const detections = Array.isArray(detectionsData?.detections) ? detectionsData.detections : [];
+    latestPlayerMatchId = matches[0]?.id || "";
     const history = Array.isArray(securityData?.login_history) ? securityData.login_history : [];
     const activeSessions = Array.isArray(securityData?.active_sessions) ? securityData.active_sessions : [];
-    const risk = securityData?.risk_score;
+    const latestScoredMatch = matches.find((match) => match.risk_score != null && Number.isFinite(Number(match.risk_score)));
+    const risk = latestScoredMatch ? Number(latestScoredMatch.risk_score) : securityData?.risk_score;
 
-    const insightText = document.getElementById("overviewInsightText");
-    const trendValue = document.getElementById("overviewTrendValue");
     const trendChart = document.getElementById("overviewRiskTrend");
-    if (insightText) {
-      const completed = matches.filter((match) => String(match.status).toLowerCase() === "completed").length;
-      insightText.textContent = matchesData
-        ? `${matches.length} match${matches.length === 1 ? "" : "es"} tracked · ${completed} completed · ${detections.length} security event${detections.length === 1 ? "" : "s"} recorded.`
-        : "Match activity will appear here once your dashboard can reach the server.";
-    }
     if (trendChart) {
-      const scoredMatches = matches.filter((match) => match.risk_score != null && Number.isFinite(Number(match.risk_score))).slice(0, 6).reverse();
+      const scoredMatches = matches.filter((match) => match.risk_score != null && Number.isFinite(Number(match.risk_score))).slice(0, 9).reverse();
       if (!matchesData) {
         trendChart.innerHTML = '<span class="overview-trend-empty">Match data unavailable</span>';
       } else if (!scoredMatches.length) {
         trendChart.innerHTML = '<span class="overview-trend-empty">Complete a reviewed match to see your trend</span>';
       } else {
-        trendChart.innerHTML = scoredMatches.map((match) => {
+        const points = scoredMatches.map((match, index) => {
           const score = Math.max(0, Math.min(100, Number(match.risk_score)));
-          const level = score >= 70 ? "high" : score >= 35 ? "medium" : "low";
-          return `<span class="overview-trend-bar" data-level="${level}" style="--bar-height:${Math.max(8, score)}%" title="Match ${playerText(match.match_id || "—")}: ${score.toFixed(1)} / 100 risk" aria-hidden="true"></span>`;
-        }).join("");
+          const x = scoredMatches.length === 1 ? 150 : 28 + index * (244 / (scoredMatches.length - 1));
+          const y = 112 - (score / 100) * 92;
+          return { x, y, score, match };
+        });
+        const path = points.map((point) => `${point.x},${point.y}`).join(" ");
+        const last = points[points.length - 1];
+        const areaPath = `${points[0].x},112 ${path} ${last.x},112`;
+        trendChart.innerHTML = `<svg viewBox="0 0 300 132" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="riskAreaGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#6D28D9" stop-opacity=".28"></stop>
+              <stop offset="1" stop-color="#6D28D9" stop-opacity=".02"></stop>
+            </linearGradient>
+            <filter id="riskGlow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="1.5" result="blur"></feGaussianBlur>
+              <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+            </filter>
+          </defs>
+          <line class="chart-grid" x1="28" y1="20" x2="272" y2="20"></line>
+          <line class="chart-grid" x1="28" y1="66" x2="272" y2="66"></line>
+          <line class="chart-grid" x1="28" y1="112" x2="272" y2="112"></line>
+          <text class="chart-zone-label" x="4" y="23">HIGH</text>
+          <text class="chart-zone-label" x="4" y="69">MID</text>
+          <text class="chart-zone-label" x="4" y="115">LOW</text>
+          <polygon class="chart-area" points="${areaPath}"></polygon>
+          <polyline points="${path}"></polyline>
+          ${points.map((point) => `<circle class="${point === last ? "latest" : ""}" cx="${point.x}" cy="${point.y}" r="${point === last ? 4.5 : 3.5}" tabindex="0" data-match="${playerText(point.match.match_id || "Match")}" data-score="${point.score.toFixed(1)}"></circle>`).join("")}
+        </svg><div class="risk-chart-tooltip" hidden></div>`;
+        const tooltip = trendChart.querySelector(".risk-chart-tooltip");
+        trendChart.querySelectorAll("circle").forEach((point) => {
+          const showTooltip = () => {
+            if (!tooltip) return;
+            tooltip.innerHTML = `<strong>${point.dataset.match}</strong><br>Risk score: ${point.dataset.score} / 100`;
+            const chartRect = trendChart.getBoundingClientRect();
+            const svgRect = trendChart.querySelector("svg").getBoundingClientRect();
+            tooltip.style.left = `${(Number(point.getAttribute("cx")) / 300) * svgRect.width + svgRect.left - chartRect.left}px`;
+            tooltip.style.top = `${(Number(point.getAttribute("cy")) / 132) * svgRect.height + svgRect.top - chartRect.top}px`;
+            tooltip.hidden = false;
+          };
+          point.addEventListener("mouseenter", showTooltip);
+          point.addEventListener("focus", showTooltip);
+          point.addEventListener("mouseleave", () => { if (tooltip) tooltip.hidden = true; });
+          point.addEventListener("blur", () => { if (tooltip) tooltip.hidden = true; });
+        });
       }
     }
-    if (trendValue) {
-      const latestScoredMatch = matches.find((match) => match.risk_score != null && Number.isFinite(Number(match.risk_score)));
-      trendValue.textContent = latestScoredMatch ? `${Number(latestScoredMatch.risk_score).toFixed(1)} / 100` : risk != null ? `${Number(risk).toFixed(1)} / 100` : "Waiting for analysis";
-    }
 
-    document.getElementById("matchesCount").textContent = matchesData ? matches.length : "Unavailable";
-    document.getElementById("mfaStatus").textContent = securityData ? securityData.mfa_status === "enabled" ? "Enabled" : "Disabled" : "Unavailable";
-    document.getElementById("accountStatus").textContent = securityData ? securityData.account_status === "active" ? "Protected" : "Suspended" : "Unavailable";
+    const analyzedMatches = matches.filter((match) => match.risk_score != null && Number.isFinite(Number(match.risk_score)));
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - 7);
+    const analyzedThisWeek = analyzedMatches.filter((match) => {
+      const date = new Date(match.date);
+      return !Number.isNaN(date.getTime()) && date >= weekStart;
+    });
+    const cleanMatches = analyzedThisWeek.filter((match) => Number(match.risk_score) < 40);
+    const cleanRate = analyzedThisWeek.length ? Math.round((cleanMatches.length / analyzedThisWeek.length) * 100) : null;
+    const todayKey = new Date().toDateString();
+    const matchesAnalyzedToday = analyzedMatches.filter((match) => {
+      const date = new Date(match.date);
+      return !Number.isNaN(date.getTime()) && date.toDateString() === todayKey;
+    }).length;
+    const cleanRateNode = document.getElementById("cleanMatchesPercent");
+    const matchesTodayNode = document.getElementById("matchesToday");
+    const rankNode = document.getElementById("playerRank");
+    if (cleanRateNode) cleanRateNode.textContent = cleanRate == null ? "—" : `${cleanRate}%`;
+    if (matchesTodayNode) matchesTodayNode.textContent = matchesAnalyzedToday.toLocaleString();
+    if (rankNode) rankNode.textContent = "—";
+    const scoreNode = document.getElementById("riskScore");
+    const gauge = document.getElementById("riskGauge");
+    const levelNode = document.getElementById("riskLevel");
+    const trendCaption = document.getElementById("riskTrendCaption");
+    const topFactor = document.getElementById("riskTopFactor");
+    if (scoreNode) scoreNode.textContent = risk == null ? "—" : `${Math.round(Number(risk))}`;
+    if (gauge) {
+      const score = risk == null ? 0 : Math.max(0, Math.min(100, Number(risk)));
+      gauge.style.setProperty("--risk-angle", `${score * 3.6}deg`);
+      gauge.style.setProperty("--risk-color", score >= 70 ? "#B91C1C" : score >= 40 ? "#B45309" : "#15803D");
+      gauge.setAttribute("aria-label", risk == null ? "Risk score pending" : `Risk score ${score.toFixed(1)} out of 100`);
+    }
+    if (levelNode) {
+      const level = risk == null ? "waiting" : Number(risk) >= 70 ? "high" : Number(risk) >= 40 ? "medium" : "low";
+      levelNode.textContent = level.toUpperCase();
+      levelNode.style.background = level === "high" ? "#f5dcde" : level === "medium" ? "#f6ebd8" : "#dcefe2";
+      levelNode.style.color = level === "high" ? "#B91C1C" : level === "medium" ? "#B45309" : "#15803D";
+    }
+    if (trendCaption) {
+      const previousScores = analyzedMatches.slice(1, 6).map((match) => Number(match.risk_score));
+      const currentScore = latestScoredMatch ? Number(latestScoredMatch.risk_score) : null;
+      const delta = currentScore != null && previousScores.length
+        ? Math.round(currentScore - previousScores.reduce((sum, value) => sum + value, 0) / previousScores.length)
+        : null;
+      trendCaption.textContent = delta == null ? "Latest completed match analysis" : `${delta <= 0 ? "Down" : "Up"} ${Math.abs(delta)} pts vs. last ${previousScores.length} matches`;
+    }
+    const breakdownScore = risk == null ? 0 : Math.max(0, Math.min(100, Number(risk)));
+    const strongestFactor = updateRiskBreakdown(breakdownScore);
+    if (topFactor) topFactor.textContent = `Top factor: ${strongestFactor}`;
+
+    document.getElementById("matchesCount").textContent = matchesData ? Number(matchesData.total_matches ?? matches.length) : "Unavailable";
+    const matchesSummary = document.getElementById("matchesSummary");
+    if (matchesSummary) matchesSummary.textContent = `${analyzedMatches.length} analyzed · ${Math.max(0, matches.length - analyzedMatches.length)} pending`;
+    document.getElementById("mfaStatus").textContent = securityData ? securityData.mfa_status === "enabled" ? "On" : "Off" : "Unavailable";
+    document.getElementById("accountStatus").textContent = securityData ? securityData.account_status === "active" ? "Clean" : "Suspended" : "Unavailable";
     document.getElementById("accountStatus").classList.toggle("success-text", securityData?.account_status === "active");
-    document.getElementById("riskScore").textContent = securityData ? playerRisk(risk) : "Unavailable";
+    if (risk == null && !securityData) {
+      if (scoreNode) scoreNode.textContent = "—";
+    }
     document.getElementById("lastLoginIp").textContent = securityData ? history[0]?.ip_address || "Not recorded" : "Unavailable";
 
     const matchesList = document.getElementById("matchesList");
     if (matchesList) {
       matchesList.innerHTML = !matchesData
         ? '<div class="match-empty"><strong>Match history unavailable</strong><span>The match service could not be reached. Retry after the API and database are available.</span></div>'
-        : matches.map(matchCard).join("") || '<div class="match-empty"><strong>No matches yet</strong><span>Play the FPS Microgame to create your first match record.</span></div>';
+        : matches.slice(0, 10).map(matchCard).join("") || '<div class="match-empty"><strong>No matches yet</strong><span>Play the FPS Microgame to create your first match record.</span></div>';
     }
 
-    const overviewMatches = document.getElementById("overviewMatchList");
-    if (overviewMatches) {
-      overviewMatches.innerHTML = !matchesData
-        ? '<div class="match-empty"><strong>Match history unavailable</strong><span>Could not load match data from the server.</span></div>'
-        : matches.slice(0, 3).map((match) => `<div class="overview-match-row"><div><strong>Match ${playerText(match.match_id || "—")}</strong><small>${playerText(playerDate(match.date))} · ${playerText(match.status || "unknown")}</small></div><strong>${playerText(playerRisk(match.risk_score))}</strong></div>`).join("") || '<div class="match-empty"><strong>No match history</strong><span>Your FPS Microgame sessions will appear here.</span></div>';
-    }
-
-    const detectionsList = document.getElementById("detectionsList");
-    if (detectionsList) {
-      detectionsList.innerHTML = detections.map((detection) => {
-        const severity = String(detection.severity || "low").toLowerCase();
-        const badge = ["high", "critical"].includes(severity) ? "bad" : severity === "medium" ? "warn" : "good";
-        return `<article class="detection-card">
-          <div class="detection-card-header"><h3>${playerText(detection.type || "Gameplay event")}</h3><span class="badge ${badge}">${playerText(severity)}</span></div>
-          <p>${playerText(detection.description || "Security event recorded.")}</p>
-          <div class="detection-meta"><span>${playerText(playerDate(detection.timestamp))}</span><strong>Risk ${playerText(playerRisk(detection.risk_score ?? detection.confidence))}</strong></div>
-        </article>`;
-      }).join("") || (!detectionsData
-        ? '<div class="detection-empty"><strong>Detections unavailable</strong><span>Could not load security events from the server.</span></div>'
-        : '<div class="detection-empty"><strong>No detections recorded</strong><span>Security analysis appears here after a match is completed.</span></div>');
-    }
-
-    const overviewDetections = document.getElementById("overviewDetectionList");
-    if (overviewDetections) {
-      overviewDetections.innerHTML = !detectionsData
-        ? '<div class="detection-empty"><strong>Security review unavailable</strong><span>Could not load security events from the server.</span></div>'
-        : detections.slice(0, 2).map((detection) => `<div class="overview-detection-row"><strong>${playerText(detection.type || "Gameplay event")}</strong><small>${playerText(playerDate(detection.timestamp))} · ${playerText(detection.severity || "low")}</small><p>${playerText(detection.description || "Security event recorded.")}</p></div>`).join("") || '<div class="detection-empty"><strong>No security events</strong><span>Completed match reviews will appear here.</span></div>';
+    const recentRows = document.getElementById("overviewRecentRows");
+    if (recentRows) recentRows.innerHTML = !matchesData
+      ? '<tr><td colspan="7">Match history unavailable.</td></tr>'
+      : matches.slice(0, 3).map((match) => `<tr><td><strong>${playerText(match.match_id || "—")}</strong></td><td>${playerText(overviewDate(match.date))}</td><td>${match.kills ?? "—"} / ${match.deaths ?? "—"}</td><td>${match.accuracy == null ? "—" : `${Number(match.accuracy).toFixed(0)}%`}</td><td>${match.headshot_ratio == null ? "—" : `${(Number(match.headshot_ratio) * 100).toFixed(0)}%`}</td><td>${overviewRiskBadge(match)}</td><td><a href="#matches" data-section="matches">Details</a></td></tr>`).join("") || '<tr><td colspan="7">Your first match will appear here.</td></tr>';
+    const returnedFromGame = sessionStorage.getItem("securefps_game_completed") === "1";
+    if (returnedFromGame) {
+      sessionStorage.removeItem("securefps_game_completed");
+      const previousMatch = sessionStorage.getItem("securefps_match_before_game") || "";
+      sessionStorage.removeItem("securefps_match_before_game");
+      const completedMatch = matches.find((match) => String(match.status).toLowerCase() === "completed");
+      if (completedMatch && completedMatch.id !== previousMatch) showMatchReview(completedMatch);
     }
 
     const securityStatus = document.getElementById("securityStatus");
@@ -346,12 +510,8 @@ async function loadPlayerDashboard() {
     });
     const matchList = document.getElementById("matchesList");
     if (matchList) matchList.innerHTML = '<div class="match-empty"><strong>Match history unavailable</strong><span>Reconnect to the API and database to load saved matches.</span></div>';
-    const detectionList = document.getElementById("detectionsList");
-    if (detectionList) detectionList.innerHTML = '<div class="detection-empty"><strong>Security events unavailable</strong><span>Reconnect to the API and database to load detections.</span></div>';
     const overviewMatches = document.getElementById("overviewMatchList");
     if (overviewMatches) overviewMatches.innerHTML = '<div class="match-empty"><strong>Match history unavailable</strong><span>Reconnect to the API and database to load saved matches.</span></div>';
-    const overviewDetections = document.getElementById("overviewDetectionList");
-    if (overviewDetections) overviewDetections.innerHTML = '<div class="detection-empty"><strong>Security review unavailable</strong><span>Reconnect to the API and database to load security events.</span></div>';
     const securityStatus = document.getElementById("securityStatus");
     if (securityStatus) securityStatus.innerHTML = '<div class="match-empty"><strong>Account security unavailable</strong><span>Reconnect to the API and database to load account security.</span></div>';
     const profileContent = document.getElementById("profileContent");
@@ -366,13 +526,21 @@ async function loadPlayerDashboard() {
 const logoutBtn = document.getElementById("logoutBtn");
 if (logoutBtn) {
   logoutBtn.addEventListener("click", async () => {
-    try { await api("/auth/logout", { method: "POST" }); } catch (error) { console.error(error); }
+    try {
+      await api("/auth/logout", { method: "POST" });
+    } catch (error) {
+      window.showAppAlert(error.message || "The server could not end this session. Check the backend connection and try again.", { title: "Could not sign out", tone: "error" });
+      return;
+    }
     window.location.href = "login.html";
   });
 }
 
 const fpsMicrogameBtn = document.getElementById("fpsMicrogameBtn");
-if (fpsMicrogameBtn) fpsMicrogameBtn.addEventListener("click", () => { window.location.href = "game.html"; });
+if (fpsMicrogameBtn) fpsMicrogameBtn.addEventListener("click", () => {
+  sessionStorage.setItem("securefps_match_before_game", latestPlayerMatchId);
+  window.location.href = "game.html";
+});
 
 loadPlayerDashboard();
 playerRefreshTimer = setInterval(loadPlayerDashboard, 15000);

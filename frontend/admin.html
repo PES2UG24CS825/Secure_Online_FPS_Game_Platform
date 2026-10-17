@@ -4,14 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>SecureFPS | Admin Control Center</title>
-  <link rel="stylesheet" href="css/styles.css?v=rbac-v1">
+  <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg">
+  <link rel="stylesheet" href="css/styles.css?v=player-suite-1">
   <style>
     .nav-btn {
       display: flex;
       align-items: center;
       gap: 8px;
       padding: 12px 16px;
-      color: #aaa;
+      color: #53507A;
       cursor: pointer;
       transition: all 0.2s;
       border-radius: 8px;
@@ -19,13 +20,13 @@
     }
 
     .nav-btn:hover {
-      color: #fff;
-      background: rgba(79, 140, 255, 0.1);
+      color: #4C1D95;
+      background: rgba(207, 198, 242, 0.55);
     }
 
     .nav-btn.active {
-      color: #4f8cff;
-      background: rgba(79, 140, 255, 0.15);
+      color: #4C1D95;
+      background: #CFC6F2;
       font-weight: 600;
     }
 
@@ -50,8 +51,8 @@
     th {
       text-align: left;
       padding: 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      color: #aaa;
+      border-bottom: 1px solid #C3BFE0;
+      color: #53507A;
       font-size: 12px;
       font-weight: 600;
       text-transform: uppercase;
@@ -59,18 +60,18 @@
 
     td {
       padding: 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      color: #ddd;
+      border-bottom: 1px solid #C3BFE0;
+      color: #1B1730;
     }
 
     tbody tr:hover {
-      background: rgba(79, 140, 255, 0.05);
+      background: rgba(207, 198, 242, 0.3);
     }
 
     .action-btn {
       background: none;
-      border: 1px solid rgba(79, 140, 255, 0.4);
-      color: #4f8cff;
+      border: 1px solid #C3BFE0;
+      color: #6D28D9;
       padding: 4px 8px;
       border-radius: 4px;
       cursor: pointer;
@@ -80,18 +81,18 @@
     }
 
     .action-btn:hover {
-      background: rgba(79, 140, 255, 0.1);
-      border-color: #4f8cff;
+      background: #CFC6F2;
+      border-color: #6D28D9;
     }
 
     .action-btn.danger {
-      border-color: rgba(255, 107, 107, 0.4);
-      color: #ff6b6b;
+      border-color: #B91C1C;
+      color: #B91C1C;
     }
 
     .action-btn.danger:hover {
-      background: rgba(255, 107, 107, 0.1);
-      border-color: #ff6b6b;
+      background: rgba(185, 28, 28, 0.08);
+      border-color: #B91C1C;
     }
 
     .severity-badge {
@@ -104,44 +105,44 @@
     }
 
     .severity-low {
-      background: rgba(53, 212, 154, 0.2);
-      color: #35d49a;
+      background: #dcefe2;
+      color: #15803D;
     }
 
     .severity-medium {
-      background: rgba(255, 193, 7, 0.2);
-      color: #ffc107;
+      background: #f6ebd8;
+      color: #B45309;
     }
 
     .severity-high {
-      background: rgba(255, 107, 107, 0.2);
-      color: #ff6b6b;
+      background: #f5dcde;
+      color: #B91C1C;
     }
 
     .severity-critical {
-      background: rgba(220, 53, 69, 0.2);
-      color: #dc3545;
+      background: #f5dcde;
+      color: #B91C1C;
     }
 
     .empty-state {
       text-align: center;
       padding: 40px 20px;
-      color: #999;
+      color: #53507A;
     }
 
     .empty-state strong {
       display: block;
       margin-bottom: 8px;
-      color: #ccc;
+      color: #1B1730;
     }
 
-    .admin-sidebar { position:fixed; inset:0 auto 0 0; width:240px; height:100vh; box-sizing:border-box; padding:24px 18px; overflow-y:auto; z-index:100; background:#07111f; border-right:1px solid rgba(255,255,255,.1); }
+    .admin-sidebar { position:fixed; inset:0 auto 0 0; width:240px; height:100vh; box-sizing:border-box; padding:24px 18px; overflow-y:auto; z-index:100; background:#E9E7F5; border-right:1px solid #C3BFE0; }
     .admin-sidebar .brand { margin-bottom:34px; }
     .admin-sidebar nav { display:grid; gap:6px; }
-    .admin-nav-btn { display:flex; align-items:center; gap:12px; width:100%; padding:12px 13px; border:1px solid transparent; border-radius:10px; color:#8fa0b6; background:transparent; font:inherit; font-size:13px; text-align:left; cursor:pointer; transition:background .18s ease,color .18s ease,border-color .18s ease; }
-    .admin-nav-btn:hover { color:#eaf2ff; background:rgba(79,140,255,.08); }
-    .admin-nav-btn.active { color:#fff; background:#112843; border-color:rgba(79,140,255,.22); box-shadow:inset 3px 0 #5e9cff; }
-    .admin-nav-icon { display:grid; place-items:center; width:24px; height:24px; border-radius:7px; color:#78a9f5; background:rgba(79,140,255,.1); font-size:14px; }
+    .admin-nav-btn { display:flex; align-items:center; gap:12px; width:100%; padding:12px 13px; border:1px solid transparent; border-radius:10px; color:#53507A; background:transparent; font:inherit; font-size:13px; text-align:left; cursor:pointer; transition:background .18s ease,color .18s ease,border-color .18s ease; }
+    .admin-nav-btn:hover { color:#4C1D95; background:rgba(207,198,242,.55); }
+    .admin-nav-btn.active { color:#4C1D95; background:#CFC6F2; border-color:#C3BFE0; box-shadow:inset 3px 0 #6D28D9; }
+    .admin-nav-icon { display:grid; place-items:center; width:24px; height:24px; border-radius:7px; color:#6D28D9; background:rgba(207,198,242,.65); font-size:14px; }
     .admin-main-wrapper { margin-left:240px; width:calc(100% - 240px); min-width:0; }
     .admin-main-wrapper .dashboard-main { width:100%; max-width:none; margin:0; padding:30px 38px 50px; box-sizing:border-box; }
     .admin-section { display:none; }
@@ -150,7 +151,26 @@
     .admin-section .admin-table-panel { margin-top:16px; }
     .admin-section-heading { margin:0 0 16px; }
     .admin-section-heading h2 { margin:0; font-size:20px; }
-    .admin-section-heading p { margin:5px 0 0; color:#8fa0b6; font-size:12px; }
+    .admin-section-heading p { margin:5px 0 0; color:#53507A; font-size:12px; }
+    .admin-filter-row { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }
+    .admin-filter-row input, .admin-filter-row select { min-height:36px; border:1px solid #C3BFE0; border-radius:9px; padding:0 10px; background:#fff; color:#1B1730; }
+    .admin-header-actions { display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-end; gap:10px; }
+    .admin-header-card { display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid #C3BFE0; border-radius:11px; background:#F7F5FF; }
+    .admin-header-card small { display:block; color:#53507A; font-size:10px; }
+    .admin-toggle { display:flex; align-items:center; gap:7px; color:#53507A; font-size:12px; }
+    .admin-pagination { display:flex; align-items:center; justify-content:flex-end; gap:10px; padding-top:12px; color:#53507A; font-size:12px; }
+    .risk-badge { display:inline-flex; padding:4px 8px; border-radius:999px; font-weight:700; font-size:11px; }
+    .risk-badge.low { background:#d8f3ee; color:#087f73; }
+    .risk-badge.medium { background:#fff0c7; color:#9a5b00; }
+    .risk-badge.high { background:#ffe0e7; color:#a61b43; }
+    .admin-table-wrap { scrollbar-color:#9d8ed2 #eeeafa; }
+    .review-note-dialog { border:0; border-radius:16px; padding:0; width:min(460px, calc(100% - 32px)); color:#1B1730; box-shadow:0 24px 70px rgba(45,28,92,.28); }
+    .review-note-dialog::backdrop { background:rgba(37,24,65,.48); backdrop-filter:blur(3px); }
+    .review-note-dialog form { padding:24px; background:#fff; }
+    .review-note-dialog h2 { margin:0 0 8px; font-size:18px; }
+    .review-note-dialog p { margin:0 0 16px; color:#53507A; font-size:13px; }
+    .review-note-dialog textarea { width:100%; box-sizing:border-box; min-height:100px; border:1px solid #BBAFE5; border-radius:10px; padding:11px; resize:vertical; font:inherit; }
+    .review-note-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
 
     .admin-page .stats-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 
@@ -174,18 +194,18 @@
 </head>
 <body class="dashboard-page admin-page">
   <aside class="admin-sidebar">
-    <div class="brand"><div class="brand-mark">SF</div><div><strong>SecureFPS</strong><small>Security operations</small></div></div>
+    <div class="brand"><img class="brand-mark" src="public/securefps-mark.svg" alt="SecureFPS logo"><div><strong>SecureFPS</strong><small>Security operations</small></div></div>
     <nav id="adminNavigation" aria-label="Admin sections">
       <button class="admin-nav-btn active" type="button" data-admin-section="overview"><span class="admin-nav-icon">◫</span>Overview</button>
       <button class="admin-nav-btn" type="button" data-admin-section="players"><span class="admin-nav-icon">♙</span>Players</button>
       <button class="admin-nav-btn" type="button" data-admin-section="security"><span class="admin-nav-icon">⌕</span>Security &amp; access</button>
       <button class="admin-nav-btn" type="button" data-admin-section="gameplay"><span class="admin-nav-icon">▤</span>Game monitoring</button>
+      <button class="admin-nav-btn" type="button" data-admin-section="support"><span class="admin-nav-icon">✉</span>Customer support</button>
     </nav>
   </aside>
   <div class="admin-main-wrapper">
   <main class="dashboard-main admin-main">
-    <header class="topbar"><div><p class="eyebrow">SECURITY OPERATIONS</p><h1 id="adminPageTitle">Admin overview</h1><p class="muted admin-subtitle" id="adminPageSubtitle">Live platform activity and security health.</p></div><div><span class="status-pill" id="adminLiveStatus"><span class="status-dot"></span>Connecting to live data…</span><button id="playerViewBtn" class="play-btn admin-player-view" type="button">Player view</button><button id="logoutBtn" class="ghost-btn admin-logout" type="button">Sign out</button></div></header>
-    <section class="panel admin-session"><div class="avatar">SA</div><div><p class="eyebrow">SIGNED-IN ADMINISTRATOR</p><h2 id="adminName">Security Admin</h2><p class="muted" id="adminEmail"></p></div><div class="admin-session-time"><span class="muted">Current session</span><strong>Active</strong><small>Administrator session</small></div></section>
+    <header class="topbar"><div><p class="eyebrow">SECURITY OPERATIONS</p><h1 id="adminPageTitle">Admin overview</h1><p class="muted admin-subtitle" id="adminPageSubtitle">Live platform activity and security health.</p></div><div class="admin-header-actions"><div class="admin-header-card"><div class="avatar">SA</div><div><strong id="adminName">Security Admin</strong><small id="adminEmail">Signed-in administrator</small></div></div><span class="status-pill" id="adminLiveStatus"><span class="status-dot"></span>Connecting to live data…</span><button id="playerViewBtn" class="play-btn admin-player-view" type="button">Player view</button><button id="logoutBtn" class="ghost-btn admin-logout" type="button">Sign out</button></div></header>
 
     <section class="admin-section active" id="admin-overview" data-admin-view="overview">
       <section class="stats-grid"><article class="stat-card"><span>Players</span><strong id="playerCount">—</strong><small>Registered accounts</small></article><article class="stat-card"><span>Recorded matches</span><strong id="matchCount">—</strong><small>FPS Microgame sessions</small></article><article class="stat-card"><span>Security events</span><strong id="eventCount">—</strong><small>Audit trail</small></article><article class="stat-card"><span>High severity</span><strong id="highCount">—</strong><small>Needs review</small></article><article class="stat-card"><span>Logins today</span><strong id="loginCount">—</strong><small>Successful access</small></article></section>
@@ -199,18 +219,24 @@
 
     <section class="admin-section" id="admin-security" data-admin-view="security">
       <div class="admin-section-heading"><h2>Security &amp; access</h2><p>Successful sign-ins and recorded security events.</p></div>
-      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">ACCOUNT ACCESS AUDIT</p><h2>Recent player sign-ins</h2></div></div><div class="admin-table-wrap"><table><thead><tr><th>Player</th><th>IP address</th><th>Time</th><th>Authentication</th></tr></thead><tbody id="recentLogins"><tr><td colspan="4">No sign-ins recorded.</td></tr></tbody></table></div></section>
+      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">ACCOUNT ACCESS AUDIT</p><h2>Sign-in activity</h2></div><label class="admin-toggle"><input id="includeTestData" type="checkbox"> Include test data</label></div><div class="admin-filter-row"><input id="loginSearch" type="search" placeholder="Search player, IP, device"><select id="loginPlayerFilter"><option value="">All players</option></select><select id="loginResultFilter"><option value="">All results</option><option value="Success">Success</option><option value="Failed">Failed</option></select><input id="loginDateFilter" type="date"><button id="refreshLogins" class="play-btn" type="button">Refresh</button></div><div class="admin-table-wrap"><table><thead><tr><th>Player</th><th>Result</th><th>Device / user agent</th><th>Location</th><th>IP address</th><th>Risk</th><th>Time</th></tr></thead><tbody id="recentLogins"><tr><td colspan="7">Loading sign-in activity…</td></tr></tbody></table></div><div id="loginPagination" class="admin-pagination"></div></section>
       <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">AUDIT TRAIL</p><h2>Security events</h2></div></div><div id="events" class="list"><div class="empty">No security events.</div></div></section>
     </section>
 
     <section class="admin-section" id="admin-gameplay" data-admin-view="gameplay">
-      <div class="admin-section-heading"><h2>Game monitoring</h2><p>Gameplay analysis, review fixtures, and match history.</p></div>
-      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">DEVELOPMENT TEST ACCOUNT</p><h2>DEMO CHEATER TEST ACCOUNT</h2></div></div><div id="demoAccountPanel"><div class="empty">Demo account is not seeded.</div></div></section>
-      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">GAME SESSION ANALYSIS</p><h2>Analyzed sessions</h2></div></div><div id="demoComparisonBanner" class="gameplay-alert-banner reviewed" role="status">Complete a normal session and the development fixture to compare actual model results.</div><div id="demoSessionComparison" class="demo-session-comparison"></div><div class="admin-table-wrap"><table><thead><tr><th>Session / Player</th><th>Created</th><th>Status / Missing</th><th>Accuracy raw / norm</th><th>Fire rate raw / norm</th><th>Movement raw / norm</th><th>Aim raw / norm</th><th>KDR raw / norm</th><th>Random forest</th><th>Isolation forest</th><th>Risk score</th></tr></thead><tbody id="analyses"><tr><td colspan="11">No analyzed sessions.</td></tr></tbody></table></div></section>
+      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">DEVELOPMENT FIXTURES</p><h2>Model comparison</h2></div><button id="seedDemoBtn" class="play-btn" type="button">Seed demo data</button></div><div id="demoAccountPanel"><div class="empty">Development fixtures are not loaded.</div></div></section>
+      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">GAME SESSION ANALYSIS</p><h2>Analyzed sessions</h2></div></div><div id="demoComparisonBanner" class="gameplay-alert-banner reviewed" role="status">Use Seed demo data in development mode to compare model outputs.</div><div id="demoSessionComparison" class="demo-session-comparison"></div><div class="admin-table-wrap"><table><thead><tr><th>Session / Player</th><th>Created</th><th>Status / Missing</th><th title="Aim accuracy and smoothness measurements">Aim behavior</th><th title="Shots per second">Fire rate</th><th title="Player movement speed">Movement speed</th><th title="Aim correction smoothness">Aim smoothness</th><th title="Kills divided by deaths">K/D ratio</th><th title="Random Forest cheater probability and label">Random Forest</th><th title="Isolation Forest normalized anomaly score and label">Isolation Forest</th><th title="Weighted continuous risk score: 60% RF + 40% Isolation Forest">Final risk</th></tr></thead><tbody id="analyses"><tr><td colspan="11">No analyzed sessions.</td></tr></tbody></table></div></section>
       <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">GAME HISTORY</p><h2>All player game sessions</h2></div></div><div class="admin-table-wrap"><table><thead><tr><th>Session</th><th>Player</th><th>Game</th><th>Started</th><th>Status</th><th>Risk score</th></tr></thead><tbody id="allMatches"><tr><td colspan="6">No game sessions recorded.</td></tr></tbody></table></div></section>
+    </section>
+
+    <section class="admin-section" id="admin-support" data-admin-view="support">
+      <div class="admin-section-heading"><h2>Customer support</h2><p>Review player messages, evidence images, and send replies.</p></div>
+      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">SUPPORT QUEUE</p><h2>Player messages</h2></div><button id="refreshSupportInbox" class="play-btn" type="button">Refresh</button></div><div id="supportTicketInbox" class="admin-support-inbox"><div class="empty">Loading player messages…</div></div></section>
     </section>
   </main>
   </div>
-  <script src="js/api.js?v=realtime-live-2"></script><script src="js/admin.js?v=admin-sections-1"></script>
+  <dialog id="supportProofDialog" class="support-proof-dialog"><div><button id="closeSupportProof" type="button" aria-label="Close image">×</button><img id="supportProofImage" alt="Player supplied support evidence"></div></dialog>
+  <dialog id="reviewNoteDialog" class="review-note-dialog"><form method="dialog" id="reviewNoteForm"><h2>Save review action</h2><p id="reviewNotePrompt">Add a required note for this decision.</p><textarea id="reviewNote" required maxlength="1000" placeholder="Explain why this action was selected"></textarea><div class="review-note-actions"><button id="cancelReviewNote" class="ghost-btn" value="cancel" type="submit">Cancel</button><button id="saveReviewNote" class="play-btn" value="default" type="submit">Save action</button></div></form></dialog>
+  <script src="js/api.js?v=brand-lockup-1"></script><script src="js/admin.js?v=auth-logout-recovery-1"></script>
 </body>
 </html>

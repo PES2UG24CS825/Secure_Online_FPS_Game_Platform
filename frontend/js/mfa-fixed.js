@@ -1,5 +1,8 @@
 const form = document.getElementById("mfaForm");
 const message = document.getElementById("message");
+if (new URLSearchParams(window.location.search).get("replace") === "1") {
+  message.textContent = "Verify your code to sign in here; the other browser will be signed out.";
+}
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();

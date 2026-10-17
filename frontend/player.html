@@ -4,8 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SecureFPS | Player Console</title>
+  <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg">
 
-  <link rel="stylesheet" href="css/styles.css?v=ui-v4">
+  <link rel="stylesheet" href="css/styles.css?v=player-suite-1">
 
   <style>
     /* ============================================================
@@ -17,19 +18,19 @@
        ============================================================ */
 
     :root {
-      --player-bg: #06101f;
-      --player-sidebar: #081526;
-      --player-panel: #0c1a2c;
-      --player-panel-2: #0f2035;
-      --player-border: rgba(117, 160, 214, 0.16);
-      --player-border-strong: rgba(117, 160, 214, 0.25);
-      --player-text: #f5f8ff;
-      --player-muted: #86a6ca;
-      --player-blue: #66a3ff;
-      --player-blue-2: #367eea;
-      --player-green: #31df9a;
-      --player-yellow: #f5b942;
-      --player-red: #ff6475;
+      --player-bg: #DEDCEE;
+      --player-sidebar: #E9E7F5;
+      --player-panel: #E9E7F5;
+      --player-panel-2: #D6D3EA;
+      --player-border: #C3BFE0;
+      --player-border-strong: #A99BD5;
+      --player-text: #1B1730;
+      --player-muted: #53507A;
+      --player-blue: #6D28D9;
+      --player-blue-2: #4C1D95;
+      --player-green: #15803D;
+      --player-yellow: #B45309;
+      --player-red: #B91C1C;
       --player-radius: 16px;
       --player-shadow: 0 18px 45px rgba(0, 0, 0, 0.18);
     }
@@ -46,7 +47,7 @@
       min-height: 100vh;
       overflow-x: hidden;
       background:
-        radial-gradient(circle at 78% 0%, rgba(61, 111, 190, 0.08), transparent 30%),
+        radial-gradient(circle at 78% 0%, rgba(109, 40, 217, 0.08), transparent 30%),
         var(--player-bg);
     }
 
@@ -55,7 +56,7 @@
     .player-page .sidebar {
       background: var(--player-sidebar) !important;
       border-right: 1px solid var(--player-border) !important;
-      width: 276px !important;
+      width: 240px !important;
     }
 
     .player-page .brand {
@@ -63,7 +64,7 @@
     }
 
     .player-page .brand-mark {
-      box-shadow: 0 10px 28px rgba(74, 102, 235, 0.24);
+      filter: drop-shadow(0 5px 8px rgba(76, 29, 149, 0.18));
     }
 
     .player-page .sidebar nav {
@@ -77,7 +78,7 @@
       min-height: 46px;
       padding: 0 16px !important;
       border-radius: 11px !important;
-      color: #8ca9ca !important;
+      color: #53507A !important;
       text-decoration: none !important;
       font-size: 14px !important;
       font-weight: 500;
@@ -86,19 +87,26 @@
     }
 
     .player-page .sidebar nav a:hover {
-      background: rgba(77, 132, 211, 0.08) !important;
-      color: #dbe9fb !important;
+      background: #D6D3EA !important;
+      color: #4C1D95 !important;
     }
 
     .player-page .sidebar nav a.active {
-      background: #122b47 !important;
-      color: #ffffff !important;
-      box-shadow: inset 3px 0 0 #5e9cff;
+      background: #6D28D9 !important;
+      color: #F3F0FF !important;
+      box-shadow: inset 3px 0 0 #4C1D95;
     }
 
     .player-page .sidebar-bottom {
       padding: 16px 14px !important;
     }
+    .player-page .brand strong,.player-page .mini-profile strong { color:#1B1730 !important; }
+    .player-page .brand small,.player-page .mini-profile small { color:#53507A !important; }
+    .player-page .overview-quick-stats { grid-template-columns:repeat(4,minmax(0,1fr)) !important; margin-top:14px !important; }
+    .player-page .overview-quick-stats .stat-card { min-height:96px; padding:15px !important; }
+    .player-page .overview-quick-stats .stat-card strong { font-size:22px; margin-top:9px; }
+    .player-page .overview-quick-stats .stat-card small { margin-top:6px; }
+    .overview-recent-panel .dashboard-panel-head a { color:#6D28D9; font-size:11px; font-weight:700; text-decoration:none; }
 
     .player-page .mini-profile {
       padding: 12px 10px !important;
@@ -110,14 +118,16 @@
       width: 100%;
       margin-top: 10px;
     }
+    .player-page #logoutBtn { min-height:46px; border:1px solid #6D28D9 !important; background:#6D28D9 !important; color:#F3F0FF !important; font-weight:800; box-shadow:0 8px 18px rgba(76,29,149,.16); }
+    .player-page #logoutBtn:hover { background:#4C1D95 !important; border-color:#4C1D95 !important; }
 
     /* ---------- Main ---------- */
 
     .player-page .dashboard-main {
-      margin-left: 276px !important;
-      width: calc(100% - 276px) !important;
+      margin-left: 240px !important;
+      width: calc(100% - 240px) !important;
       min-height: 100vh;
-      padding: 38px 46px 60px !important;
+      padding: 30px 40px 50px !important;
       box-sizing: border-box;
       background: transparent !important;
     }
@@ -125,7 +135,7 @@
     .player-view {
       display: none !important;
       width: 100%;
-      max-width: 1420px;
+      max-width: 1160px;
       margin: 0 auto;
     }
 
@@ -180,20 +190,20 @@
       font-size: 14px;
     }
 
-    .overview-insight { display:grid; grid-template-columns:minmax(240px,.9fr) minmax(300px,1.1fr); align-items:center; gap:24px; min-height:154px; margin:0 0 18px; padding:22px 26px; overflow:hidden; border:1px solid rgba(87,148,231,.34); border-radius:18px; background:radial-gradient(ellipse at 88% 0%,rgba(61,112,205,.22),transparent 43%),linear-gradient(112deg,#102943,#0c192a 68%,#111f34); box-shadow:0 16px 38px rgba(0,0,0,.18); }
+    .overview-insight { display:grid; grid-template-columns:minmax(240px,.9fr) minmax(300px,1.1fr); align-items:center; gap:24px; min-height:154px; margin:0 0 18px; padding:22px 26px; overflow:hidden; border:1px solid #C3BFE0; border-radius:18px; background:linear-gradient(112deg,#E9E7F5,#D6D3EA); box-shadow:0 16px 38px rgba(27,23,48,.10); }
     .overview-insight-copy { display:flex; align-items:flex-start; gap:14px; }
-    .overview-insight-mark { display:grid; place-items:center; width:42px; height:42px; flex:0 0 auto; border:1px solid rgba(115,165,255,.32); border-radius:13px; color:#91b9ff; background:rgba(73,124,213,.15); font-size:20px; }
-    .overview-insight-copy h2 { margin:1px 0 6px; color:#f2f7ff; font-size:18px; letter-spacing:-.02em; }
-    .overview-insight-copy p { max-width:390px; margin:0; color:#9bb5d3; font-size:12px; line-height:1.6; }
-    .overview-trend { min-width:0; padding:14px 16px 10px; border:1px solid rgba(126,161,204,.16); border-radius:14px; background:rgba(6,17,29,.38); }
-    .overview-trend-head { display:flex; align-items:center; justify-content:space-between; gap:10px; color:#9bb5d3; font-size:11px; }
-    .overview-trend-head strong { color:#dceaff; font-size:11px; }
+    .overview-insight-mark { display:grid; place-items:center; width:42px; height:42px; flex:0 0 auto; border:1px solid #C3BFE0; border-radius:13px; color:#4C1D95; background:#CFC6F2; font-size:20px; }
+    .overview-insight-copy h2 { margin:1px 0 6px; color:#1B1730; font-size:18px; letter-spacing:-.02em; }
+    .overview-insight-copy p { max-width:390px; margin:0; color:#53507A; font-size:12px; line-height:1.6; }
+    .overview-trend { min-width:0; padding:14px 16px 10px; border:1px solid #C3BFE0; border-radius:14px; background:#F0EFF9; }
+    .overview-trend-head { display:flex; align-items:center; justify-content:space-between; gap:10px; color:#53507A; font-size:11px; }
+    .overview-trend-head strong { color:#1B1730; font-size:11px; }
     .overview-trend-chart { display:flex; align-items:flex-end; gap:9px; height:58px; margin-top:12px; }
-    .overview-trend-bar { position:relative; flex:1; min-width:8px; max-width:34px; height:var(--bar-height); min-height:5px; border-radius:6px 6px 2px 2px; background:linear-gradient(180deg,#6da2ff,#4267c4); box-shadow:0 0 16px rgba(79,132,231,.16); }
+    .overview-trend-bar { position:relative; flex:1; min-width:8px; max-width:34px; height:var(--bar-height); min-height:5px; border-radius:6px 6px 2px 2px; background:linear-gradient(180deg,#6D28D9,#4C1D95); box-shadow:0 0 16px rgba(76,29,149,.16); }
     .overview-trend-bar[data-level="medium"] { background:linear-gradient(180deg,#f2bb68,#bd7743); }
     .overview-trend-bar[data-level="high"] { background:linear-gradient(180deg,#f17c78,#bc4f68); }
-    .overview-trend-empty { align-self:center; color:#718ba9; font-size:11px; }
-    .overview-trend-foot { display:flex; justify-content:space-between; margin-top:8px; color:#6f89a8; font-size:9px; }
+    .overview-trend-empty { align-self:center; color:#53507A; font-size:11px; }
+    .overview-trend-foot { display:flex; justify-content:space-between; margin-top:8px; color:#53507A; font-size:9px; }
 
     .player-page .stats-grid {
       display: grid !important;
@@ -208,7 +218,7 @@
       padding: 20px !important;
       border: 1px solid var(--player-border) !important;
       border-radius: var(--player-radius) !important;
-      background: linear-gradient(145deg, rgba(16, 34, 55, 0.98), rgba(9, 24, 41, 0.98)) !important;
+      background: linear-gradient(145deg, #E9E7F5, #D6D3EA) !important;
       box-shadow: var(--player-shadow);
     }
 
@@ -222,7 +232,7 @@
     .player-page .stat-card strong {
       display: block;
       margin-top: 13px;
-      color: #ffffff;
+      color: #1B1730;
       font-size: 28px;
       line-height: 1;
     }
@@ -230,12 +240,64 @@
     .player-page .stat-card small {
       display: block;
       margin-top: 10px;
-      color: #7597bd;
+      color: #53507A;
       font-size: 11px;
     }
+    .overview-masthead { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:15px; }
+    .overview-masthead h1 { margin:4px 0 0; font-size:28px; }
+    .overview-glance { display:grid; grid-template-columns:1.35fr repeat(3,minmax(0,1fr)) auto; align-items:center; gap:16px; margin-bottom:14px; padding:18px 22px; border-radius:15px; background:linear-gradient(105deg,#4C1D95,#2f1264); color:#F3F0FF; }
+    .overview-glance-label { display:grid; gap:5px; font-size:11px; color:#ded2ff; }
+    .overview-glance-label strong { color:#fff; font-size:15px; }
+    .overview-glance-stat { display:grid; gap:3px; }
+    .overview-glance-stat strong { color:#fff; font-size:23px; }
+    .overview-glance-stat small { color:#ded2ff; font-size:10px; }
+    .overview-glance-action { justify-self:end; padding:11px 14px; border:1px solid rgba(243,240,255,.7) !important; border-radius:10px; background:transparent !important; color:#F3F0FF !important; font:inherit; font-size:11px; font-weight:700; text-decoration:none; white-space:nowrap; cursor:pointer; appearance:none; }
+    .overview-glance-action:hover { background:rgba(243,240,255,.12); }
+    .overview-risk-grid { display:grid; grid-template-columns:minmax(260px,.95fr) minmax(300px,1.05fr); gap:14px; margin-bottom:14px; }
+    .overview-risk-card { min-width:0; padding:18px; border:1px solid #C3BFE0; border-radius:15px; background:#F0EFF9; }
+    .overview-risk-card { display:flex; align-items:center; justify-content:center; gap:20px; }
+    .overview-breakdown { min-width:0; padding:18px; border:1px solid #C3BFE0; border-radius:15px; background:#F0EFF9; }
+    .risk-gauge { --risk-angle:0deg; --risk-color:#15803D; width:112px; height:112px; flex:0 0 auto; display:grid; place-items:center; border-radius:50%; background:conic-gradient(var(--risk-color) var(--risk-angle),#e3def3 0); position:relative; }
+    .risk-gauge::before { content:""; position:absolute; inset:9px; border-radius:50%; background:#F0EFF9; }
+    .risk-gauge-value { position:relative; display:grid; text-align:center; color:#1B1730; font-size:26px; font-weight:800; }
+    .risk-gauge-value small { color:#53507A; font-size:9px; font-weight:500; }
+    .risk-summary { display:grid; gap:7px; }
+    .risk-summary h2 { margin:0; color:#1B1730; font-size:14px; }
+    .risk-summary p { margin:0; color:#53507A; font-size:11px; line-height:1.5; }
+    .overview-alert-link { border:0; padding:0; background:transparent; color:#6D28D9; font:inherit; font-size:11px; font-weight:700; cursor:pointer; text-align:left; }
+    .overview-breakdown h2 { margin:0; color:#1B1730; font-size:14px; }
+    .risk-zones { display:grid; gap:10px; margin-top:14px; }
+    .risk-zone { display:grid; grid-template-columns:78px 1fr 26px; align-items:center; gap:8px; color:#53507A; font-size:10px; }
+    .risk-zone-track { height:7px; overflow:hidden; border-radius:99px; background:#e6e0f5; }
+    .risk-zone-fill { display:block; height:100%; width:0; border-radius:inherit; background:#0f766e; transition:width .35s ease,background .2s ease; }
+    .risk-zone strong { color:#53507A; font-size:10px; text-align:right; }
+    .risk-level-pill { width:max-content; padding:4px 9px; border-radius:99px; background:#dcefe2; color:#15803D; font-size:10px; font-weight:800; }
+    .overview-lower-grid { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(280px,.75fr); gap:14px; margin-bottom:14px; }
+    .overview-table-wrap { overflow-x:auto; }
+    .overview-risk-line { position:relative; display:block; height:128px; margin-top:8px; overflow:hidden; border:1px solid rgba(195,191,224,.7); border-radius:10px; background:linear-gradient(to bottom,#fcebdd 0 30%,#fff5e3 30% 66%,#e8f5ee 66% 100%); }
+    .overview-risk-line svg { display:block; width:100%; height:100%; overflow:visible; }
+    .overview-risk-line .chart-grid { stroke:rgba(83,80,122,.16); stroke-width:1; stroke-dasharray:3 5; }
+    .overview-risk-line .chart-zone-label { fill:#53507A; font-size:8px; font-weight:600; opacity:.8; }
+    .overview-risk-line .chart-area { fill:url(#riskAreaGradient); opacity:.8; }
+    .overview-risk-line polyline { fill:none; stroke:#6D28D9; stroke-width:2.8; stroke-linecap:round; stroke-linejoin:round; filter:url(#riskGlow); }
+    .overview-risk-line circle { fill:#F0EFF9; stroke:#6D28D9; stroke-width:2; cursor:pointer; transition:r .15s ease,fill .15s ease; }
+    .overview-risk-line circle.latest { fill:#6D28D9; stroke:#F0EFF9; stroke-width:2.5; }
+    .overview-risk-line circle:hover { r:5.5; fill:#6D28D9; }
+    .risk-chart-tooltip { position:absolute; z-index:4; pointer-events:none; transform:translate(-50%,-115%); min-width:130px; padding:8px 10px; border:1px solid #C3BFE0; border-radius:8px; background:#1B1730; color:#F3F0FF; font-size:10px; line-height:1.45; text-align:center; box-shadow:0 8px 20px rgba(27,23,48,.22); }
+    .risk-chart-tooltip[hidden] { display:none; }
+    .overview-recent-table { width:100%; border-collapse:collapse; font-size:10px; }
+    .overview-recent-table th,.overview-recent-table td { padding:9px 6px; text-align:left; border-bottom:1px solid #e4e0f0; color:#1B1730; white-space:nowrap; }
+    .overview-recent-table th { color:#53507A; font-size:9px; }
+    .overview-recent-table td:last-child { color:#4C1D95; font-weight:700; }
+    .overview-risk-badge { display:inline-block; padding:4px 8px; border-radius:999px; background:#dcefe2; color:#0f675d; font-size:10px; font-weight:800; }
+    .overview-risk-badge.medium { background:#f6ebd8; color:#92400e; }
+    .overview-risk-badge.high { background:#f5dcde; color:#B91C1C; }
+    .overview-risk-badge.pending { background:#e8e2f6; color:#4C1D95; }
+    @media(max-width:1000px){.overview-glance{grid-template-columns:repeat(3,1fr)}.overview-glance-label{grid-column:1/-1}.overview-glance-action{justify-self:start}.overview-risk-grid,.overview-lower-grid{grid-template-columns:1fr}}
+    @media(max-width:600px){.overview-glance{grid-template-columns:1fr 1fr;padding:15px}.overview-masthead{align-items:flex-start}.overview-masthead h1{font-size:23px}.overview-risk-card{align-items:flex-start;gap:14px}.risk-gauge{width:88px;height:88px}}
 
     .player-page .ip-stat { overflow-wrap:anywhere; font-size:17px !important; }
-    .dashboard-panels { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(300px,.85fr); gap:16px; margin-top:18px; }
+    .dashboard-panels { display:grid; grid-template-columns:1fr; gap:16px; margin-top:18px; }
     .dashboard-notice { margin:0 0 16px; padding:13px 16px; border:1px solid #7e5631; border-radius:10px; background:#2a2119; color:#f0c58d; font-size:13px; }
     .dashboard-notice[hidden] { display:none; }
     .dashboard-panel { min-width:0; padding:22px; border:1px solid var(--player-border); border-radius:var(--player-radius); background:linear-gradient(155deg,rgba(15,31,50,.98),rgba(10,23,39,.98)); box-shadow:var(--player-shadow); }
@@ -326,9 +388,9 @@
     .match-stat { padding:10px; border-radius:9px; background:rgba(255,255,255,.035); }
     .match-stat span { display:block; color:var(--player-muted); font-size:10px; }
     .match-stat strong { display:block; margin-top:6px; font-size:15px; }
-    .match-risk { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:13px; border-top:1px solid var(--player-border); }
+    .match-risk { display:grid; justify-items:center; gap:6px; padding:15px 0 2px; border-top:1px solid var(--player-border); text-align:center; }
     .match-risk span { color:var(--player-muted); font-size:11px; }
-    .match-risk strong { font-size:13px; }
+    .match-risk strong { color:#4C1D95; font-size:24px; letter-spacing:-.03em; }
     .match-analysis-note { margin:12px 0 0; color:var(--player-muted); font-size:11px; line-height:1.5; }
     .match-empty,.detection-empty { grid-column:1/-1; min-height:130px; display:grid; place-content:center; gap:7px; padding:22px; border:1px dashed var(--player-border-strong); border-radius:14px; color:var(--player-muted); text-align:center; }
     .match-empty strong,.detection-empty strong { color:#e7f0fc; font-size:13px; }
@@ -701,6 +763,141 @@
       .overview-insight { grid-template-columns:1fr; gap:16px; padding:20px; }
       .match-grid { padding:12px; grid-template-columns:1fr; }
     }
+
+    /* Lavender palette overrides for player-specific components. */
+    .player-page .sidebar nav a.active,
+    .player-page .sidebar nav a:hover { background:#CFC6F2 !important; color:#4C1D95 !important; }
+    .player-page .overview-insight,
+    .player-page .dashboard-panel,
+    .player-page .match-card,
+    .player-page .overview-match-row,
+    .player-page .overview-detection-row { background:#E9E7F5 !important; border-color:#C3BFE0 !important; color:#1B1730 !important; }
+    .player-page .overview-insight-copy h2,
+    .player-page .overview-trend-head strong,
+    .player-page .match-empty strong,
+    .player-page .appearance-group h3 { color:#1B1730 !important; }
+    .player-page .overview-insight-copy p,
+    .player-page .overview-trend-head,
+    .player-page .overview-trend-empty,
+    .player-page .overview-trend-foot,
+    .player-page .dashboard-panel-caption { color:#53507A !important; }
+    .player-page .overview-trend,
+    .player-page .match-stat,
+    .player-page .appearance-option:not(.banner-option) { background:#D6D3EA !important; border-color:#C3BFE0 !important; color:#1B1730 !important; }
+    .player-page .banner-option { background-color:#D6D3EA !important; background-image:var(--banner-swatch) !important; border-color:#C3BFE0 !important; }
+    .player-page .appearance-option[aria-pressed="true"] { border-color:#6D28D9 !important; box-shadow:0 0 0 2px rgba(109,40,217,.18) !important; }
+    .player-page .appearance-hint { color:#53507A !important; }
+    .player-page .appearance-upload { border-color:#A99BD5 !important; background:#CFC6F2 !important; color:#4C1D95 !important; }
+    .player-page .appearance-upload:hover { border-color:#6D28D9 !important; background:#D6D3EA !important; }
+    .player-page .profile-row strong { color:#1B1730 !important; }
+    .player-page .profile-identity h3 { color:#1B1730 !important; }
+    .player-page .profile-identity p,
+    .player-page .profile-row span { color:#53507A !important; }
+    .player-page .profile-avatar:not(.has-profile-image) { background:linear-gradient(135deg,#6D28D9,#4C1D95) !important; color:#F3F0FF !important; }
+    .player-page .match-table thead,
+    .player-page .match-table tbody tr:hover { background:#D6D3EA !important; }
+    .player-page .match-table th,
+    .player-page .match-table td { color:#1B1730 !important; border-color:#C3BFE0 !important; }
+    .player-page .match-table th { color:#53507A !important; }
+    .player-page .detection-card,
+    .player-page .security-card,
+    .player-page .profile-card,
+    .player-page .match-shell { background:#E9E7F5 !important; border-color:#C3BFE0 !important; color:#1B1730 !important; }
+    .player-page .profile-details input,
+    .player-page .profile-details select,
+    .player-page .profile-details textarea { background:#F0EFF9 !important; border-color:#C3BFE0 !important; color:#1B1730 !important; }
+    .player-page .severity-low { color:#15803D !important; background:#dcefe2 !important; }
+    .player-page .severity-medium { color:#B45309 !important; background:#f6ebd8 !important; }
+    .player-page .severity-high { color:#B91C1C !important; background:#f5dcde !important; }
+
+    .match-review-backdrop { position:fixed; z-index:999; inset:0; background:rgba(27,23,48,.25); backdrop-filter:blur(3px); }
+    .match-review-backdrop[hidden] { display:none; }
+    .match-review-toast { position:fixed; z-index:1000; top:50%; left:50%; transform:translate(-50%,-50%); display:flex; align-items:flex-start; gap:14px; width:min(500px,calc(100vw - 32px)); padding:22px; border:1px solid #C3BFE0; border-left:5px solid #6D28D9; border-radius:18px; background:#F0EFF9; color:#1B1730; box-shadow:0 24px 70px rgba(27,23,48,.3); }
+    .match-review-toast[hidden] { display:none; }
+    .match-review-icon { display:grid; place-items:center; width:38px; height:38px; flex:0 0 auto; border-radius:50%; background:#dcefe2; color:#15803D; font-weight:900; }
+    .match-review-content { flex:1; }
+    .match-review-content strong { display:block; font-size:18px; }
+    .match-review-toast p { margin:7px 0; color:#53507A; font-size:13px; line-height:1.5; }
+    .match-review-toast small { color:#53507A; font-size:11px; }
+    .match-review-toast a { display:inline-block; margin-top:12px; color:#6D28D9; font-size:12px; font-weight:800; text-decoration:none; }
+    .match-review-toast button { border:0; background:transparent; color:#53507A; font-size:22px; cursor:pointer; line-height:1; }
+    .reward-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:18px; }
+    .reward-balance { display:grid; gap:7px; padding:20px; border:1px solid var(--player-border); border-radius:var(--player-radius); background:#E9E7F5; }
+    .reward-balance span,.reward-balance small { color:var(--player-muted); font-size:12px; }
+    .reward-balance strong { color:var(--player-blue-2); font-size:26px; }
+    .equipped-reward-badge { display:inline-block; margin-top:3px; padding:4px 8px; border:1px solid #C3BFE0; border-radius:999px; background:#CFC6F2; color:#4C1D95; font-size:10px; font-weight:700; }
+    .equipped-reward-badge[hidden] { display:none !important; }
+    .reward-store,.reward-history,.support-assistant,.support-contact,.support-ticket-history { margin-top:16px; padding:22px; border:1px solid var(--player-border); border-radius:var(--player-radius); background:#E9E7F5; }
+    .reward-store-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+    .reward-item { display:grid; gap:9px; padding:16px; border:1px solid var(--player-border); border-radius:12px; background:#F0EFF9; }
+    .reward-item h3,.support-assistant h3,.support-contact h3 { margin:0; font-size:14px; }
+    .reward-item p { margin:0; color:var(--player-muted); font-size:12px; line-height:1.5; }
+    .reward-item .reward-price { color:#4C1D95; font-weight:800; }
+    .reward-item button:disabled { opacity:.55; cursor:not-allowed; }
+    .support-layout { display:grid; grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr); gap:16px; }
+    .support-faq-list { display:grid; gap:8px; margin:14px 0; }
+    .support-faq-button { padding:10px 12px; border:1px solid var(--player-border); border-radius:10px; background:#F0EFF9; color:#4C1D95; text-align:left; cursor:pointer; }
+    .support-faq-button:hover { background:#CFC6F2; }
+    .support-answer { min-height:70px; padding:13px; border-radius:10px; background:#D6D3EA; color:#1B1730; font-size:12px; line-height:1.6; }
+    .support-form { display:grid; gap:12px; margin-top:14px; }
+    .support-form label { display:grid; gap:6px; color:#53507A; font-size:12px; font-weight:600; }
+    .support-form input,.support-form select,.support-form textarea { width:100%; padding:10px 12px; border:1px solid #C3BFE0; border-radius:9px; background:#F0EFF9; color:#1B1730; font:inherit; font-size:12px; }
+    .support-form textarea { resize:vertical; }
+    .support-form small { color:#53507A; font-weight:400; }
+    .support-form-status { color:#15803D; font-size:12px; }
+    .support-ticket { padding:13px 0; border-bottom:1px solid var(--player-border); }
+    .support-ticket:last-child { border-bottom:0; }
+    .support-ticket-head { display:flex; justify-content:space-between; gap:12px; }
+    .support-ticket p { white-space:pre-wrap; color:#53507A; font-size:12px; line-height:1.5; }
+    .support-ticket .admin-reply { padding:10px 12px; border-radius:9px; background:#D6D3EA; color:#1B1730; font-size:12px; }
+    .leaderboard-hero { display:grid; grid-template-columns:1.4fr repeat(3,1fr); gap:12px; align-items:center; margin-bottom:16px; padding:20px; border:1px solid #C3BFE0; border-radius:16px; background:linear-gradient(120deg,#4C1D95,#6D28D9); color:#F3F0FF; box-shadow:0 16px 36px rgba(76,29,149,.2); }
+    .leaderboard-hero-icon { display:grid; place-items:center; width:52px; height:52px; border-radius:15px; background:rgba(255,255,255,.16); font-size:25px; }
+    .leaderboard-hero strong { display:block; font-size:24px; }
+    .leaderboard-hero span { display:block; margin-top:4px; color:#ddd3ff; font-size:11px; }
+    .leaderboard-card { padding:22px; border:1px solid var(--player-border); border-radius:var(--player-radius); background:#E9E7F5; }
+    .overview-leaderboard { min-width:0; padding:18px; border:1px solid #C3BFE0; border-radius:15px; background:#F0EFF9; }
+    .overview-leaderboard .leaderboard-list { gap:6px; }
+    .overview-leaderboard .leaderboard-row { grid-template-columns:30px 1fr auto; padding:9px 10px; }
+    .overview-leaderboard .leaderboard-row .leaderboard-metric:last-child { display:none; }
+    .leaderboard-list { display:grid; gap:8px; }
+    .leaderboard-row { display:grid; grid-template-columns:44px 1fr auto auto; gap:12px; align-items:center; padding:13px 14px; border:1px solid #C3BFE0; border-radius:12px; background:#F0EFF9; }
+    .leaderboard-row.current { border-color:#8b6bd9; background:#e6defa; }
+    .leaderboard-rank { color:#6D28D9; font-size:17px; font-weight:900; text-align:center; }
+    .leaderboard-player strong,.leaderboard-player small { display:block; }
+    .leaderboard-player small { margin-top:3px; color:#53507A; font-size:10px; }
+    .leaderboard-metric { text-align:right; }
+    .leaderboard-metric strong { display:block; color:#4C1D95; }
+    .leaderboard-metric small { color:#53507A; font-size:10px; }
+    .detection-modal-backdrop { position:fixed; z-index:1100; inset:0; display:grid; place-items:center; padding:18px; background:rgba(27,23,48,.32); backdrop-filter:blur(4px); }
+    .detection-modal-backdrop[hidden] { display:none; }
+    .detection-modal { width:min(520px,100%); padding:24px; border:1px solid #C3BFE0; border-radius:18px; background:#F0EFF9; box-shadow:0 24px 70px rgba(27,23,48,.28); }
+    .detection-modal-head { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+    .detection-modal h2 { margin:0; color:#1B1730; font-size:20px; }
+    .detection-modal p { color:#53507A; font-size:13px; line-height:1.65; }
+    .detection-modal ul { display:grid; gap:9px; padding-left:20px; color:#53507A; font-size:12px; line-height:1.5; }
+    .detection-modal-close { border:0; background:transparent; color:#53507A; font-size:24px; cursor:pointer; }
+    @media(max-width:700px){.leaderboard-hero{grid-template-columns:1fr 1fr}.leaderboard-hero-icon{display:none}.leaderboard-row{grid-template-columns:34px 1fr auto}.leaderboard-row .leaderboard-metric:last-child{display:none}}
+    .support-proof { display:inline-block; margin:4px 8px 4px 0; color:#6D28D9; font-size:12px; }
+    @media(max-width:800px){.support-layout{grid-template-columns:1fr}.reward-store-grid{grid-template-columns:1fr 1fr}}
+    @media(max-width:600px){.reward-summary,.reward-store-grid{grid-template-columns:1fr}}
+    .player-page .dashboard-notice { border-color:#e8cfaa !important; background:#f6ebd8 !important; color:#92400e !important; }
+    .player-help-widget { position:fixed; z-index:950; right:24px; bottom:24px; }
+    .player-help-toggle { display:flex; align-items:center; gap:9px; min-height:50px; padding:0 19px; border:0; border-radius:999px; background:#6D28D9; color:#F3F0FF; font-weight:800; box-shadow:0 10px 28px rgba(76,29,149,.28); cursor:pointer; }
+    .player-help-toggle:hover { background:#4C1D95; }
+    .player-help-panel { width:min(360px,calc(100vw - 28px)); margin-bottom:12px; padding:17px; border:1px solid #C3BFE0; border-radius:16px; background:#E9E7F5; color:#1B1730; box-shadow:0 16px 45px rgba(27,23,48,.22); }
+    .player-help-panel[hidden] { display:none; }
+    .player-help-head { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    .player-help-head div { display:grid; gap:4px; }
+    .player-help-head small { color:#53507A; }
+    .player-help-head button { border:0; background:transparent; color:#53507A; font-size:24px; cursor:pointer; }
+    .player-help-questions { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin:14px 0; }
+    .player-help-questions button { min-height:38px; padding:7px; border:1px solid #C3BFE0; border-radius:9px; background:#F0EFF9; color:#4C1D95; font-size:11px; cursor:pointer; }
+    #playerHelpForm { display:flex; gap:7px; }
+    #playerHelpForm input { min-width:0; flex:1; padding:10px; border:1px solid #C3BFE0; border-radius:9px; background:#F0EFF9; color:#1B1730; }
+    #playerHelpForm button { border:0; border-radius:9px; padding:0 13px; background:#6D28D9; color:#F3F0FF; font-weight:700; cursor:pointer; }
+    #playerHelpAnswer { min-height:50px; margin:12px 0 8px; color:#53507A; font-size:12px; line-height:1.5; }
+    #playerHelpSupport { color:#6D28D9; font-size:12px; font-weight:700; }
+    @media(max-width:600px){.player-help-widget{right:14px;bottom:14px}}
   </style>
 </head>
 
@@ -713,7 +910,7 @@
   <aside class="sidebar">
 
     <div class="brand">
-      <div class="brand-mark">SF</div>
+      <img class="brand-mark" src="public/securefps-mark.svg" alt="SecureFPS logo">
       <div>
         <strong>SecureFPS</strong>
         <small>Gaming Security</small>
@@ -726,20 +923,25 @@
         Overview
       </a>
 
-      <a href="#games" data-section="games">
-        Game Hub
-      </a>
-
       <a href="#matches" data-section="matches">
         Matches
       </a>
-
-      <a href="#detections" data-section="detections">
-        Detections
+      <a href="#leaderboard" data-section="leaderboard">
+        Leaderboard
+      </a>
+      <a href="#games" data-section="games">
+        Game Hub
+      </a>
+      <a href="#rewards" data-section="rewards">
+        Rewards
       </a>
 
       <a href="#security" data-section="security">
         Account Security
+      </a>
+
+      <a href="#support" data-section="support">
+        Support
       </a>
 
       <a href="#profile" data-section="profile">
@@ -774,6 +976,12 @@
 
   <main class="dashboard-main">
 
+    <div id="matchReviewBackdrop" class="match-review-backdrop" hidden></div>
+    <div id="matchReviewToast" class="match-review-toast" role="status" aria-live="polite" hidden>
+      <div class="match-review-icon" aria-hidden="true">✓</div><div class="match-review-content"><strong id="matchReviewTitle">Match review</strong><p id="matchReviewMessage"></p><small>Closing in <span id="matchReviewCountdown">10</span>s</small><a href="#matches" data-section="matches" id="matchReviewDetails">View match details</a></div>
+      <button id="matchReviewClose" type="button" aria-label="Dismiss match review">×</button>
+    </div>
+
 
     <!-- ==========================================================
          OVERVIEW
@@ -781,88 +989,50 @@
 
     <section id="overview" class="player-view player-view-active">
 
-      <div class="player-overview-head">
-
-        <div>
-          <p class="eyebrow">PLAYER CONSOLE</p>
-
-          <h1 id="welcome">
-            Welcome back
-          </h1>
-
-          <p class="player-overview-subtitle">
-            FPS Microgame matches, risk score, and sign-in details
-          </p>
-        </div>
-
+      <div class="overview-masthead">
+        <div><p class="eyebrow">PLAYER CONSOLE</p><h1 id="welcome">Welcome back</h1></div>
         <span class="status-pill" id="playerLiveStatus" role="status">Connecting…</span>
-
       </div>
 
-
-      <section class="overview-insight" aria-label="Match risk trend">
-        <div class="overview-insight-copy">
-          <div class="overview-insight-mark" aria-hidden="true">⌁</div>
-          <div>
-            <h2>Your matches, at a glance</h2>
-            <p id="overviewInsightText">SecureFPS tracks match activity and reviews gameplay signals as your sessions finish.</p>
-          </div>
-        </div>
-        <div class="overview-trend">
-          <div class="overview-trend-head"><span>Recent match risk</span><strong id="overviewTrendValue">Waiting for analysis</strong></div>
-          <div class="overview-trend-chart" id="overviewRiskTrend" role="img" aria-label="Recent match risk trend"><span class="overview-trend-empty">Match analysis appears here</span></div>
-          <div class="overview-trend-foot"><span>OLDER</span><span>RECENT</span></div>
-        </div>
+      <section class="overview-glance" aria-label="Platform at a glance">
+        <div class="overview-glance-label"><span>PLATFORM AT A GLANCE</span><strong>Fair play community</strong></div>
+        <div class="overview-glance-stat"><strong id="cleanMatchesPercent">—</strong><small>matches clean this week</small></div>
+        <div class="overview-glance-stat"><strong id="matchesToday">—</strong><small>matches analyzed today</small></div>
+        <div class="overview-glance-stat"><strong id="playerRank">—</strong><small>your fair-play rank</small></div>
+        <button type="button" class="overview-glance-action" data-detection-info>How detection works</button>
       </section>
 
-
-      <section class="stats-grid">
-
-        <article class="stat-card">
-          <span>Matches played</span>
-          <strong id="matchesCount">—</strong>
-          <small>FPS Microgame sessions</small>
+      <section class="overview-risk-grid" aria-label="Current risk summary">
+        <article class="overview-risk-card">
+          <div class="risk-gauge" id="riskGauge"><div class="risk-gauge-value"><span id="riskScore">—</span><small>out of 100</small></div></div>
+          <div class="risk-summary"><h2>Current risk level</h2><span class="risk-level-pill" id="riskLevel">WAITING</span><p id="riskTrendCaption">Latest completed match analysis</p><p id="riskTopFactor">Top factor: —</p><button type="button" class="overview-alert-link" data-detection-info>How this is calculated</button></div>
         </article>
+        <article class="overview-breakdown"><h2>Risk breakdown</h2><div class="risk-zones" aria-label="Risk factors"><div class="risk-zone"><span>Aim behavior</span><span class="risk-zone-track"><span class="risk-zone-fill" id="riskAimFill" style="width:0%"></span></span><strong id="riskAimValue">—</strong></div><div class="risk-zone"><span>Reaction time</span><span class="risk-zone-track"><span class="risk-zone-fill" id="riskReactionFill" style="width:0%"></span></span><strong id="riskReactionValue">—</strong></div><div class="risk-zone"><span>Movement</span><span class="risk-zone-track"><span class="risk-zone-fill" id="riskMovementFill" style="width:0%"></span></span><strong id="riskMovementValue">—</strong></div><div class="risk-zone"><span>Input patterns</span><span class="risk-zone-track"><span class="risk-zone-fill" id="riskInputFill" style="width:0%"></span></span><strong id="riskInputValue">—</strong></div><div class="risk-zone"><span>Account / IP</span><span class="risk-zone-track"><span class="risk-zone-fill" id="riskAccountFill" style="width:0%"></span></span><strong id="riskAccountValue">—</strong></div></div></article>
+      </section>
 
-        <article class="stat-card">
-          <span>Current risk score</span>
-          <strong id="riskScore">Pending</strong>
-          <small>Latest completed analysis</small>
-        </article>
-
-        <article class="stat-card">
-          <span>Latest login IP</span>
-          <strong id="lastLoginIp" class="ip-stat">Not recorded</strong>
-          <small>Address observed by the server</small>
-        </article>
-
-        <article class="stat-card">
-          <span>Authentication</span>
-          <strong id="mfaStatus">Loading</strong>
-          <small>Authenticator status</small>
-        </article>
-
-        <article class="stat-card">
-          <span>Account status</span>
-          <strong id="accountStatus">Loading</strong>
-          <small>Current account state</small>
-        </article>
-
+      <section class="stats-grid overview-quick-stats">
+        <article class="stat-card"><span>Matches played</span><strong id="matchesCount">—</strong><small id="matchesSummary">FPS Microgame sessions</small></article>
+        <article class="stat-card"><span>Account status</span><strong id="accountStatus">Loading</strong><small>Current account state</small></article>
+        <article class="stat-card"><span>Two-factor auth</span><strong id="mfaStatus">Loading</strong><small>Authenticator app</small></article>
+        <article class="stat-card"><span>Last login</span><strong id="lastLoginIp" class="ip-stat">Not recorded</strong><small>Most recent sign-in address</small></article>
       </section>
 
       <div id="dashboardNotice" class="dashboard-notice" role="status" hidden></div>
 
-      <div class="dashboard-panels">
-        <section class="dashboard-panel">
-          <div class="dashboard-panel-head"><h2>Recent matches</h2><span class="dashboard-panel-caption">Latest sessions</span></div>
-          <div id="overviewMatchList" class="overview-match-list"><div class="match-empty">Loading match history…</div></div>
-        </section>
-        <section class="dashboard-panel">
-          <div class="dashboard-panel-head"><h2>Security review</h2><span class="dashboard-panel-caption">Recent gameplay signals</span></div>
-          <div id="overviewDetectionList" class="overview-detection-list"><div class="detection-empty">Loading security events…</div></div>
-        </section>
-      </div>
+      <section class="overview-lower-grid">
+        <article class="overview-breakdown"><div class="dashboard-panel-head"><h2>Risk trend, last 9 matches</h2><span class="dashboard-panel-caption">Older → Recent</span></div><div class="overview-trend-chart overview-risk-line" id="overviewRiskTrend" role="img" aria-label="Recent match risk trend"><span class="overview-trend-empty">Match analysis appears here</span></div><div class="overview-trend-foot"><span>Hover a point for match details</span></div></article>
+        <article class="overview-leaderboard"><div class="dashboard-panel-head"><div><h2>Top performers</h2><span class="dashboard-panel-caption">Kills · K/D · accuracy</span></div><a href="#leaderboard" data-section="leaderboard">View all</a></div><div id="overviewLeaderboardList" class="leaderboard-list"><div class="empty">Loading performance…</div></div></article>
+      </section>
+      <section class="dashboard-panel overview-recent-panel"><div class="dashboard-panel-head"><h2>Recent matches</h2><a href="#matches" data-section="matches">All matches</a></div><div class="overview-table-wrap"><table class="overview-recent-table"><thead><tr><th>Match</th><th>Date</th><th>K/D</th><th>Accuracy</th><th>Headshot %</th><th>Risk</th><th></th></tr></thead><tbody id="overviewRecentRows"><tr><td colspan="7">Loading match history…</td></tr></tbody></table></div></section>
 
+    </section>
+
+    <section id="leaderboard" class="player-view">
+      <div class="section-title">
+        <div><p class="eyebrow">COMMUNITY</p><h2>Performance leaderboard</h2><p class="page-description">Ranked by match performance: kills, K/D ratio, accuracy, and completed matches.</p></div>
+      </div>
+      <div class="leaderboard-hero"><div class="leaderboard-hero-icon">★</div><div><strong id="leaderboardRank">—</strong><span>Your current rank</span></div><div><strong id="leaderboardKills">—</strong><span>Total kills</span></div><div><strong id="leaderboardKd">—</strong><span>K/D ratio</span></div></div>
+      <section class="leaderboard-card"><div class="dashboard-panel-head"><div><h2>Top performers</h2><span class="dashboard-panel-caption">Kills, K/D, accuracy, completed matches</span></div><button class="play-btn" id="refreshLeaderboard" type="button">Refresh</button></div><div id="leaderboardList" class="leaderboard-list"><div class="empty">Loading leaderboard…</div></div></section>
     </section>
 
 
@@ -954,34 +1124,6 @@
 
 
     <!-- ==========================================================
-         DETECTIONS
-    =========================================================== -->
-
-    <section id="detections" class="player-view">
-
-      <div class="section-title">
-
-        <div>
-          <p class="eyebrow">DETECTIONS</p>
-
-          <h2>Gameplay security</h2>
-
-          <p class="page-description">
-            Security events detected during your gameplay.
-          </p>
-        </div>
-
-      </div>
-
-
-      <div id="detectionsList" class="detection-grid">
-        <div class="detection-empty"><strong>No detections recorded</strong><span>Security analysis appears here after a match is completed.</span></div>
-      </div>
-
-    </section>
-
-
-    <!-- ==========================================================
          ACCOUNT SECURITY
     =========================================================== -->
 
@@ -1066,6 +1208,22 @@
 
     </section>
 
+    <section id="rewards" class="player-view">
+      <div class="section-title"><div><p class="eyebrow">PLAYER REWARDS</p><h2>Your rewards</h2><p class="page-description">Earn coins and XP for daily sign-ins and completed matches.</p></div></div>
+      <div class="reward-summary" id="rewardSummary"><article class="reward-balance"><span>Coins</span><strong id="rewardCoins">—</strong></article><article class="reward-balance"><span>Experience</span><strong id="rewardXp">— XP</strong><small id="rewardLevel">Level 1</small></article><article class="reward-balance"><span>Daily streak</span><strong id="rewardStreak">— days</strong><small id="dailyRewardMessage">Daily bonus: 25 coins + 25 XP</small></article></div>
+      <section class="profile-card reward-store"><div class="dashboard-panel-head"><div><h2>Cosmetic store</h2><span class="dashboard-panel-caption">Spend coins on profile badges</span></div></div><div class="reward-store-grid" id="rewardStore"><div class="empty">Loading rewards…</div></div></section>
+      <section class="profile-card reward-history"><div class="dashboard-panel-head"><div><h2>Recent rewards</h2><span class="dashboard-panel-caption">Daily and match earnings</span></div></div><div id="rewardHistory" class="list"><div class="empty">Loading reward activity…</div></div></section>
+    </section>
+
+    <section id="support" class="player-view">
+      <div class="section-title"><div><p class="eyebrow">PLAYER SUPPORT</p><h2>How can we help?</h2><p class="page-description">Browse quick answers or send a message to the SecureFPS admin team.</p></div></div>
+      <div class="support-layout">
+        <section class="profile-card support-assistant"><h3>SecureFPS helper</h3><p class="appearance-hint">Choose a common question or ask about account access, matches, security, or rewards.</p><div class="support-faq-list" id="supportFaqList"></div><div class="support-answer" id="supportAnswer" role="status">Select a question to see a suggested solution.</div><form id="supportQuestionForm" class="support-form"><label>Ask a question<input id="supportQuestion" maxlength="240" placeholder="For example: Where are my match rewards?"></label><button class="play-btn" type="submit">Ask the helper</button></form></section>
+        <section class="profile-card support-contact"><h3>Contact support</h3><form id="supportTicketForm" class="support-form"><label>Topic<select id="supportCategory" required><option value="account">Account or sign-in</option><option value="match">Match or results</option><option value="security">Security review</option><option value="rewards">Rewards or store</option><option value="other">Other</option></select></label><label>Message<textarea id="supportMessage" rows="5" maxlength="3000" required placeholder="Describe what happened and what you need help with."></textarea></label><label>Screenshot or proof (optional)<input id="supportAttachment" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPG, or WebP up to 3 MB.</small></label><button class="play-btn" id="sendSupportTicket" type="submit">Send to admin</button><span id="supportFormStatus" class="appearance-status" role="status"></span></form></section>
+      </div>
+      <section class="profile-card support-ticket-history"><div class="dashboard-panel-head"><div><h2>Your support messages</h2><span class="dashboard-panel-caption">Replies from admin appear here</span></div><button class="play-btn" id="refreshSupportTickets" type="button">Refresh</button></div><div id="supportTicketList" class="list"><div class="empty">Loading messages…</div></div></section>
+    </section>
+
 
     <!-- ==========================================================
          PROFILE
@@ -1106,6 +1264,8 @@
               <h3 id="profileDisplayName">
                 Player
               </h3>
+
+              <span id="equippedRewardBadge" class="equipped-reward-badge" hidden></span>
 
               <p id="profileDisplayEmail">
                 player@example.com
@@ -1194,10 +1354,31 @@
 
   </main>
 
+  <aside class="player-help-widget" aria-label="SecureFPS help assistant">
+    <section id="playerHelpPanel" class="player-help-panel" aria-label="SecureFPS helper" hidden>
+      <div class="player-help-head"><div><strong>SecureFPS helper</strong><small>Quick answers for your account</small></div><button id="playerHelpClose" type="button" aria-label="Close helper">×</button></div>
+      <div class="player-help-questions"><button type="button" data-help-question="I can't sign in">Sign-in help</button><button type="button" data-help-question="Where is my match result?">Missing match</button><button type="button" data-help-question="What does a security review mean?">Risk review</button><button type="button" data-help-question="When do I earn coins and XP?">Coins and XP</button><button type="button" data-help-question="How does the leaderboard work?">Leaderboard</button></div>
+      <form id="playerHelpForm"><label class="sr-only" for="playerHelpInput">Ask the helper a question</label><input id="playerHelpInput" maxlength="240" placeholder="Ask a question…"><button type="submit">Ask</button></form>
+      <p id="playerHelpAnswer" role="status">Choose a topic or ask a question. Contact support for account specific help.</p>
+      <a href="#support" data-section="support" id="playerHelpSupport">Contact support</a>
+    </section>
+    <button id="playerHelpToggle" class="player-help-toggle" type="button" aria-expanded="false" aria-controls="playerHelpPanel"><span aria-hidden="true">✦</span> Help</button>
+  </aside>
+
+  <div id="detectionInfoModal" class="detection-modal-backdrop" hidden>
+    <section class="detection-modal" role="dialog" aria-modal="true" aria-labelledby="detectionInfoTitle">
+      <div class="detection-modal-head"><div><p class="eyebrow">SECURITY EXPLAINED</p><h2 id="detectionInfoTitle">How SecureFPS detection works</h2></div><button type="button" class="detection-modal-close" id="detectionInfoClose" aria-label="Close explanation">×</button></div>
+      <p>SecureFPS reviews gameplay telemetry after each completed match. It is a safety signal to help protect fair play, not an automatic ban decision.</p>
+      <ul><li><strong>Gameplay patterns:</strong> aim behavior, reaction timing, movement, accuracy, and input consistency are evaluated.</li><li><strong>Risk score:</strong> the model combines those signals into a score from 0 to 100. Lower scores indicate lower risk.</li><li><strong>Review timing:</strong> the result appears after enough match events are recorded and the analysis completes.</li><li><strong>Privacy:</strong> account and sign-in signals are used only as supporting security context.</li></ul>
+      <button type="button" class="play-btn" id="detectionInfoDone">Got it</button>
+    </section>
+  </div>
+
 
   <!-- Existing application logic -->
-  <script src="js/api.js?v=realtime-live-2"></script>
-  <script src="js/player.js?v=overview-trend-1"></script>
+  <script src="js/api.js?v=brand-lockup-1"></script>
+  <script src="js/player-features.js?v=player-suite-3"></script>
+  <script src="js/player.js?v=auth-logout-recovery-1"></script>
 
 
   <!-- ============================================================
@@ -1256,9 +1437,9 @@
         );
 
         const selectedButton =
-          buttons.find(function (button) {
+          buttons.filter(function (button) {
             return button.dataset.section === sectionId;
-          });
+          }).pop();
 
         if (selectedButton) {
           selectedButton.classList.add("active");
