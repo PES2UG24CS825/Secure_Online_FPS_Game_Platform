@@ -27,6 +27,7 @@ function displayRiskScore(value) {
 let loginPage = 1;
 let playersPage = 1;
 const playersPageSize = 20;
+let adminOverviewPlayers = [];
 
 function renderPlayersLoading() {
   const body = document.getElementById("players");
@@ -45,9 +46,24 @@ async function loadPlayers() {
   });
   if (search) params.set("search", search);
   try {
-    const data = await api(`/admin/players?${params.toString()}`);
+    let data;
+    try {
+      data = await api(`/admin/players?${params.toString()}`);
+    } catch (error) {
+      if (error.status !== 404) throw error;
+      const searchLower = search.toLowerCase();
+      const filteredPlayers = adminOverviewPlayers.filter((player) =>
+        !searchLower ||
+        `${player.name || ""} ${player.email || ""}`.toLowerCase().includes(searchLower)
+      );
+      const start = (playersPage - 1) * playersPageSize;
+      data = {
+        players: filteredPlayers.slice(start, start + playersPageSize),
+        total: filteredPlayers.length
+      };
+    }
     const players = Array.isArray(data.players) ? data.players : [];
-    body.innerHTML = players.map((player) => `<tr><td><strong>${escapeHtml(player.name || "Player")}</strong>${player.demo ? '<small>DEMO TEST ACCOUNT</small>' : ""}<small>${escapeHtml(player.email || "")}</small></td><td>${escapeHtml(player.role || "player")}</td><td><span class="badge ${player.mfa_enabled ? "good" : "warn"}">${player.mfa_enabled ? "MFA enabled" : "Disabled"}</span></td><td>${escapeHtml(player.matches_played ?? 0)}</td><td>${escapeHtml(displayRiskScore(player.risk_score))}</td><td>${escapeHtml(player.last_login_ip || "No login recorded")}<small>${escapeHtml(displayDate(player.last_login))}</small></td><td>${escapeHtml(displayDate(player.created_at))}</td><td><button class="play-btn" data-action="suspend" data-id="${escapeHtml(player.id)}" data-player-name="${escapeHtml(player.name || "Player")}">Suspend</button> <button class="play-btn danger-btn" data-action="delete" data-id="${escapeHtml(player.id)}" data-player-name="${escapeHtml(player.name || "Player")}">Delete</button></td></tr>`).join("") || '<tr><td colspan="8" class="empty-state">No players found.</td></tr>';
+    body.innerHTML = players.map((player) => `<tr><td><strong>${escapeHtml(player.name || "Player")}</strong>${player.demo ? '<small>DEMO TEST ACCOUNT</small>' : ""}<small>${escapeHtml(player.email || "")}</small></td><td>${escapeHtml(player.role || "player")}</td><td><span class="badge ${player.mfa_enabled ? "good" : "warn"}">${player.mfa_enabled ? "MFA enabled" : "Disabled"}</span></td><td>${escapeHtml(player.matches_played ?? 0)}</td><td>${escapeHtml(displayRiskScore(player.risk_score))}</td><td>${escapeHtml(player.last_login_ip || "No login recorded")}<small>${escapeHtml(displayDate(player.last_login))}</small></td><td>${escapeHtml(displayDate(player.created_at))}</td><td><button class="play-btn" data-action="revoke" data-id="${escapeHtml(player.id)}" data-player-name="${escapeHtml(player.name || "Player")}">Suspend</button> <button class="play-btn danger-btn" data-action="delete" data-id="${escapeHtml(player.id)}" data-player-name="${escapeHtml(player.name || "Player")}">Delete</button></td></tr>`).join("") || '<tr><td colspan="8" class="empty-state">No players found.</td></tr>';
     const total = Number(data.total ?? data.total_players ?? data.count ?? players.length);
     const pageCount = Math.max(1, Math.ceil(total / playersPageSize));
     playersPage = Math.min(playersPage, pageCount);
@@ -270,6 +286,7 @@ async function loadAdmin() {
     document.getElementById("adminName").textContent = me.user.name;
     document.getElementById("adminEmail").textContent = me.user.email;
     const data = await api("/admin/overview");
+    adminOverviewPlayers = Array.isArray(data.players) ? data.players : [];
     document.getElementById("playerCount").textContent = data.players.length;
     document.getElementById("matchCount").textContent = data.summary?.matches_analyzed ?? data.matches?.length ?? 0;
     document.getElementById("eventCount").textContent = data.events.length;
@@ -441,7 +458,7 @@ document.getElementById("players").addEventListener("click", async (event) => {
   if (!button) return;
   const action = button.dataset.action;
   const playerName = button.dataset.playerName || "this player";
-  if (action === "suspend" && !await window.showAppConfirm(`Suspend ${playerName}?`, { title: "Suspend player", confirmText: "Suspend", tone: "warning" })) return;
+  if (action === "revoke" && !await window.showAppConfirm(`Suspend ${playerName}?`, { title: "Suspend player", confirmText: "Suspend", tone: "warning" })) return;
   if (action === "delete") {
     const confirmed = await window.showAppConfirm(`Delete ${playerName}? This action cannot be undone.`, { title: "Delete player", confirmText: "Delete", tone: "error", requireName: playerName });
     if (!confirmed) return;

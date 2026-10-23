@@ -112,10 +112,14 @@ window.showAppToast = function (message, tone = "info") {
 async function api(path, options = {}) {
   let response;
   try {
+    const headers = { ...(options.headers || {}) };
+    if (options.body && !headers["Content-Type"]) {
+      headers["Content-Type"] = "application/json";
+    }
     response = await fetch(`${API_BASE}${path}`, {
+      ...options,
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-      ...options
+      headers
     });
   } catch (error) {
     throw new Error(`Cannot connect to the backend at ${API_BASE}. Start the backend and try again.`);
