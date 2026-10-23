@@ -24,13 +24,6 @@ window.showAppAlert = function (message, options = {}) {
   const body = document.createElement("p");
   body.className = "app-alert-message";
   body.textContent = String(message ?? "");
-  const verification = options.requireName ? document.createElement("input") : null;
-  if (verification) {
-    verification.type = "text";
-    verification.className = "confirm-name-input";
-    verification.placeholder = `Type ${options.requireName} to confirm`;
-    verification.setAttribute("aria-label", `Type ${options.requireName} to confirm deletion`);
-  }
   const actions = document.createElement("div");
   actions.className = "app-alert-actions";
   const button = document.createElement("button");
@@ -62,6 +55,13 @@ window.showAppConfirm = function (message, options = {}) {
     const body = document.createElement("p");
     body.className = "app-alert-message";
     body.textContent = String(message ?? "");
+    const verification = options.requireName ? document.createElement("input") : null;
+    if (verification) {
+      verification.type = "text";
+      verification.className = "confirm-name-input";
+      verification.placeholder = `Type ${options.requireName} to confirm`;
+      verification.setAttribute("aria-label", `Type ${options.requireName} to confirm deletion`);
+    }
     const actions = document.createElement("div");
     actions.className = "app-alert-actions";
     const cancel = document.createElement("button");

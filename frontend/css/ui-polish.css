@@ -84,6 +84,16 @@ a:focus-visible {
   color: #991B1B;
 }
 
+.confirm-name-input {
+  width: 100%;
+  min-height: 40px;
+  margin: 4px 0 14px;
+  padding: 8px 10px;
+  border: 1px solid #C3BFE0;
+  border-radius: 10px;
+  color: #1B1730;
+}
+
 .loading-skeleton span {
   display: block;
   height: 14px;
