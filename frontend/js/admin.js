@@ -467,7 +467,25 @@ document.getElementById("playersPagination")?.addEventListener("click", (event) 
   playersPage += Number(button.dataset.playersPage);
   loadPlayers();
 });
-document.getElementById("playerViewBtn").addEventListener("click", () => { window.location.href = "player.html"; });
+document.getElementById("playerViewBtn").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    const identity = await api("/auth/me");
+    if (identity.user?.role === "player") {
+      window.location.href = "game.html";
+      return;
+    }
+    await api("/auth/logout", { method: "POST" });
+    window.location.href = "login.html?next=game.html";
+  } catch (error) {
+    button.disabled = false;
+    window.showAppAlert(
+      error.message || "The player game could not be opened. Please sign out and log in with a player account.",
+      { title: "Player view unavailable", tone: "warning" }
+    );
+  }
+});
 document.getElementById("logoutBtn").addEventListener("click", async () => {
   try {
     await api("/auth/logout", { method: "POST" });

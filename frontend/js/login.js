@@ -1,5 +1,9 @@
 const loginForm = document.getElementById("loginForm");
 const message = document.getElementById("message");
+const requestedDestination = new URLSearchParams(window.location.search).get("next");
+const nextDestination = ["game.html", "player.html", "admin.html"].includes(requestedDestination)
+  ? requestedDestination
+  : "";
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -19,7 +23,10 @@ loginForm.addEventListener("submit", async (event) => {
       })
     });
     if (data.mfa_required) {
-      window.location.replace(`mfa.html${data.replace_other_session ? "?replace=1" : ""}`);
+      const params = new URLSearchParams();
+      if (data.replace_other_session) params.set("replace", "1");
+      if (nextDestination) params.set("next", nextDestination);
+      window.location.replace(`mfa.html${params.toString() ? `?${params}` : ""}`);
       return;
     }
     message.textContent = data.message || "Unable to continue sign-in.";

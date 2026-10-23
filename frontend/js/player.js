@@ -179,7 +179,7 @@ async function loadPlayerDashboard() {
   try {
     const me = await api("/auth/me");
     if (!me?.user || me.user.role !== "player") {
-      window.location.replace("login.html");
+      window.location.replace("login.html?next=game.html");
       return;
     }
     connectPlayerLiveEvents();
