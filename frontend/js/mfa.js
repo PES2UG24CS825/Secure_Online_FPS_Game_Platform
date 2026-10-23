@@ -1,5 +1,8 @@
 const form = document.getElementById("mfaForm");
 const message = document.getElementById("message");
+if (new URLSearchParams(window.location.search).get("replace") === "1") {
+  message.textContent = "Verify your code to sign in here; the other browser will be signed out.";
+}
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -11,11 +14,15 @@ form.addEventListener("submit", async (event) => {
   }
 
   try {
-    const data = await api("/auth/verify-mfa", {
+    await api("/auth/verify-mfa", {
       method: "POST",
       body: JSON.stringify({ code: document.getElementById("code").value })
     });
-    window.location.href = data.user?.role === "admin" ? "admin.html?v=admin-fix-2" : "player.html?v=player-fix-2";
+    const identity = await api("/auth/me");
+    const destination = identity.user?.role === "admin"
+      ? "admin.html"
+      : "player.html";
+    window.location.replace(destination);
   } catch (error) {
     message.textContent = error.message;
     if (submitButton) {

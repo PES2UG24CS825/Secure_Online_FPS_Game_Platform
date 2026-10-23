@@ -18,15 +18,16 @@ loginForm.addEventListener("submit", async (event) => {
         password: document.getElementById("password").value
       })
     });
-
     if (data.mfa_required) {
-      message.textContent = "Password accepted. Enter your authenticator code.";
-      window.location.href = "mfa.html";
+      window.location.replace(`mfa.html${data.replace_other_session ? "?replace=1" : ""}`);
       return;
     }
     message.textContent = data.message || "Unable to continue sign-in.";
   } catch (error) {
-    message.textContent = error.message;
+    message.textContent = error.message || "Unable to connect to the authentication server.";
+    if (error.status === 409) {
+      window.showAppAlert(error.message, { title: "Account already signed in", tone: "warning" });
+    }
     if (submitButton) {
       submitButton.disabled = false;
       submitButton.textContent = "Continue to MFA →";

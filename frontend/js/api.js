@@ -1,5 +1,4 @@
-const API_HOST = window.location.hostname || "127.0.0.1";
-const API_BASE = `http://${API_HOST}:5000/api`;
+const API_BASE = window.APP_CONFIG?.apiBase || `http://${window.location.hostname || "127.0.0.1"}:5000/api`;
 window.API_BASE = API_BASE;
 window.text = window.text || ((value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character])));
 window.dateText = window.dateText || ((value) => value ? new Date(value).toLocaleString() : "Unknown");
