@@ -36,6 +36,7 @@ function renderPlayersLoading() {
 async function loadPlayers() {
   const body = document.getElementById("players");
   if (!body) return;
+  body.setAttribute("aria-busy", "true");
   renderPlayersLoading();
   const search = document.getElementById("playerSearch")?.value.trim() || "";
   const params = new URLSearchParams({
@@ -56,6 +57,8 @@ async function loadPlayers() {
     body.innerHTML = `<tr><td colspan="8" class="empty-state">${escapeHtml(error.message || "Player data could not be loaded.")}</td></tr>`;
     const pagination = document.getElementById("playersPagination");
     if (pagination) pagination.textContent = "";
+  } finally {
+    body.setAttribute("aria-busy", "false");
   }
 }
 function renderLoginAudit(rows) {
@@ -383,7 +386,8 @@ function showAdminSection(sectionName, updateHash = false) {
   document.querySelectorAll("[data-admin-section]").forEach((button) => {
     const isActive = button.dataset.adminSection === section;
     button.classList.toggle("active", isActive);
-    button.setAttribute("aria-current", isActive ? "page" : "false");
+    if (isActive) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
   });
   const title = document.getElementById("adminPageTitle");
   if (title) title.textContent = adminSectionLabels[section];
