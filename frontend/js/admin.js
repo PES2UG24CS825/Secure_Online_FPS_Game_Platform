@@ -47,14 +47,14 @@ async function loadPlayers() {
   try {
     const data = await api(`/admin/players?${params.toString()}`);
     const players = Array.isArray(data.players) ? data.players : [];
-    body.innerHTML = players.map((player) => `<tr><td><strong>${escapeHtml(player.name || "Player")}</strong>${player.demo ? '<small>DEMO TEST ACCOUNT</small>' : ""}<small>${escapeHtml(player.email || "")}</small></td><td>${escapeHtml(player.role || "player")}</td><td><span class="badge ${player.mfa_enabled ? "good" : "warn"}">${player.mfa_enabled ? "MFA enabled" : "Disabled"}</span></td><td>${escapeHtml(player.matches_played ?? 0)}</td><td>${escapeHtml(displayRiskScore(player.risk_score))}</td><td>${escapeHtml(player.last_login_ip || "No login recorded")}<small>${escapeHtml(displayDate(player.last_login))}</small></td><td>${escapeHtml(displayDate(player.created_at))}</td><td><button class="play-btn" data-action="revoke" data-id="${escapeHtml(player.id)}" data-player-name="${escapeHtml(player.name || "Player")}">Suspend</button> <button class="play-btn danger-btn" data-action="delete" data-id="${escapeHtml(player.id)}" data-player-name="${escapeHtml(player.name || "Player")}">Delete</button></td></tr>`).join("") || '<tr><td colspan="8" class="empty-state">No players found.</td></tr>';
+    body.innerHTML = players.map((player) => `<tr><td><strong>${escapeHtml(player.name || "Player")}</strong>${player.demo ? '<small>DEMO TEST ACCOUNT</small>' : ""}<small>${escapeHtml(player.email || "")}</small></td><td>${escapeHtml(player.role || "player")}</td><td><span class="badge ${player.mfa_enabled ? "good" : "warn"}">${player.mfa_enabled ? "MFA enabled" : "Disabled"}</span></td><td>${escapeHtml(player.matches_played ?? 0)}</td><td>${escapeHtml(displayRiskScore(player.risk_score))}</td><td>${escapeHtml(player.last_login_ip || "No login recorded")}<small>${escapeHtml(displayDate(player.last_login))}</small></td><td>${escapeHtml(displayDate(player.created_at))}</td><td><button class="play-btn" data-action="suspend" data-id="${escapeHtml(player.id)}" data-player-name="${escapeHtml(player.name || "Player")}">Suspend</button> <button class="play-btn danger-btn" data-action="delete" data-id="${escapeHtml(player.id)}" data-player-name="${escapeHtml(player.name || "Player")}">Delete</button></td></tr>`).join("") || '<tr><td colspan="8" class="empty-state">No players found.</td></tr>';
     const total = Number(data.total ?? data.total_players ?? data.count ?? players.length);
     const pageCount = Math.max(1, Math.ceil(total / playersPageSize));
     playersPage = Math.min(playersPage, pageCount);
     const pagination = document.getElementById("playersPagination");
     if (pagination) pagination.innerHTML = `<button class="ghost-btn" type="button" data-players-page="-1" ${playersPage <= 1 ? "disabled" : ""}>Previous</button><span>Page ${playersPage} of ${pageCount}</span><button class="ghost-btn" type="button" data-players-page="1" ${playersPage >= pageCount || players.length < playersPageSize ? "disabled" : ""}>Next</button>`;
   } catch (error) {
-    body.innerHTML = `<tr><td colspan="8" class="empty-state">${escapeHtml(error.message || "Player data could not be loaded.")}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" class="empty-state"><strong>Player accounts unavailable</strong><span>${escapeHtml(error.message || "Player data could not be loaded.")}</span></td></tr>`;
     const pagination = document.getElementById("playersPagination");
     if (pagination) pagination.textContent = "";
   } finally {
@@ -441,7 +441,7 @@ document.getElementById("players").addEventListener("click", async (event) => {
   if (!button) return;
   const action = button.dataset.action;
   const playerName = button.dataset.playerName || "this player";
-  if (action === "revoke" && !await window.showAppConfirm(`Suspend ${playerName}?`, { title: "Suspend player", confirmText: "Suspend", tone: "warning" })) return;
+  if (action === "suspend" && !await window.showAppConfirm(`Suspend ${playerName}?`, { title: "Suspend player", confirmText: "Suspend", tone: "warning" })) return;
   if (action === "delete") {
     const confirmed = await window.showAppConfirm(`Delete ${playerName}? This action cannot be undone.`, { title: "Delete player", confirmText: "Delete", tone: "error", requireName: playerName });
     if (!confirmed) return;
