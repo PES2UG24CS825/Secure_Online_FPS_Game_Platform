@@ -229,7 +229,7 @@ async function loadAdmin() {
   const liveStatus = document.getElementById("adminLiveStatus");
   try {
     const me = await api("/auth/me");
-    if (!["admin", "moderator", "super_admin"].includes(me.user.role)) { window.location.href = "dashboard.html"; return; }
+    if (!["admin", "moderator", "super_admin"].includes(me.user.role)) { window.location.href = "player.html"; return; }
     connectAdminLiveEvents();
     document.getElementById("adminName").textContent = me.user.name;
     document.getElementById("adminEmail").textContent = me.user.email;
@@ -400,7 +400,7 @@ document.getElementById("supportProofDialog")?.addEventListener("click", (event)
 });
 
 document.getElementById("players").addEventListener("click", async (event) => { const button = event.target.closest("button[data-action]"); if (!button) return; await api(`/admin/players/${button.dataset.id}/${button.dataset.action}`, { method: "POST" }); loadAdmin(); });
-document.getElementById("playerViewBtn").addEventListener("click", () => { window.location.href = "dashboard.html"; });
+document.getElementById("playerViewBtn").addEventListener("click", () => { window.location.href = "player.html"; });
 document.getElementById("logoutBtn").addEventListener("click", async () => {
   try {
     await api("/auth/logout", { method: "POST" });
