@@ -19,6 +19,11 @@ button,
   font-size: 15px;
 }
 
+.admin-table-wrap td button,
+.overview-recent-table td button {
+  min-height: 34px;
+}
+
 .password-toggle {
   width: 36px !important;
   height: 36px !important;
@@ -36,12 +41,17 @@ button,
   background: #F0ECFF;
 }
 
-.overview-recent-panel .dashboard-panel-head a,
-.overview-recent-panel a,
+.player-page .overview-leaderboard .dashboard-panel-head a,
+.player-page .overview-recent-panel .dashboard-panel-head a,
+.player-page .overview-alert-link,
+.player-page .overview-glance-action,
 .section-title a {
+  border: 0;
+  background: transparent;
   color: #4C1D95;
   font-size: 13px;
   font-weight: 700;
+  text-decoration: none;
 }
 
 button:focus-visible,
