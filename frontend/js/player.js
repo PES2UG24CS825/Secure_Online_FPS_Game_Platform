@@ -329,8 +329,16 @@ async function loadPlayerDashboard() {
     const matchesSummary = document.getElementById("matchesSummary");
     if (matchesSummary) matchesSummary.textContent = `${analyzedMatches.length} analyzed · ${Math.max(0, matches.length - analyzedMatches.length)} pending`;
     document.getElementById("mfaStatus").textContent = securityData ? securityData.mfa_status === "enabled" ? "On" : "Off" : "Unavailable";
-    document.getElementById("accountStatus").textContent = securityData ? securityData.account_status === "active" ? "Clean" : "Suspended" : "Unavailable";
-    document.getElementById("accountStatus").classList.toggle("success-text", securityData?.account_status === "active");
+    const accountStatus = securityData?.account_status;
+    const accountStatusLabels = {
+      active: "Active",
+      suspended: "Suspended",
+      banned: "Banned",
+      restricted: "Restricted"
+    };
+    const accountStatusNode = document.getElementById("accountStatus");
+    accountStatusNode.textContent = accountStatusLabels[accountStatus] || "Unavailable";
+    accountStatusNode.classList.toggle("success-text", accountStatus === "active");
     if (risk == null && !securityData) {
       if (scoreNode) scoreNode.textContent = "—";
     }
