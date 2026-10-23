@@ -6,191 +6,8 @@
   <title>SecureFPS | Admin Control Center</title>
   <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg">
   <link rel="stylesheet" href="css/styles.css">
-  <style>
-    .nav-btn {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 16px;
-      color: #53507A;
-      cursor: pointer;
-      transition: all 0.2s;
-      border-radius: 8px;
-      margin: 4px 0;
-    }
-
-    .nav-btn:hover {
-      color: #4C1D95;
-      background: rgba(207, 198, 242, 0.55);
-    }
-
-    .nav-btn.active {
-      color: #4C1D95;
-      background: #CFC6F2;
-      font-weight: 600;
-    }
-
-    .section {
-      display: none;
-    }
-
-    .section.active {
-      display: block;
-    }
-
-    .admin-table-wrap {
-      overflow-x: auto;
-      margin-top: 16px;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    th {
-      text-align: left;
-      padding: 12px;
-      border-bottom: 1px solid #C3BFE0;
-      color: #53507A;
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-
-    td {
-      padding: 12px;
-      border-bottom: 1px solid #C3BFE0;
-      color: #1B1730;
-    }
-
-    tbody tr:hover {
-      background: rgba(207, 198, 242, 0.3);
-    }
-
-    .action-btn {
-      background: none;
-      border: 1px solid #C3BFE0;
-      color: #6D28D9;
-      padding: 4px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      margin: 0 4px;
-      transition: all 0.2s;
-    }
-
-    .action-btn:hover {
-      background: #CFC6F2;
-      border-color: #6D28D9;
-    }
-
-    .action-btn.danger {
-      border-color: #B91C1C;
-      color: #B91C1C;
-    }
-
-    .action-btn.danger:hover {
-      background: rgba(185, 28, 28, 0.08);
-      border-color: #B91C1C;
-    }
-
-    .severity-badge {
-      display: inline-block;
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-
-    .severity-low {
-      background: #dcefe2;
-      color: #15803D;
-    }
-
-    .severity-medium {
-      background: #f6ebd8;
-      color: #B45309;
-    }
-
-    .severity-high {
-      background: #f5dcde;
-      color: #B91C1C;
-    }
-
-    .severity-critical {
-      background: #f5dcde;
-      color: #B91C1C;
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 40px 20px;
-      color: #53507A;
-    }
-
-    .empty-state strong {
-      display: block;
-      margin-bottom: 8px;
-      color: #1B1730;
-    }
-
-    .admin-sidebar { position:fixed; inset:0 auto 0 0; width:240px; height:100vh; box-sizing:border-box; padding:24px 18px; overflow-y:auto; z-index:100; background:#E9E7F5; border-right:1px solid #C3BFE0; }
-    .admin-sidebar .brand { margin-bottom:34px; }
-    .admin-sidebar nav { display:grid; gap:6px; }
-    .admin-nav-btn { display:flex; align-items:center; gap:12px; width:100%; padding:12px 13px; border:1px solid transparent; border-radius:10px; color:#53507A; background:transparent; font:inherit; font-size:13px; text-align:left; cursor:pointer; transition:background .18s ease,color .18s ease,border-color .18s ease; }
-    .admin-nav-btn:hover { color:#4C1D95; background:rgba(207,198,242,.55); }
-    .admin-nav-btn.active { color:#4C1D95; background:#CFC6F2; border-color:#C3BFE0; box-shadow:inset 3px 0 #6D28D9; }
-    .admin-nav-icon { display:grid; place-items:center; width:24px; height:24px; border-radius:7px; color:#6D28D9; background:rgba(207,198,242,.65); font-size:14px; }
-    .admin-main-wrapper { margin-left:240px; width:calc(100% - 240px); min-width:0; }
-    .admin-main-wrapper .dashboard-main { width:100%; max-width:none; margin:0; padding:30px 38px 50px; box-sizing:border-box; }
-    .admin-section { display:none; }
-    .admin-section.active { display:block; }
-    .admin-section > .admin-table-panel:first-child { margin-top:0; }
-    .admin-section .admin-table-panel { margin-top:16px; }
-    .admin-section-heading { margin:0 0 16px; }
-    .admin-section-heading h2 { margin:0; font-size:20px; }
-    .admin-section-heading p { margin:5px 0 0; color:#53507A; font-size:12px; }
-    .admin-filter-row { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }
-    .admin-filter-row input, .admin-filter-row select { min-height:36px; border:1px solid #C3BFE0; border-radius:9px; padding:0 10px; background:#fff; color:#1B1730; }
-    .admin-header-actions { display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-end; gap:10px; }
-    .admin-header-card { display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid #C3BFE0; border-radius:11px; background:#F7F5FF; }
-    .admin-header-card small { display:block; color:#53507A; font-size:10px; }
-    .admin-toggle { display:flex; align-items:center; gap:7px; color:#53507A; font-size:12px; }
-    .admin-pagination { display:flex; align-items:center; justify-content:flex-end; gap:10px; padding-top:12px; color:#53507A; font-size:12px; }
-    .risk-badge { display:inline-flex; padding:4px 8px; border-radius:999px; font-weight:700; font-size:11px; }
-    .risk-badge.low { background:#d8f3ee; color:#087f73; }
-    .risk-badge.medium { background:#fff0c7; color:#9a5b00; }
-    .risk-badge.high { background:#ffe0e7; color:#a61b43; }
-    .admin-table-wrap { scrollbar-color:#9d8ed2 #eeeafa; }
-    .review-note-dialog { border:0; border-radius:16px; padding:0; width:min(460px, calc(100% - 32px)); color:#1B1730; box-shadow:0 24px 70px rgba(45,28,92,.28); }
-    .review-note-dialog::backdrop { background:rgba(37,24,65,.48); backdrop-filter:blur(3px); }
-    .review-note-dialog form { padding:24px; background:#fff; }
-    .review-note-dialog h2 { margin:0 0 8px; font-size:18px; }
-    .review-note-dialog p { margin:0 0 16px; color:#53507A; font-size:13px; }
-    .review-note-dialog textarea { width:100%; box-sizing:border-box; min-height:100px; border:1px solid #BBAFE5; border-radius:10px; padding:11px; resize:vertical; font:inherit; }
-    .review-note-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
-
-    .admin-page .stats-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-
-    @media (max-width: 1100px) {
-      .admin-page .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
-
-    @media (max-width: 900px) {
-      .admin-page { display:block; }
-      .admin-sidebar { position:static; width:100%; height:auto; border-right:0; border-bottom:1px solid rgba(255,255,255,.1); }
-      .admin-sidebar .brand { margin-bottom:16px; }
-      .admin-sidebar nav { grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); }
-      .admin-main-wrapper { margin:0; width:100%; }
-      .admin-main-wrapper .dashboard-main { padding:24px; }
-    }
-
-    @media (max-width: 600px) {
-      .admin-page .stats-grid { grid-template-columns: 1fr; }
-    }
-  </style>
+  <link rel="stylesheet" href="css/admin.css">
+  <link rel="stylesheet" href="css/ui-polish.css">
 </head>
 <body class="dashboard-page admin-page">
   <aside class="admin-sidebar">
@@ -214,12 +31,12 @@
 
     <section class="admin-section" id="admin-players" data-admin-view="players">
       <div class="admin-section-heading"><h2>Player accounts</h2><p>Review player status, gameplay risk, and access controls.</p></div>
-      <section class="panel admin-table-panel"><div class="admin-table-wrap"><table><thead><tr><th>Player</th><th>Role</th><th>MFA</th><th>Matches</th><th>Risk score</th><th>Last login IP</th><th>Created</th><th>Actions</th></tr></thead><tbody id="players"><tr><td colspan="8">Loading player accounts…</td></tr></tbody></table></div></section>
+      <section class="panel admin-table-panel"><div class="admin-filter-row"><label for="playerSearch">Search players</label><input id="playerSearch" type="search" placeholder="Search by name or email" aria-label="Search players by name or email"></div><div class="admin-table-wrap"><table><thead><tr><th>Player</th><th>Role</th><th>MFA</th><th>Matches</th><th>Risk score</th><th>Last login IP</th><th>Created</th><th>Actions</th></tr></thead><tbody id="players" aria-live="polite"><tr><td colspan="8">Loading player accounts…</td></tr></tbody></table></div><div id="playersPagination" class="admin-pagination" aria-live="polite"></div></section>
     </section>
 
     <section class="admin-section" id="admin-security" data-admin-view="security">
       <div class="admin-section-heading"><h2>Security &amp; access</h2><p>Successful sign-ins and recorded security events.</p></div>
-      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">ACCOUNT ACCESS AUDIT</p><h2>Sign-in activity</h2></div><label class="admin-toggle"><input id="includeTestData" type="checkbox"> Include test data</label></div><div class="admin-filter-row"><input id="loginSearch" type="search" placeholder="Search player, IP, device"><select id="loginPlayerFilter"><option value="">All players</option></select><select id="loginResultFilter"><option value="">All results</option><option value="Success">Success</option><option value="Failed">Failed</option></select><input id="loginDateFilter" type="date"><button id="refreshLogins" class="play-btn" type="button">Refresh</button></div><div class="admin-table-wrap"><table><thead><tr><th>Player</th><th>Result</th><th>Device / user agent</th><th>Location</th><th>IP address</th><th>Risk</th><th>Time</th></tr></thead><tbody id="recentLogins"><tr><td colspan="7">Loading sign-in activity…</td></tr></tbody></table></div><div id="loginPagination" class="admin-pagination"></div></section>
+      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">ACCOUNT ACCESS AUDIT</p><h2>Sign-in activity</h2></div><label class="admin-toggle"><input id="includeTestData" type="checkbox"> Include test data</label></div><div class="admin-filter-row"><label for="loginSearch">Search sign-ins</label><input id="loginSearch" type="search" placeholder="Search player, IP, device"><label for="loginPlayerFilter">Player</label><select id="loginPlayerFilter"><option value="">All players</option></select><label for="loginResultFilter">Result</label><select id="loginResultFilter"><option value="">All results</option><option value="Success">Success</option><option value="Failed">Failed</option></select><label for="loginDateFilter">Date</label><input id="loginDateFilter" type="date"><button id="refreshLogins" class="play-btn" type="button">Refresh</button></div><div class="admin-table-wrap"><table><thead><tr><th>Player</th><th>Result</th><th>Device / user agent</th><th>Location</th><th>IP address</th><th>Risk</th><th>Time</th></tr></thead><tbody id="recentLogins" aria-live="polite"><tr><td colspan="7">Loading sign-in activity…</td></tr></tbody></table></div><div id="loginPagination" class="admin-pagination"></div></section>
       <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">AUDIT TRAIL</p><h2>Security events</h2></div></div><div id="events" class="list"><div class="empty">No security events.</div></div></section>
     </section>
 
@@ -236,7 +53,7 @@
   </main>
   </div>
   <dialog id="supportProofDialog" class="support-proof-dialog"><div><button id="closeSupportProof" type="button" aria-label="Close image">×</button><img id="supportProofImage" alt="Player supplied support evidence"></div></dialog>
-  <dialog id="reviewNoteDialog" class="review-note-dialog"><form method="dialog" id="reviewNoteForm"><h2>Save review action</h2><p id="reviewNotePrompt">Add a required note for this decision.</p><textarea id="reviewNote" required maxlength="1000" placeholder="Explain why this action was selected"></textarea><div class="review-note-actions"><button id="cancelReviewNote" class="ghost-btn" value="cancel" type="submit">Cancel</button><button id="saveReviewNote" class="play-btn" value="default" type="submit">Save action</button></div></form></dialog>
+  <dialog id="reviewNoteDialog" class="review-note-dialog"><form method="dialog" id="reviewNoteForm"><h2>Save review action</h2><p id="reviewNotePrompt">Add a required note for this decision.</p><label for="reviewNote">Review note</label><textarea id="reviewNote" required maxlength="1000" placeholder="Explain why this action was selected"></textarea><div class="review-note-actions"><button id="cancelReviewNote" class="ghost-btn" value="cancel" type="submit">Cancel</button><button id="saveReviewNote" class="play-btn" value="default" type="submit">Save action</button></div></form></dialog>
   <script src="js/config.js"></script><script src="js/api.js"></script><script src="js/admin.js"></script>
 </body>
 </html>

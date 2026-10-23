@@ -6,6 +6,7 @@
   <title>SecureFPS | Create Account</title>
   <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg">
   <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/ui-polish.css">
 </head>
 <body class="auth-page">
   <main class="auth-shell">
@@ -36,7 +37,7 @@
         <label>Confirm password<div class="password-field"><input id="confirmPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="Re-enter password"><button class="password-toggle" type="button" data-password-target="confirmPassword" aria-label="Show password" title="Show password">&#128065;</button></div></label>
         <button class="primary-btn" type="submit">Create secure account <span>→</span></button>
       </form>
-      <div id="message" class="message"></div>
+      <div id="message" class="message" aria-live="polite"></div>
       <div id="mfaSetup" class="mfa-setup hidden">
         <h3>Set up your authenticator</h3>
         <p>Scan this QR code using Google Authenticator, Microsoft Authenticator, or another TOTP app.</p>

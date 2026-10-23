@@ -24,6 +24,13 @@ window.showAppAlert = function (message, options = {}) {
   const body = document.createElement("p");
   body.className = "app-alert-message";
   body.textContent = String(message ?? "");
+  const verification = options.requireName ? document.createElement("input") : null;
+  if (verification) {
+    verification.type = "text";
+    verification.className = "confirm-name-input";
+    verification.placeholder = `Type ${options.requireName} to confirm`;
+    verification.setAttribute("aria-label", `Type ${options.requireName} to confirm deletion`);
+  }
   const actions = document.createElement("div");
   actions.className = "app-alert-actions";
   const button = document.createElement("button");
@@ -40,6 +47,66 @@ window.showAppAlert = function (message, options = {}) {
   document.body.append(dialog);
   dialog.showModal();
   button.focus();
+};
+
+window.showAppConfirm = function (message, options = {}) {
+  return new Promise((resolve) => {
+    const dialog = document.createElement("dialog");
+    dialog.className = "app-alert-dialog";
+    dialog.dataset.tone = options.tone || "warning";
+    const content = document.createElement("div");
+    content.className = "app-alert-content";
+    const title = document.createElement("h2");
+    title.className = "app-alert-title";
+    title.textContent = options.title || "Confirm action";
+    const body = document.createElement("p");
+    body.className = "app-alert-message";
+    body.textContent = String(message ?? "");
+    const actions = document.createElement("div");
+    actions.className = "app-alert-actions";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "ghost-btn";
+    cancel.textContent = "Cancel";
+    const confirm = document.createElement("button");
+    confirm.type = "button";
+    confirm.className = "primary-btn";
+    confirm.textContent = options.confirmText || "Confirm";
+    if (verification) {
+      confirm.disabled = true;
+      verification.addEventListener("input", () => {
+        confirm.disabled = verification.value.trim() !== options.requireName;
+      });
+    }
+    const finish = (value) => {
+      dialog.close();
+      resolve(value);
+    };
+    cancel.addEventListener("click", () => finish(false));
+    confirm.addEventListener("click", () => finish(true));
+    actions.append(cancel, confirm);
+    content.append(title, body);
+    if (verification) content.append(verification);
+    content.append(actions);
+    dialog.append(content);
+    dialog.addEventListener("close", () => {
+      dialog.remove();
+      resolve(false);
+    }, { once: true });
+    document.body.append(dialog);
+    dialog.showModal();
+    confirm.focus();
+  });
+};
+
+window.showAppToast = function (message, tone = "info") {
+  const toast = document.createElement("div");
+  toast.className = "app-toast";
+  toast.dataset.tone = tone;
+  toast.setAttribute("role", "status");
+  toast.textContent = String(message ?? "");
+  document.body.append(toast);
+  window.setTimeout(() => toast.remove(), 3200);
 };
 
 async function api(path, options = {}) {

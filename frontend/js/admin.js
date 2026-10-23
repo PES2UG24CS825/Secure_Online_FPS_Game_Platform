@@ -25,6 +25,39 @@ function displayRiskScore(value) {
 }
 
 let loginPage = 1;
+let playersPage = 1;
+const playersPageSize = 20;
+
+function renderPlayersLoading() {
+  const body = document.getElementById("players");
+  if (body) body.innerHTML = Array.from({ length: 5 }, () => '<tr class="loading-skeleton"><td colspan="8"><span></span></td></tr>').join("");
+}
+
+async function loadPlayers() {
+  const body = document.getElementById("players");
+  if (!body) return;
+  renderPlayersLoading();
+  const search = document.getElementById("playerSearch")?.value.trim() || "";
+  const params = new URLSearchParams({
+    limit: String(playersPageSize),
+    offset: String((playersPage - 1) * playersPageSize)
+  });
+  if (search) params.set("search", search);
+  try {
+    const data = await api(`/admin/players?${params.toString()}`);
+    const players = Array.isArray(data.players) ? data.players : [];
+    body.innerHTML = players.map((player) => `<tr><td><strong>${escapeHtml(player.name || "Player")}</strong>${player.demo ? '<small>DEMO TEST ACCOUNT</small>' : ""}<small>${escapeHtml(player.email || "")}</small></td><td>${escapeHtml(player.role || "player")}</td><td><span class="badge ${player.mfa_enabled ? "good" : "warn"}">${player.mfa_enabled ? "MFA enabled" : "Disabled"}</span></td><td>${escapeHtml(player.matches_played ?? 0)}</td><td>${escapeHtml(displayRiskScore(player.risk_score))}</td><td>${escapeHtml(player.last_login_ip || "No login recorded")}<small>${escapeHtml(displayDate(player.last_login))}</small></td><td>${escapeHtml(displayDate(player.created_at))}</td><td><button class="play-btn" data-action="revoke" data-id="${escapeHtml(player.id)}" data-player-name="${escapeHtml(player.name || "Player")}">Suspend</button> <button class="play-btn danger-btn" data-action="delete" data-id="${escapeHtml(player.id)}" data-player-name="${escapeHtml(player.name || "Player")}">Delete</button></td></tr>`).join("") || '<tr><td colspan="8" class="empty-state">No players found.</td></tr>';
+    const total = Number(data.total ?? data.total_players ?? data.count ?? players.length);
+    const pageCount = Math.max(1, Math.ceil(total / playersPageSize));
+    playersPage = Math.min(playersPage, pageCount);
+    const pagination = document.getElementById("playersPagination");
+    if (pagination) pagination.innerHTML = `<button class="ghost-btn" type="button" data-players-page="-1" ${playersPage <= 1 ? "disabled" : ""}>Previous</button><span>Page ${playersPage} of ${pageCount}</span><button class="ghost-btn" type="button" data-players-page="1" ${playersPage >= pageCount || players.length < playersPageSize ? "disabled" : ""}>Next</button>`;
+  } catch (error) {
+    body.innerHTML = `<tr><td colspan="8" class="empty-state">${escapeHtml(error.message || "Player data could not be loaded.")}</td></tr>`;
+    const pagination = document.getElementById("playersPagination");
+    if (pagination) pagination.textContent = "";
+  }
+}
 function renderLoginAudit(rows) {
   const body = document.getElementById("recentLogins");
   const search = (document.getElementById("loginSearch")?.value || "").toLowerCase();
@@ -239,7 +272,7 @@ async function loadAdmin() {
     document.getElementById("eventCount").textContent = data.events.length;
     document.getElementById("highCount").textContent = data.events.filter((event) => ["high", "critical"].includes(event.severity)).length;
     document.getElementById("loginCount").textContent = data.login_count ?? 0;
-    document.getElementById("players").innerHTML = data.players.map((player) => `<tr><td><strong>${escapeHtml(player.name || "Player")}</strong>${player.demo ? '<small>DEMO TEST ACCOUNT</small>' : ""}<small>${escapeHtml(player.email || "")}</small></td><td>${escapeHtml(player.role || "player")}</td><td><span class="badge ${player.mfa_enabled ? "good" : "warn"}">${player.mfa_enabled ? "MFA enabled" : "Disabled"}</span></td><td>${escapeHtml(player.matches_played ?? 0)}</td><td>${escapeHtml(displayRiskScore(player.risk_score))}</td><td>${escapeHtml(player.last_login_ip || "No login recorded")}<small>${escapeHtml(displayDate(player.last_login))}</small></td><td>${escapeHtml(displayDate(player.created_at))}</td><td><button class="play-btn" data-action="revoke" data-id="${escapeHtml(player.id)}">Suspend</button> <button class="play-btn danger-btn" data-action="delete" data-id="${escapeHtml(player.id)}">Delete</button></td></tr>`).join("") || '<tr><td colspan="8">No players registered.</td></tr>';
+    await loadPlayers();
     document.getElementById("events").innerHTML = data.events.map((event) => `<div class="list-row"><div><strong>${escapeHtml(event.type || "Security event")}</strong><small>${escapeHtml(event.description || displayDate(event.created_at))}</small></div><span class="badge ${["high", "critical"].includes(event.severity) ? "bad" : event.severity === "medium" ? "warn" : "good"}">${escapeHtml(event.severity || "low")}</span></div>`).join("") || '<div class="empty">No security events.</div>';
     window.adminLoginRows = data.recent_logins || [];
     const playerFilter = document.getElementById("loginPlayerFilter");
@@ -399,7 +432,37 @@ document.getElementById("supportProofDialog")?.addEventListener("click", (event)
   if (event.target === event.currentTarget) event.currentTarget.close();
 });
 
-document.getElementById("players").addEventListener("click", async (event) => { const button = event.target.closest("button[data-action]"); if (!button) return; await api(`/admin/players/${button.dataset.id}/${button.dataset.action}`, { method: "POST" }); loadAdmin(); });
+document.getElementById("players").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  const action = button.dataset.action;
+  const playerName = button.dataset.playerName || "this player";
+  if (action === "revoke" && !await window.showAppConfirm(`Suspend ${playerName}?`, { title: "Suspend player", confirmText: "Suspend", tone: "warning" })) return;
+  if (action === "delete") {
+    const confirmed = await window.showAppConfirm(`Delete ${playerName}? This action cannot be undone.`, { title: "Delete player", confirmText: "Delete", tone: "error", requireName: playerName });
+    if (!confirmed) return;
+  }
+  button.disabled = true;
+  try {
+    await api(`/admin/players/${button.dataset.id}/${action}`, { method: "POST" });
+    window.showAppToast(`${playerName} ${action === "delete" ? "deleted" : "suspended"}.`, "success");
+    await loadAdmin();
+  } catch (error) {
+    window.showAppToast(error.message || "The admin action failed.", "error");
+  } finally {
+    button.disabled = false;
+  }
+});
+document.getElementById("playerSearch")?.addEventListener("input", () => {
+  playersPage = 1;
+  loadPlayers();
+});
+document.getElementById("playersPagination")?.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-players-page]");
+  if (!button || button.disabled) return;
+  playersPage += Number(button.dataset.playersPage);
+  loadPlayers();
+});
 document.getElementById("playerViewBtn").addEventListener("click", () => { window.location.href = "player.html"; });
 document.getElementById("logoutBtn").addEventListener("click", async () => {
   try {
