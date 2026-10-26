@@ -130,26 +130,32 @@ def run_profile(profile, delay):
 
     client = ApiClient(os.getenv("HACKER_DEMO_BASE_URL", "http://127.0.0.1:5000/api"))
     email = PROFILES[profile]
-    login(client, password, mfa_secret, email)
-    _, started = client.post("/game/start", {})
-    session_id = started["session_id"]
-    game_token = started["game_token"]
-    print(f"{profile}: started {session_id}")
+    try:
+        login(client, password, mfa_secret, email)
+        _, started = client.post("/game/start", {})
+        session_id = started["session_id"]
+        game_token = started["game_token"]
+        print(f"{profile}: started {session_id}")
 
-    for event_type, telemetry in profile_events(profile):
-        _, response = client.post("/game-events", {
-            "game_token": game_token,
-            "session_id": session_id,
-            "event_type": event_type,
-            "game": "FPS_Microgame",
-            "telemetry": telemetry,
-        })
-        detection = response.get("realtime_detection")
-        if detection and detection.get("enforcement_action") not in {None, "none"}:
-            print(f"{profile}: {detection}")
-        if event_type != "game_completed":
-            time.sleep(delay)
-    print(f"{profile}: completed {session_id}")
+        for event_type, telemetry in profile_events(profile):
+            _, response = client.post("/game-events", {
+                "game_token": game_token,
+                "session_id": session_id,
+                "event_type": event_type,
+                "game": "FPS_Microgame",
+                "telemetry": telemetry,
+            })
+            detection = response.get("realtime_detection")
+            if detection and detection.get("enforcement_action") not in {None, "none"}:
+                print(f"{profile}: {detection}")
+            if event_type != "game_completed":
+                time.sleep(delay)
+        print(f"{profile}: completed {session_id}")
+    finally:
+        try:
+            client.post("/auth/logout", {})
+        except RuntimeError:
+            pass
 
 
 def main():

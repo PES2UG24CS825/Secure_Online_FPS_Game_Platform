@@ -177,11 +177,23 @@ def top_risk_reasons(raw_features, result):
 
 def auto_ban_hacker(user_id, session_id, account, result, raw_features):
     risk_score = result.get("risk_score")
+    try:
+        demo_threshold = float(os.getenv(
+            "DEMO_HACKER_BAN_RISK_THRESHOLD",
+            str(BAN_RISK_THRESHOLD),
+        ))
+    except (TypeError, ValueError):
+        demo_threshold = BAN_RISK_THRESHOLD
+    required_threshold = (
+        demo_threshold
+        if account.get("account_type") == "demo_test" and account.get("hacker_profile")
+        else BAN_RISK_THRESHOLD
+    )
     if (
         account.get("account_type") != "demo_test"
         or not account.get("hacker_profile")
         or not isinstance(risk_score, (int, float))
-        or risk_score < BAN_RISK_THRESHOLD
+        or risk_score < required_threshold
         or account.get("revoked") is True
         or account.get("account_status") == "banned"
     ):
@@ -1046,7 +1058,19 @@ def analyze_game_session(
     enforcement_action = "none"
     restriction_until = None
     auto_ban = None
-    if realtime and result.get("risk_score", 0) >= BAN_RISK_THRESHOLD:
+    try:
+        demo_ban_threshold = float(os.getenv(
+            "DEMO_HACKER_BAN_RISK_THRESHOLD",
+            str(BAN_RISK_THRESHOLD),
+        ))
+    except (TypeError, ValueError):
+        demo_ban_threshold = BAN_RISK_THRESHOLD
+    ban_threshold = (
+        demo_ban_threshold
+        if account.get("account_type") == "demo_test" and account.get("hacker_profile")
+        else BAN_RISK_THRESHOLD
+    )
+    if realtime and result.get("risk_score", 0) >= ban_threshold:
         auto_ban = auto_ban_hacker(
             user_id,
             session_id,
