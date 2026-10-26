@@ -275,6 +275,28 @@ function renderBannedAccounts(data) {
   }).join("") || '<div class="empty">No banned or suspended accounts.</div>';
 }
 
+function renderHonourReport(rows) {
+  const body = document.getElementById("honourReportRows");
+  if (!body) return;
+  const report = Array.isArray(rows) ? rows : [];
+  body.innerHTML = report.map((row) => {
+    const change = Number(row.honour_change || 0);
+    const changeLabel = `${change > 0 ? "+" : ""}${change}`;
+    const scoreBefore = row.honour_before == null ? "—" : row.honour_before;
+    const scoreAfter = row.honour_after == null ? "—" : row.honour_after;
+    const changeTone = change > 0 ? "good" : change < 0 ? "warn" : "gray";
+    return `<tr>
+      <td><strong>${escapeHtml(row.player_name || "Unknown player")}</strong></td>
+      <td>${escapeHtml(row.result || "Honour update")}</td>
+      <td>${escapeHtml(row.session_id || "—")}</td>
+      <td><span class="badge ${changeTone}">${escapeHtml(changeLabel)} Honour</span></td>
+      <td>${escapeHtml(String(scoreBefore))} → ${escapeHtml(String(scoreAfter))}</td>
+      <td>${escapeHtml(row.access_status || "Available")}</td>
+      <td>${escapeHtml(displayDate(row.created_at))}</td>
+    </tr>`;
+  }).join("") || '<tr><td colspan="7">No Honour changes recorded yet.</td></tr>';
+}
+
 function renderDemoComparison(data) {
   const banner = document.getElementById("demoComparisonBanner");
   const comparison = document.getElementById("demoSessionComparison");
@@ -458,6 +480,7 @@ async function loadAdmin(force = false) {
     document.getElementById("matchCount").textContent = data.summary?.matches_analyzed ?? data.stats?.matches_analyzed ?? matches.length;
     document.getElementById("eventCount").textContent = data.stats?.security_events ?? events.length;
     document.getElementById("highCount").textContent = data.stats?.high_severity_events ?? events.filter((event) => ["high", "critical"].includes(event.severity)).length;
+    renderHonourReport(data.honour_report);
     await loadPlayers();
     document.getElementById("events").innerHTML = events.map((event) => `<div class="list-row"><div><strong>${escapeHtml(event.type || "Security event")}</strong><small>${escapeHtml(event.description || displayDate(event.created_at || event.timestamp))}</small></div><span class="badge ${["high", "critical"].includes(event.severity) ? "bad" : event.severity === "medium" ? "warn" : "good"}">${escapeHtml(event.severity || "low")}</span></div>`).join("") || '<div class="empty">No security events.</div>';
     const loginKeys = new Set();
@@ -860,6 +883,7 @@ document.getElementById("loginPagination")?.addEventListener("click", (event) =>
   renderLoginAudit(window.adminLoginRows || []);
 });
 document.getElementById("refreshLogins")?.addEventListener("click", () => loadAdmin(true));
+document.getElementById("refreshHonourReport")?.addEventListener("click", () => loadAdmin(true));
 document.getElementById("runHackerDemoBtn")?.addEventListener("click", async (event) => {
   const button = event.currentTarget;
   const confirmed = await window.showAppConfirm("Prepare the two normal players and four hacker simulations? The normal players stay active. You will get a separate alert when all four hackers are detected and banned.", {

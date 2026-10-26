@@ -1016,6 +1016,8 @@ def receive_game_event():
                 "coins": 20,
                 "xp": 50,
                 "honour": honour_awarded,
+                "honour_before": honour_before,
+                "honour_after": int(honour_after.get("honour_score", honour_before)),
                 "session_id": session_id,
                 "created_at": utc_now(),
             })
@@ -1527,6 +1529,8 @@ def end_game():
         {"_id": user_id, "honour_score": {"$exists": False}},
         {"$set": {"honour_score": 100}},
     )
+    honour_before_record = users.find_one({"_id": user_id}, {"honour_score": 1}) or {}
+    honour_before = max(0, min(MAX_HONOUR_SCORE, int(honour_before_record.get("honour_score", 100))))
     users.update_one(
         {"_id": user_id},
         {"$inc": {"honour_score": -MATCH_ABANDON_HONOUR_PENALTY}},
@@ -1549,6 +1553,8 @@ def end_game():
         "user_id": user_id,
         "session_id": session_id,
         "severity": "medium" if restriction_until else "low",
+        "honour_before": honour_before,
+        "honour_change": honour_score - honour_before,
         "honour_score": honour_score,
         "restricted_until": restriction_until,
         "review_status": "pending",
@@ -2442,6 +2448,38 @@ def admin_overview():
             "suspended" if hacker.get("revoked") else "active"
         )
 
+    honour_report_rows = []
+    for event in security_events.find({"type": "match_abandoned"}).sort("created_at", -1).limit(100):
+        user_key = str(event.get("user_id", ""))
+        score_after = event.get("honour_score")
+        honour_report_rows.append({
+            "player_name": player_names.get(user_key, "Unknown player"),
+            "session_id": event.get("session_id"),
+            "result": "Left unfinished match",
+            "honour_change": event.get("honour_change", -MATCH_ABANDON_HONOUR_PENALTY),
+            "honour_before": event.get("honour_before"),
+            "honour_after": score_after,
+            "access_status": "Paused for 30 minutes" if event.get("restricted_until") else "Available",
+            "created_at": event["created_at"].isoformat() if event.get("created_at") else None,
+        })
+    for reward in reward_transactions.find({"type": "match_completed"}).sort("created_at", -1).limit(100):
+        user_key = str(reward.get("user_id", ""))
+        honour_change = int(reward.get("honour", reward.get("honour_awarded", 0)) or 0)
+        honour_before = reward.get("honour_before")
+        honour_after = reward.get("honour_after")
+        honour_report_rows.append({
+            "player_name": player_names.get(user_key, "Unknown player"),
+            "session_id": reward.get("session_id"),
+            "result": "Completed match",
+            "honour_change": honour_change,
+            "honour_before": honour_before,
+            "honour_after": honour_after,
+            "access_status": "Available",
+            "created_at": reward["created_at"].isoformat() if reward.get("created_at") else None,
+        })
+    honour_report_rows.sort(key=lambda row: row.get("created_at") or "", reverse=True)
+    honour_report_rows = honour_report_rows[:100]
+
     analyses = list(
         game_events.find(
             {"analysis_type": "game_session"},
@@ -2708,6 +2746,8 @@ def admin_overview():
 
             for event in events
         ],
+
+        "honour_report": honour_report_rows,
 
         "analyses": [
             {
