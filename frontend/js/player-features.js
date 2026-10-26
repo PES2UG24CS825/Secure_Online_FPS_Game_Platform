@@ -7,7 +7,7 @@ const helpTopics = [
   {
     question: "My match or result is missing",
     category: "match",
-    answer: "Return to the player page after the match finishes and refresh Matches. The latest ten records are shown. A match review may take a short time if gameplay data is still being processed."
+    answer: "Return to the player page after the match finishes and refresh Matches. The latest ten completed matches are shown. A match review may take a short time if gameplay data is still being processed."
   },
   {
     question: "What does a security review mean?",
@@ -198,32 +198,6 @@ document.querySelectorAll("[data-detection-info]").forEach((button) => button.ad
 document.getElementById("detectionInfoClose")?.addEventListener("click", closeDetectionModal);
 document.getElementById("detectionInfoDone")?.addEventListener("click", closeDetectionModal);
 detectionModal?.addEventListener("click", (event) => { if (event.target === detectionModal) closeDetectionModal(); });
-const helpPanel = document.getElementById("playerHelpPanel");
-const helpToggle = document.getElementById("playerHelpToggle");
-function setHelpOpen(open) {
-  if (!helpPanel || !helpToggle) return;
-  helpPanel.hidden = !open;
-  helpToggle.setAttribute("aria-expanded", String(open));
-}
-helpToggle?.addEventListener("click", () => setHelpOpen(helpPanel.hidden));
-document.getElementById("playerHelpClose")?.addEventListener("click", () => setHelpOpen(false));
-document.querySelectorAll("[data-help-question]").forEach((button) => button.addEventListener("click", () => {
-  const topic = answerSupportQuestion(button.dataset.helpQuestion);
-  document.getElementById("playerHelpAnswer").textContent = topic.answer;
-}));
-document.getElementById("playerHelpForm")?.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const input = document.getElementById("playerHelpInput");
-  const question = input.value.trim();
-  if (!question) return;
-  document.getElementById("playerHelpAnswer").textContent = answerSupportQuestion(question).answer;
-  input.value = "";
-});
-document.getElementById("playerHelpSupport")?.addEventListener("click", (event) => {
-  event.preventDefault();
-  setHelpOpen(false);
-  document.querySelector('#playerNavigation a[data-section="support"]')?.click();
-});
 document.getElementById("rewardStore")?.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-reward-action]");
   if (!button) return;

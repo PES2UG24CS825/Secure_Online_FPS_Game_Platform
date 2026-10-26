@@ -5,71 +5,44 @@ gameplay telemetry analysis.
 
 ## Run locally
 
-1. Start MongoDB on this computer. The app uses the local database
-   `secure_fps` by default.
-2. In a terminal, install the backend requirements and create `backend/.env`:
+1. Start MongoDB on this computer. The backend connects to the local MongoDB
+   service and uses the `secure_fps` database by default.
+2. In PowerShell, prepare the backend once:
 
    ```powershell
    cd backend
    python -m venv .venv
-   .\.venv\Scripts\activate
+   .\.venv\Scripts\Activate.ps1
    pip install -r requirements.txt
    Copy-Item .env.example .env
    ```
 
-   Set a private `FLASK_SECRET_KEY` in `.env`.
-3. Start Flask:
+   Set `FLASK_SECRET_KEY` in `backend/.env` before using sign-in.
+3. Start Flask from the `backend` directory:
 
    ```powershell
    python app.py
    ```
 
 4. Open <http://127.0.0.1:5000/login.html>. Flask serves the frontend and API
-   on the same port. The old frontend server on port 5500 also works if needed:
+   from the same origin. The root URL <http://127.0.0.1:5000/> redirects to the
+   login page.
+
+   To use the separate frontend server on port 5500, keep Flask running, open
+   another terminal, and run:
 
    ```powershell
    cd frontend
    python -m http.server 5500
    ```
 
+   Then open <http://127.0.0.1:5500/login.html>. This serves only the frontend;
+   Flask must still be running on port 5000 for API requests. Admin sign-in is
+   at <http://127.0.0.1:5500/admin.html>.
+
 The development admin defaults are `admin1@gmail.com` / `Admin@12345` with MFA
-secret `JBSWY3DPEHPK3PXP`. Change these values before sharing or deploying the
-demo.
-
-## Connect another laptop (Windows)
-
-The host computer runs MongoDB and SecureFPS. The other laptop only needs a
-browser.
-
-1. Connect both computers to the same Wi-Fi. If that network blocks connections
-between devices, use the host's Mobile hotspot.
-2. Make sure MongoDB is running on the host.
-3. If Windows Firewall blocks access, open PowerShell as Administrator in the
-   project folder and run this once:
-
-   ```powershell
-   .\allow_firewall.ps1
-   ```
-
-   This allows TCP port 5000 on the Private network profile only. Set a trusted
-   home or hotspot network to Private in Windows Settings if needed.
-4. On the host, double-click `start_demo.bat` and keep its backend window open.
-   It prints the URL for the other computer and a localhost URL for the host.
-5. On the other laptop, open the printed `http://<host-ip>:5000/login.html`
-   address. Use the exact IP printed by the script.
-
-Only port 5000 needs to be reachable from the other laptop. Keep MongoDB bound
-to the host; do not expose port 27017. LAN mode is off by default, and Flask
-debug is off when started in LAN mode.
-
-If the page does not load, check that both computers are on the same network,
-the backend window is still open, the printed IP is current, and Windows
-Firewall allows port 5000 on the Private profile. College and office Wi-Fi may
-isolate devices; try a personal hotspot in that case.
-
-**WebGL note:** the checked-in Unity build may still contain a localhost API
-address. Rebuild the WebGL game from `unity-games/FPS_Microgame` after updating
-the Unity client before testing gameplay telemetry from another laptop.
+secret `JBSWY3DPEHPK3PXP`. These are development credentials; change them before
+sharing the demo.
 
 ## Optional: four hacker demo accounts
 
@@ -78,20 +51,29 @@ gameplay from the admin console. Do not enable it for production or real users.
 
 1. In `backend/.env`, set `APP_ENV=development`, `HACKER_DEMO_PASSWORD`,
    `HACKER_DEMO_MFA_SECRET`, and `DEMO_HACKER_BAN_RISK_THRESHOLD=85`.
-2. With MongoDB running, seed the accounts:
-
-   ```powershell
-   cd backend
-   .\.venv\Scripts\python.exe scripts\seed_hackers.py
-   ```
-
-3. Restart Flask, sign in as an admin, open **Game monitoring**, and choose
-   **Run hacker demo**. Use **Reset demo hackers** to clear the demo results.
+   `DEMO_PLAYER_PASSWORD` and `DEMO_PLAYER_MFA_SECRET` are optional; when left
+   blank, the two normal demo players use the hacker demo credentials.
+2. With MongoDB running, restart Flask, sign in as an admin, open **Game
+   monitoring**, and choose **Run full demo**. One click prepares both normal
+   player accounts and all four hacker accounts, adds model comparison matches,
+   clears old hacker results, and starts the four simulations. Use **Reset demo
+   hackers** to clear their results without running the demo again.
 
 The accounts are `hacker_aimbot@example.test`,
 `hacker_wallhack@example.test`, `hacker_speed@example.test`, and
 `hacker_silent@example.test`. All use the configured demo password and MFA
-secret. Do not commit `backend/.env`.
+secret. The full demo creates two login-capable normal player accounts:
+`demo_player_one@example.test` and `demo_player_two@example.test`. Both use the
+configured normal demo password and MFA secret (or the hacker demo credentials
+when dedicated normal credentials are blank). They stay active while hacker
+simulations run. For accounts only, you can also seed them from PowerShell:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe scripts\seed_demo_players.py
+```
+
+Do not commit `backend/.env`.
 
 ## Project paths
 

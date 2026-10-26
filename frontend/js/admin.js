@@ -69,16 +69,21 @@ async function loadPlayers() {
     const players = Array.isArray(data.players) ? data.players : [];
     body.innerHTML = players.map((player) => {
       const isHacker = ["aimbot", "wallhack", "speedhack", "silent_aim"].includes(player.hacker_profile);
+      const isNormalDemo = player.account_type === "demo_normal";
       const suspended = ["suspended", "banned"].includes(player.account_status);
       const actions = window.adminRole === "moderator"
         ? '<span class="muted">Read only</span>'
         : `<button class="play-btn" data-action="${suspended ? "restore" : "revoke"}" data-id="${escapeHtml(player.id)}" data-player-name="${escapeHtml(player.name || "Player")}">${suspended ? "Restore" : "Suspend"}</button> <button class="play-btn danger-btn" data-action="delete" data-id="${escapeHtml(player.id)}" data-player-name="${escapeHtml(player.name || "Player")}">Delete</button>`;
-      const status = isHacker
-        ? `<span class="badge ${suspended ? "bad" : "warn"}">${escapeHtml(player.account_status || "active")}</span>`
-        : "";
+      const status = suspended
+        ? `<span class="badge bad">${escapeHtml(player.account_status || "suspended")}</span>`
+        : isHacker
+          ? '<span class="badge warn">active</span>'
+          : isNormalDemo
+            ? '<span class="badge good">active</span>'
+          : "";
       const marker = isHacker
         ? `<small class="hacker-player-label">HACKER DEMO · ${escapeHtml(player.hacker_profile)}</small>`
-        : (player.demo ? '<small>DEMO TEST ACCOUNT</small>' : "");
+        : isNormalDemo ? '<small>NORMAL DEMO PLAYER</small>' : (player.demo ? '<small>DEMO TEST ACCOUNT</small>' : "");
       return `<tr class="${isHacker ? "hacker-player-row" : ""}"><td><strong>${escapeHtml(player.name || "Player")}</strong>${marker}<small>${escapeHtml(player.email || "")}</small></td><td>${escapeHtml(player.role || "player")}</td><td><span class="badge ${player.mfa_enabled ? "good" : "warn"}">${player.mfa_enabled ? "MFA enabled" : "Disabled"}</span>${status}</td><td>${escapeHtml(player.matches_played ?? 0)}</td><td>${escapeHtml(displayRiskScore(player.risk_score))}</td><td>${escapeHtml(player.last_login_ip || "No login recorded")}<small>${escapeHtml(displayDate(player.last_login))}</small></td><td>${escapeHtml(displayDate(player.created_at))}</td><td>${actions}</td></tr>`;
     }).join("") || '<tr><td colspan="8" class="empty-state">No genuine player accounts found yet.</td></tr>';
     const total = Number(data.total ?? data.total_players ?? data.count ?? players.length);
@@ -229,6 +234,30 @@ function renderGameplayAlerts(data) {
   }).join("") || '<div class="empty">No gameplay alerts.</div>';
 }
 
+function renderBannedAccounts(data) {
+  const list = document.getElementById("bannedAccountsList");
+  const count = document.getElementById("bannedAccountCount");
+  if (!list || !count) return;
+  const accounts = Array.isArray(data.banned_accounts)
+    ? data.banned_accounts
+    : (Array.isArray(data.hacker_accounts) ? data.hacker_accounts : [])
+      .filter((account) => account.account_status === "banned" || account.revoked === true)
+      .map((account) => ({
+        ...account,
+        status: ["banned", "suspended"].includes(account.account_status) ? account.account_status : "banned",
+        reason: account.ban_reason || [],
+      }));
+  count.textContent = `${accounts.length} account${accounts.length === 1 ? "" : "s"}`;
+  list.innerHTML = accounts.map((account) => {
+    const reasons = Array.isArray(account.reason) ? account.reason.join("; ") : account.reason;
+    return `<article class="list-row banned-account-row">
+      <div class="banned-account-identity"><strong>${escapeHtml(account.name || "Player")}</strong><span>${escapeHtml(account.email || "")}</span><small>${escapeHtml(account.hacker_profile || "player")} · ${escapeHtml(displayDate(account.banned_at))}</small></div>
+      <p class="banned-account-reason">${reasons ? escapeHtml(reasons) : "No reason recorded."}</p>
+      <span class="badge bad">${escapeHtml((account.status || "banned").toUpperCase())}</span>
+    </article>`;
+  }).join("") || '<div class="empty">No banned or suspended accounts.</div>';
+}
+
 function renderDemoComparison(data) {
   const banner = document.getElementById("demoComparisonBanner");
   const comparison = document.getElementById("demoSessionComparison");
@@ -265,8 +294,10 @@ function renderDemoComparison(data) {
     const normalized = analysis.features || {};
     const alert = alertBySession.get(analysis.session_id);
     const complete = analysis.status === "success";
-    const player = isDemo
-      ? "Development fixture (no player account)"
+    const matchedPlayer = (Array.isArray(data.players) ? data.players : [])
+      .find((item) => item.id === analysis.user_id);
+    const player = matchedPlayer
+      ? `${matchedPlayer.name || matchedPlayer.email || "Player"}${matchedPlayer.hacker_profile ? ` · ${matchedPlayer.hacker_profile}` : ""} (${matchedPlayer.email || ""})`
       : analysis.user_id || "N/A";
     const featureRows = ["accuracy", "fire_rate", "movement_speed", "aim_smoothness", "kdr"]
       .map((feature) => `<div><strong>${escapeHtml(feature)}</strong><span>${displayNumber(raw[feature])} raw / ${displayNumber(normalized[feature])} normalized</span></div>`)
@@ -294,11 +325,32 @@ function renderHackerAccounts(data) {
   const panel = document.getElementById("hackerAccountsPanel");
   if (!panel) return;
   const accounts = Array.isArray(data.hacker_accounts) ? data.hacker_accounts : [];
-  if (!accounts.length) {
-    panel.innerHTML = '<div class="demo-account-card"><strong>No hacker accounts seeded.</strong><p>Run <code>python scripts/seed_hackers.py</code> in development, then refresh.</p></div>';
+  const hackerAccounts = accounts.filter((account) => account.hacker_profile);
+  const bannedHackerAccounts = hackerAccounts.filter((account) =>
+    account.account_status === "banned" || account.revoked === true
+  );
+  if (hackerDemoAwaitingBan && hackerAccounts.length >= 4 && bannedHackerAccounts.length >= 4) {
+    hackerDemoAwaitingBan = false;
+    clearInterval(hackerDemoPollTimer);
+    clearTimeout(hackerDemoCompletionTimer);
+    window.showAppToast("Hacker detection complete: all four demo hacker accounts were banned.", "error");
+  }
+  const normalPlayers = (Array.isArray(data.players) ? data.players : [])
+    .filter((player) => player.account_type === "demo_normal");
+  if (!accounts.length && !normalPlayers.length) {
+    panel.innerHTML = '<div class="empty">No demo accounts yet. Run the full demo to add the normal players and hacker accounts.</div>';
     return;
   }
-  panel.innerHTML = `<div class="hacker-account-grid">${accounts.map((account) => {
+  const normalCards = normalPlayers.map((player) => `<article class="demo-account-card hacker-account-card">
+    <div class="demo-account-heading"><strong>${escapeHtml(player.name || player.email || "Demo player")}</strong><span class="badge good">NORMAL PLAYER</span></div>
+    <div class="demo-account-fields">
+      <span><strong>Email:</strong> ${escapeHtml(player.email || "—")}</span>
+      <span><strong>Matches:</strong> ${escapeHtml(String(player.matches_played || 0))}</span>
+      <span><strong>MFA:</strong> ${player.mfa_enabled ? "enabled" : "disabled"}</span>
+      <span><strong>Account status:</strong> ${escapeHtml(player.account_status || "active")}</span>
+    </div>
+  </article>`).join("");
+  const hackerCards = accounts.map((account) => {
     const banned = account.account_status === "banned" || account.revoked;
     return `<article class="demo-account-card hacker-account-card">
       <div class="demo-account-heading"><strong>${escapeHtml(account.email || account.name)}</strong><span class="badge ${banned ? "bad" : "good"}">${banned ? "PERMANENTLY BANNED" : "READY"}</span></div>
@@ -309,7 +361,8 @@ function renderHackerAccounts(data) {
         <span><strong>Account status:</strong> ${escapeHtml(account.account_status || "active")}</span>
       </div>
     </article>`;
-  }).join("")}</div>`;
+  }).join("");
+  panel.innerHTML = `<div class="hacker-account-grid">${normalCards}${hackerCards}</div>`;
 }
 
 let adminLoading = false;
@@ -319,8 +372,8 @@ let adminLiveEvents = null;
 let adminRefreshTimer = null;
 let adminRefreshDebounce = null;
 let hackerDemoPollTimer = null;
-const shownHackerBanAlerts = new Set();
-let hasRenderedAdminData = false;
+let hackerDemoCompletionTimer = null;
+let hackerDemoAwaitingBan = false;
 
 function connectAdminLiveEvents() {
   if (adminLiveEvents || !window.EventSource) return;
@@ -340,19 +393,13 @@ function connectAdminLiveEvents() {
     }
   });
   adminLiveEvents.addEventListener("update", (event) => {
-    let update = null;
-    try { update = JSON.parse(event.data); } catch (error) { console.warn("Invalid admin live update", error); }
-    if (update?.type === "cheater_banned") {
-      const score = displayRiskScore(update.risk_score);
-      const toast = document.createElement("div");
-      toast.className = "admin-cheater-toast";
-      toast.setAttribute("role", "status");
-      toast.setAttribute("aria-live", "polite");
-      const modelScore = update.model_risk_score == null ? "" : ` · model ${escapeHtml(displayRiskScore(update.model_risk_score))}`;
-      toast.innerHTML = `<strong>Cheater auto-banned</strong><br>${escapeHtml(update.player_name || "Player")} (risk ${escapeHtml(score)}${modelScore})<br><small>${escapeHtml(update.hacker_profile || "demo")} · ${escapeHtml((update.top_reasons || []).slice(0, 2).join("; ") || "threshold exceeded")}</small>`;
-      document.body.append(toast);
-      window.setTimeout(() => toast.remove(), 5000);
-    }
+    try {
+      const update = JSON.parse(event.data || "{}");
+      if (update.type === "match_abandoned") {
+        const lockMessage = update.restricted_until ? " Player access is paused for 30 minutes." : "";
+        window.showAppToast?.(`${update.player_name || "A player"} left an unfinished match. Honour: ${update.honour_score ?? "—"}/100.${lockMessage}`, "warning");
+      }
+    } catch (_) {}
     clearTimeout(adminRefreshDebounce);
     adminRefreshDebounce = setTimeout(() => {
       loadAdmin(true);
@@ -435,22 +482,9 @@ async function loadAdmin(force = false) {
       return `<tr><td>${escapeHtml(match.session_id || "N/A")}</td><td>${escapeHtml(match.player_name || match.player_id || "Unknown player")}</td><td>${escapeHtml(match.game || "FPS Microgame")}</td><td>${escapeHtml(displayDate(match.started_at))}</td><td>${escapeHtml(match.status || "unknown")}</td><td>${escapeHtml(score)}</td></tr>`;
     }).join("") || '<tr><td colspan="6">No game sessions recorded.</td></tr>';
     renderGameplayAlerts(data);
+    renderBannedAccounts(data);
     renderDemoComparison(data);
     renderHackerAccounts(data);
-    const newBans = (data.gameplay_alerts || []).filter((alert) =>
-      alert.permanent_ban && alert.session_id && !shownHackerBanAlerts.has(alert.session_id)
-    );
-    newBans.forEach((alert) => {
-      shownHackerBanAlerts.add(alert.session_id);
-      if (hasRenderedAdminData) {
-        const score = displayRiskScore(alert.risk_score);
-        window.showAppToast(
-          `Cheater auto-banned: ${alert.player_name || "Player"} (risk ${score})`,
-          "error"
-        );
-      }
-    });
-    hasRenderedAdminData = true;
     adminHasLoaded = true;
     if (liveStatus) {
       liveStatus.className = "status-pill live-connected";
@@ -482,7 +516,7 @@ async function loadAdmin(force = false) {
         tableBody.innerHTML = `<tr><td colspan="${columns}">${escapeHtml(message)}</td></tr>`;
       }
     });
-    ["events", "gameplayAlerts", "demoAccountPanel", "demoSessionComparison"].forEach((id) => {
+    ["events", "gameplayAlerts", "bannedAccountsList", "demoAccountPanel", "demoSessionComparison"].forEach((id) => {
       const section = document.getElementById(id);
       if (section && !adminHasLoaded) {
         section.textContent = "Data unavailable. Check the API and database connection.";
@@ -516,7 +550,16 @@ async function loadSupportInbox() {
   if (!inbox) return;
   try {
     const { tickets = [] } = await api("/admin/support/tickets");
-    inbox.innerHTML = tickets.map((ticket) => `<article class="admin-support-ticket"><header><div><strong>${escapeHtml(ticket.player_name)}</strong><small>${escapeHtml(ticket.player_email)} · ${escapeHtml(ticket.category)} · ${escapeHtml(displayDate(ticket.created_at))}</small></div><span class="badge ${ticket.status === "resolved" ? "good" : ticket.status === "answered" ? "warn" : "gray"}">${escapeHtml(ticket.status)}</span></header><p>${escapeHtml(ticket.message)}</p>${ticket.attachment ? `<button class="play-btn" type="button" data-ticket-action="proof" data-ticket-id="${escapeHtml(ticket.id)}">View image proof · ${escapeHtml(ticket.attachment.name)}</button>` : ""}${ticket.admin_reply ? `<div class="admin-support-reply"><strong>Latest reply</strong><p>${escapeHtml(ticket.admin_reply)}</p></div>` : ""}<label>Reply to player<textarea rows="3" maxlength="3000" data-ticket-reply="${escapeHtml(ticket.id)}" placeholder="Write a helpful reply…">${escapeHtml(ticket.admin_reply || "")}</textarea></label><div class="admin-support-actions"><button class="play-btn" type="button" data-ticket-action="reply" data-ticket-id="${escapeHtml(ticket.id)}">Send reply</button>${ticket.status !== "resolved" ? `<button class="ghost-btn" type="button" data-ticket-action="resolve" data-ticket-id="${escapeHtml(ticket.id)}">Mark resolved</button>` : ""}</div></article>`).join("") || '<div class="empty">No support messages in the queue.</div>';
+    inbox.innerHTML = tickets.map((ticket) => {
+      const resolved = ticket.status === "resolved";
+      const latestReply = ticket.admin_reply
+        ? `<div class="admin-support-reply"><strong>Latest reply</strong><p>${escapeHtml(ticket.admin_reply)}</p></div>`
+        : "";
+      const replyControls = resolved
+        ? '<p class="muted">This request is resolved.</p>'
+        : `<label>Reply to player<textarea rows="3" maxlength="3000" data-ticket-reply="${escapeHtml(ticket.id)}" placeholder="Write a new reply…"></textarea></label><div class="admin-support-actions"><button class="play-btn" type="button" data-ticket-action="reply" data-ticket-id="${escapeHtml(ticket.id)}">Send reply</button><button class="ghost-btn" type="button" data-ticket-action="resolve" data-ticket-id="${escapeHtml(ticket.id)}">Mark resolved</button></div>`;
+      return `<article class="admin-support-ticket"><header><div><strong>${escapeHtml(ticket.player_name)}</strong><small>${escapeHtml(ticket.player_email)} · ${escapeHtml(ticket.category)} · ${escapeHtml(displayDate(ticket.created_at))}</small></div><span class="badge ${resolved ? "good" : ticket.status === "answered" ? "warn" : "gray"}">${escapeHtml(ticket.status)}</span></header><p>${escapeHtml(ticket.message)}</p>${ticket.attachment ? `<button class="play-btn" type="button" data-ticket-action="proof" data-ticket-id="${escapeHtml(ticket.id)}">View image proof · ${escapeHtml(ticket.attachment.name)}</button>` : ""}${latestReply}${replyControls}</article>`;
+    }).join("") || '<div class="empty">No support messages in the queue.</div>';
   } catch (error) {
     inbox.textContent = error.message || "Support inbox could not be loaded.";
   }
@@ -800,41 +843,62 @@ document.getElementById("loginPagination")?.addEventListener("click", (event) =>
   renderLoginAudit(window.adminLoginRows || []);
 });
 document.getElementById("refreshLogins")?.addEventListener("click", () => loadAdmin(true));
-document.getElementById("seedDemoBtn")?.addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  button.disabled = true;
-  try {
-    await api("/admin/gameplay/seed-demo", { method: "POST" });
-    await loadAdmin();
-  } catch (error) {
-    window.showAppAlert(error.message || "Demo data could not be seeded.", { title: "Seed demo data failed", tone: "error" });
-  } finally {
-    if (button?.isConnected) button.disabled = false;
-  }
-});
 document.getElementById("runHackerDemoBtn")?.addEventListener("click", async (event) => {
   const button = event.currentTarget;
-  const confirmed = await window.showAppConfirm("Start all four hacker simulations? They will be detected and permanently banned.", {
-    title: "Run hacker demo?",
+  const confirmed = await window.showAppConfirm("Prepare the two normal players and four hacker simulations? The normal players stay active. You will get a separate alert when all four hackers are detected and banned.", {
+    title: "Run full demo?",
     confirmText: "Run demo",
     tone: "warning"
   });
   if (!confirmed) return;
   button.disabled = true;
-  button.textContent = "Starting…";
+  button.textContent = "Preparing demo…";
+  let demoStep = "connecting to the demo API";
   try {
+    demoStep = "adding the two normal player accounts";
+    button.textContent = "Adding normal players…";
+    await api("/admin/gameplay/seed-normal-demo-players", { method: "POST" });
+    demoStep = "preparing the four hacker accounts";
+    button.textContent = "Preparing hacker accounts…";
+    await api("/admin/gameplay/seed-hacker-demo-accounts", { method: "POST" });
+    demoStep = "clearing the previous hacker run";
+    button.textContent = "Resetting previous run…";
+    await api("/admin/gameplay/reset-hacker-demo", { method: "POST" });
+    demoStep = "adding comparison matches";
+    button.textContent = "Adding comparison matches…";
+    await api("/admin/gameplay/seed-demo", { method: "POST" });
+    demoStep = "starting the four hacker simulations";
+    button.textContent = "Starting hacker simulations…";
+    hackerDemoAwaitingBan = true;
     await api("/admin/gameplay/run-hacker-demo", { method: "POST" });
-    window.showAppToast("Hacker demo started. Watch for live auto-ban alerts.", "success");
+    window.showAppToast("Demo started: the four hacker simulations are running. Waiting for detection and bans…", "info");
     await loadAdmin(true);
     clearInterval(hackerDemoPollTimer);
     hackerDemoPollTimer = setInterval(() => loadAdmin(true), 2000);
-    window.setTimeout(() => clearInterval(hackerDemoPollTimer), 30000);
+    clearTimeout(hackerDemoCompletionTimer);
+    hackerDemoCompletionTimer = window.setTimeout(() => {
+      clearInterval(hackerDemoPollTimer);
+      if (hackerDemoAwaitingBan) {
+        hackerDemoAwaitingBan = false;
+        window.showAppAlert(
+          "The simulations started, but all four hacker accounts were not banned within 45 seconds. Refresh the dashboard and check the backend logs.",
+          { title: "Demo still running", tone: "warning" }
+        );
+      }
+    }, 45000);
   } catch (error) {
-    window.showAppAlert(error.message || "The hacker demo could not start.", { title: "Hacker demo failed", tone: "error" });
+    hackerDemoAwaitingBan = false;
+    clearInterval(hackerDemoPollTimer);
+    clearTimeout(hackerDemoCompletionTimer);
+    const oldBackend = error.status === 404;
+    const message = oldBackend
+      ? `The backend returned 404 while ${demoStep}. Stop and restart Flask with python app.py from the backend folder, then hard-refresh this page (Ctrl+F5) and try again.`
+      : `${demoStep.charAt(0).toUpperCase()}${demoStep.slice(1)} failed: ${error.message || "Request failed."}`;
+    window.showAppAlert(message, { title: oldBackend ? "Restart the backend" : "Full demo failed", tone: "error" });
   } finally {
     if (button?.isConnected) {
       button.disabled = false;
-      button.textContent = "Run hacker demo";
+      button.textContent = "Run full demo";
     }
   }
 });
@@ -851,7 +915,6 @@ document.getElementById("resetHackerDemoBtn")?.addEventListener("click", async (
   try {
     const result = await api("/admin/gameplay/reset-hacker-demo", { method: "POST" });
     window.showAppToast(`Reset ${result.reset_accounts || 0} demo hacker accounts.`, "success");
-    shownHackerBanAlerts.clear();
     await loadAdmin(true);
   } catch (error) {
     window.showAppAlert(error.message || "The hacker demo could not be reset.", { title: "Reset failed", tone: "error" });

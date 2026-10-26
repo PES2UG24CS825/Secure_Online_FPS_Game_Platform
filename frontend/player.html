@@ -51,7 +51,7 @@
       </a>
 
       <a href="#support" data-section="support">
-        Support
+        Help &amp; support
       </a>
 
       <a href="#profile" data-section="profile">
@@ -88,7 +88,7 @@
 
     <div id="matchReviewBackdrop" class="match-review-backdrop" hidden></div>
     <div id="matchReviewToast" class="match-review-toast" role="status" aria-live="polite" hidden>
-      <div class="match-review-icon" aria-hidden="true">✓</div><div class="match-review-content"><strong id="matchReviewTitle">Match review</strong><p id="matchReviewMessage"></p><small>Closing in <span id="matchReviewCountdown">10</span>s</small><a href="#matches" data-section="matches" id="matchReviewDetails">View match details</a></div>
+      <div class="match-review-icon" id="matchReviewIcon" aria-hidden="true">✓</div><div class="match-review-content"><strong id="matchReviewTitle">Match review</strong><p id="matchReviewMessage"></p><small>Closing in <span id="matchReviewCountdown">10</span>s</small><a href="#matches" data-section="matches" id="matchReviewDetails">View match details</a></div>
       <button id="matchReviewClose" type="button" aria-label="Dismiss match review">×</button>
     </div>
 
@@ -121,7 +121,7 @@
       </section>
 
       <section class="stats-grid overview-quick-stats">
-        <article class="stat-card"><span>Matches played</span><strong id="matchesCount">—</strong><small id="matchesSummary">FPS Microgame sessions</small></article>
+        <article class="stat-card"><span>Completed matches</span><strong id="matchesCount">—</strong><small id="matchesSummary">FPS Microgame results</small></article>
         <article class="stat-card"><span>Account status</span><strong id="accountStatus">Loading</strong><small>Current account state</small></article>
         <article class="stat-card"><span>Two-factor auth</span><strong id="mfaStatus">Loading</strong><small>Authenticator app</small></article>
         <article class="stat-card"><span>Last login</span><strong id="lastLoginIp" class="ip-stat">Not recorded</strong><small>Most recent sign-in address</small></article>
@@ -133,7 +133,7 @@
         <article class="overview-breakdown"><div class="dashboard-panel-head"><h2>Risk trend, last 9 matches</h2><span class="dashboard-panel-caption">Older → Recent</span></div><div class="overview-trend-chart overview-risk-line" id="overviewRiskTrend" role="img" aria-label="Recent match risk trend"><span class="overview-trend-empty">Match analysis appears here</span></div><div class="overview-trend-foot"><span>Hover a point for match details</span></div></article>
         <article class="overview-leaderboard"><div class="dashboard-panel-head"><div><h2>Top performers</h2><span class="dashboard-panel-caption">Kills · K/D · accuracy</span></div><a href="#leaderboard" data-section="leaderboard">View all</a></div><div id="overviewLeaderboardList" class="leaderboard-list"><div class="empty">Loading performance…</div></div></article>
       </section>
-      <section class="dashboard-panel overview-recent-panel"><div class="dashboard-panel-head"><h2>Recent matches</h2><a href="#matches" data-section="matches">All matches</a></div><div class="overview-table-wrap"><table class="overview-recent-table"><thead><tr><th>Match</th><th>Date</th><th>K/D</th><th>Accuracy</th><th>Headshot %</th><th>Risk</th><th></th></tr></thead><tbody id="overviewRecentRows"><tr><td colspan="7">Loading match history…</td></tr></tbody></table></div></section>
+      <section class="dashboard-panel overview-recent-panel"><div class="dashboard-panel-head"><h2>Recent completed matches</h2><a href="#matches" data-section="matches">View matches</a></div><div class="overview-table-wrap"><table class="overview-recent-table"><thead><tr><th>Match</th><th>Date</th><th>K/D</th><th>Accuracy</th><th>Headshot %</th><th>Risk</th><th></th></tr></thead><tbody id="overviewRecentRows"><tr><td colspan="7">Loading match history…</td></tr></tbody></table></div></section>
 
     </section>
 
@@ -200,6 +200,16 @@
 
         </article>
 
+        <aside class="game-session-guide" aria-label="What happens in a match">
+          <div><p class="eyebrow">YOUR NEXT SESSION</p><h3>From play to review</h3><p>Each finished run is saved to your account.</p></div>
+          <ol>
+            <li><span>1</span><div><strong>Start a match</strong><small>Launch the FPS Microgame from this page.</small></div></li>
+            <li><span>2</span><div><strong>Finish the run</strong><small>Return to the dashboard so the session can be saved.</small></div></li>
+            <li><span>3</span><div><strong>Check your results</strong><small>Completed matches appear with their analysis status.</small></div></li>
+          </ol>
+          <a href="#matches" data-section="matches">View completed matches <span aria-hidden="true">→</span></a>
+        </aside>
+
       </div>
 
     </section>
@@ -216,10 +226,10 @@
         <div>
           <p class="eyebrow">MATCHES</p>
 
-          <h2>Recent matches</h2>
+          <h2>Completed matches</h2>
 
           <p class="page-description">
-            Your gameplay history and match results.
+            Finished FPS Microgame sessions and their review status.
           </p>
         </div>
 
@@ -227,7 +237,7 @@
 
 
       <div id="matchesList" class="match-grid">
-        <div class="match-empty"><strong>No matches yet</strong><span>Play the FPS Microgame to create your first match record.</span></div>
+        <div class="match-empty"><strong>No completed matches yet</strong><span>Finish a match to see your results and security review here.</span><a class="play-btn" href="#games" data-section="games">Play FPS Microgame</a></div>
       </div>
 
     </section>
@@ -328,7 +338,7 @@
     <section id="support" class="player-view">
       <div class="section-title"><div><p class="eyebrow">PLAYER SUPPORT</p><h2>How can we help?</h2><p class="page-description">Browse quick answers or send a message to the SecureFPS admin team.</p></div></div>
       <div class="support-layout">
-        <section class="profile-card support-assistant"><h3>SecureFPS helper</h3><p class="appearance-hint">Choose a common question or ask about account access, matches, security, or rewards.</p><div class="support-faq-list" id="supportFaqList"></div>        <div class="support-answer" id="supportAnswer" role="status" aria-live="polite">Select a question to see a suggested solution.</div><form id="supportQuestionForm" class="support-form"><label>Ask a question<input id="supportQuestion" maxlength="240" placeholder="For example: Where are my match rewards?"></label><button class="play-btn" type="submit">Ask the helper</button></form></section>
+        <section class="profile-card support-assistant"><h3>SecureFPS helper</h3><p class="appearance-hint">Choose a common question or ask about account access, matches, security, or rewards.</p><div class="support-faq-list" id="supportFaqList"></div><div class="support-answer" id="supportAnswer" role="status" aria-live="polite">Select a question to see a suggested solution.</div><form id="supportQuestionForm" class="support-form"><label>Ask a question<input id="supportQuestion" maxlength="240" required placeholder="For example: Where are my match rewards?"></label><button class="play-btn" type="submit">Ask the helper</button></form></section>
         <section class="profile-card support-contact"><h3>Contact support</h3><form id="supportTicketForm" class="support-form"><label>Topic<select id="supportCategory" required><option value="account">Account or sign-in</option><option value="match">Match or results</option><option value="security">Security review</option><option value="rewards">Rewards or store</option><option value="other">Other</option></select></label><label>Message<textarea id="supportMessage" rows="5" maxlength="3000" required placeholder="Describe what happened and what you need help with."></textarea></label><label>Screenshot or proof (optional)<input id="supportAttachment" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPG, or WebP up to 3 MB.</small></label><button class="play-btn" id="sendSupportTicket" type="submit">Send to admin</button><span id="supportFormStatus" class="appearance-status" role="status"></span></form></section>
       </div>
       <section class="profile-card support-ticket-history"><div class="dashboard-panel-head"><div><h2>Your support messages</h2><span class="dashboard-panel-caption">Replies from admin appear here</span></div><button class="play-btn" id="refreshSupportTickets" type="button">Refresh</button></div><div id="supportTicketList" class="list"><div class="empty">Loading messages…</div></div></section>
@@ -463,17 +473,6 @@
     </section>
 
   </main>
-
-  <aside class="player-help-widget" aria-label="SecureFPS help assistant">
-    <section id="playerHelpPanel" class="player-help-panel" aria-label="SecureFPS helper" hidden>
-      <div class="player-help-head"><div><strong>SecureFPS helper</strong><small>Quick answers for your account</small></div><button id="playerHelpClose" type="button" aria-label="Close helper">×</button></div>
-      <div class="player-help-questions"><button type="button" data-help-question="I can't sign in">Sign-in help</button><button type="button" data-help-question="Where is my match result?">Missing match</button><button type="button" data-help-question="What does a security review mean?">Risk review</button><button type="button" data-help-question="When do I earn coins and XP?">Coins and XP</button><button type="button" data-help-question="How does the leaderboard work?">Leaderboard</button></div>
-      <form id="playerHelpForm"><label class="sr-only" for="playerHelpInput">Ask the helper a question</label><input id="playerHelpInput" maxlength="240" placeholder="Ask a question…"><button type="submit">Ask</button></form>
-      <p id="playerHelpAnswer" role="status">Choose a topic or ask a question. Contact support for account specific help.</p>
-      <a href="#support" data-section="support" id="playerHelpSupport">Contact support</a>
-    </section>
-    <button id="playerHelpToggle" class="player-help-toggle" type="button" aria-expanded="false" aria-controls="playerHelpPanel"><span aria-hidden="true">✦</span> Help</button>
-  </aside>
 
   <div id="detectionInfoModal" class="detection-modal-backdrop" hidden>
     <section class="detection-modal" role="dialog" aria-modal="true" aria-labelledby="detectionInfoTitle">

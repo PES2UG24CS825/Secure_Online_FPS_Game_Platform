@@ -69,7 +69,7 @@ button,input{font:inherit}
 .badge.good{background:#d1ead8;color:#166534}
 .badge.warn{background:#f3e4c8;color:#92400e}
 .badge.bad{background:#f3d3d5;color:#991b1b}
-.gameplay-alert-banner.high,.gameplay-alert-card.high{border-color:#e4b2b5;background:#f5dcde;color:#991b1b}
+.gameplay-alert-banner.high,.gameplay-alert-card.high,.gameplay-alert-card.critical{border-color:#e4b2b5;background:#f5dcde;color:#991b1b}
 .gameplay-alert-banner.medium,.gameplay-alert-card.medium{border-color:#e8cfaa;background:#f6ebd8;color:#92400e}
 .gameplay-alert-banner.clear{border-color:#b3d7bf;background:#dcefe2;color:#166534}
 .gameplay-alert-banner.reviewed,.gameplay-alert-card.unknown,.gameplay-incomplete-notice{border-color:var(--line);background:var(--panel2);color:var(--muted)}
@@ -80,7 +80,7 @@ th,td,.list-row{border-color:var(--line)!important}
 .password-toggle:hover{color:var(--accent)}
 .admin-nav-btn.active{color:var(--accent2);background:var(--brand-tint)}
 
-dialog.app-alert-dialog{width:min(440px,calc(100vw - 32px));padding:0;border:1px solid var(--line);border-radius:18px;background:#E9E7F5;color:var(--text);box-shadow:0 28px 90px rgba(27,23,48,.25)}
+dialog.app-alert-dialog{position:fixed;top:50%;left:50%;right:auto;bottom:auto;margin:0;transform:translate(-50%,-50%);width:min(440px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;box-sizing:border-box;padding:0;border:1px solid var(--line);border-radius:18px;background:#E9E7F5;color:var(--text);box-shadow:0 28px 90px rgba(27,23,48,.25)}
 dialog.app-alert-dialog::backdrop{background:rgba(27,23,48,.42);backdrop-filter:blur(5px)}
 .app-alert-content{padding:24px}
 .app-alert-heading{display:flex;align-items:center;gap:12px;margin-bottom:12px}
@@ -92,7 +92,7 @@ dialog.app-alert-dialog::backdrop{background:rgba(27,23,48,.42);backdrop-filter:
 .app-alert-actions{display:flex;justify-content:flex-end;margin-top:22px}
 .app-alert-actions button{min-width:92px;border:0;border-radius:10px;padding:10px 16px;background:linear-gradient(135deg,#6D28D9,#4C1D95);color:#F3F0FF;font:inherit;font-weight:700;font-size:13px;cursor:pointer}
 .app-alert-actions button:focus-visible{outline:3px solid rgba(109,40,217,.35);outline-offset:2px}
-@media(prefers-reduced-motion:no-preference){dialog.app-alert-dialog[open]{animation:alert-pop .18s ease-out}@keyframes alert-pop{from{opacity:0;transform:translateY(7px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}}
+@media(prefers-reduced-motion:no-preference){dialog.app-alert-dialog[open]{animation:alert-pop .18s ease-out}@keyframes alert-pop{from{opacity:0;scale:.98}to{opacity:1;scale:1}}}
 .admin-support-inbox{display:grid;gap:14px}
 .admin-support-ticket{padding:16px;border:1px solid var(--line);border-radius:13px;background:var(--panel)}
 .admin-support-ticket header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}

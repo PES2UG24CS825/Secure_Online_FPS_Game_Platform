@@ -38,13 +38,9 @@ app.register_blueprint(player_bp)
 def network_server_settings(environ=None):
     env = environ if environ is not None else os.environ
     truthy = {"1", "true", "yes", "on"}
-    lan_mode = env.get("LAN_MODE", "0").strip().lower() in truthy
-    default_host = "0.0.0.0" if lan_mode else "127.0.0.1"
-    host = env.get("FLASK_HOST", default_host).strip()
     port = int(env.get("FLASK_PORT", "5000"))
     debug_requested = env.get("FLASK_DEBUG", "1").strip().lower() in truthy
-    debug = debug_requested and host != "0.0.0.0"
-    return host, port, debug
+    return "127.0.0.1", port, debug_requested
 
 
 @app.get("/")

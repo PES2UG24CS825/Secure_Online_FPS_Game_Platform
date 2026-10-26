@@ -99,14 +99,29 @@ window.showAppConfirm = function (message, options = {}) {
   });
 };
 
+let appToastRegion = null;
+
 window.showAppToast = function (message, tone = "info") {
+  if (!appToastRegion?.isConnected) {
+    appToastRegion = document.createElement("div");
+    appToastRegion.className = "app-toast-region";
+    appToastRegion.setAttribute("role", "status");
+    appToastRegion.setAttribute("aria-live", "polite");
+    appToastRegion.setAttribute("aria-relevant", "additions");
+    document.body.append(appToastRegion);
+  }
   const toast = document.createElement("div");
   toast.className = "app-toast";
   toast.dataset.tone = tone;
-  toast.setAttribute("role", "status");
   toast.textContent = String(message ?? "");
-  document.body.append(toast);
-  window.setTimeout(() => toast.remove(), 3200);
+  appToastRegion.append(toast);
+  window.setTimeout(() => {
+    toast.remove();
+    if (appToastRegion?.isConnected && !appToastRegion.childElementCount) {
+      appToastRegion.remove();
+      appToastRegion = null;
+    }
+  }, 3200);
 };
 
 async function api(path, options = {}) {

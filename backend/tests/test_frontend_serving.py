@@ -15,6 +15,18 @@ class FrontendServingTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["Location"], "/login.html")
 
+    def test_full_demo_setup_routes_are_registered(self):
+        for path in (
+            "/api/admin/gameplay/seed-normal-demo-players",
+            "/api/admin/gameplay/seed-hacker-demo-accounts",
+        ):
+            with self.subTest(path=path):
+                response = self.client.post(path)
+                self.assertEqual(response.status_code, 403)
+
+        telemetry_response = self.client.get("/api/admin/gameplay/telemetry")
+        self.assertEqual(telemetry_response.status_code, 403)
+
     def test_frontend_pages_and_unity_assets_are_served(self):
         for page in ("login.html", "player.html", "admin.html", "game.html"):
             with self.subTest(page=page):

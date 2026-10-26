@@ -76,19 +76,28 @@ function showMatchReview(match) {
   const toast = document.getElementById("matchReviewToast");
   const backdrop = document.getElementById("matchReviewBackdrop");
   if (!toast) return;
-  const severity = String(match.alert_severity || "").toLowerCase();
   const score = match.risk_score == null ? null : Number(match.risk_score);
-  const rewardNotice = "Match reward: +20 coins and +50 XP.";
+  const reportedSeverity = String(match.alert_severity || "").toLowerCase();
+  const severity = ["critical", "high", "medium", "low"].includes(reportedSeverity)
+    ? reportedSeverity
+    : score == null ? "unknown" : score >= 75 ? "high" : score >= 50 ? "medium" : "low";
+  const honourReward = match.honour_awarded == null ? "" : ` and +${Number(match.honour_awarded)} Honour`;
+  const rewardNotice = `Match reward: +20 coins and +50 XP${honourReward}.`;
   const title = document.getElementById("matchReviewTitle");
   const message = document.getElementById("matchReviewMessage");
   const countdown = document.getElementById("matchReviewCountdown");
-  if (title) title.textContent = severity ? `${severity.toUpperCase()} GAMEPLAY SIGNAL` : "MATCH COMPLETE";
+  const icon = document.getElementById("matchReviewIcon");
+  toast.dataset.severity = severity;
+  if (icon) icon.textContent = ["critical", "high", "medium"].includes(severity) ? "!" : severity === "unknown" ? "i" : "✓";
+  if (title) title.textContent = ["critical", "high", "medium"].includes(severity)
+    ? `${severity.toUpperCase()} GAMEPLAY SIGNAL`
+    : severity === "unknown" ? "MATCH REVIEW INCOMPLETE" : "MATCH COMPLETE";
   if (message) {
-    const review = severity
+    const review = ["critical", "high", "medium"].includes(severity)
       ? `The match review detected a ${severity} signal${score == null ? "." : ` with a risk score of ${score.toFixed(1)} / 100.`}`
-      : score == null
+      : severity === "unknown"
         ? "Your match was saved. Security analysis is incomplete because more gameplay data is needed."
-        : `No elevated gameplay signal was reported. Match risk score: ${score.toFixed(1)} / 100.`;
+        : `No elevated gameplay signal was reported${score == null ? "." : `. Match risk score: ${score.toFixed(1)} / 100.`}`;
     message.textContent = `${review} ${rewardNotice}`;
   }
   toast.hidden = false;
@@ -212,15 +221,31 @@ async function loadPlayerDashboard() {
     ]);
 
     const matches = Array.isArray(matchesData?.matches) ? matchesData.matches : [];
-    latestPlayerMatchId = matches[0]?.id || "";
+    const completedMatches = matches.filter((match) => String(match.status || "").toLowerCase() === "completed");
+    latestPlayerMatchId = completedMatches[0]?.id || "";
     const history = Array.isArray(securityData?.login_history) ? securityData.login_history : [];
     const activeSessions = Array.isArray(securityData?.active_sessions) ? securityData.active_sessions : [];
-    const latestScoredMatch = matches.find((match) => match.risk_score != null && Number.isFinite(Number(match.risk_score)));
+    if (securityData) {
+      const honourScore = Number(securityData.honour_score ?? 100);
+      const restrictionUntil = securityData.play_restricted_until;
+      if (honourScore < 80) {
+        const noticeKey = `securefps_honour_warning:${user.email || "account"}:${honourScore}:${restrictionUntil || "none"}`;
+        if (localStorage.getItem(noticeKey) !== "shown") {
+          const activeRestriction = restrictionUntil && new Date(restrictionUntil).getTime() > Date.now();
+          const message = activeRestriction
+            ? `Honour is ${honourScore}/100. Match access is paused until ${playerDate(restrictionUntil)} because the score is below 80.`
+            : `Honour is ${honourScore}/100, below 80. Leaving another unfinished match will pause match access for 30 minutes.`;
+          window.showAppToast?.(message, "warning");
+          localStorage.setItem(noticeKey, "shown");
+        }
+      }
+    }
+    const latestScoredMatch = completedMatches.find((match) => match.risk_score != null && Number.isFinite(Number(match.risk_score)));
     const risk = latestScoredMatch ? Number(latestScoredMatch.risk_score) : securityData?.risk_score;
 
     const trendChart = document.getElementById("overviewRiskTrend");
     if (trendChart) {
-      const scoredMatches = matches.filter((match) => match.risk_score != null && Number.isFinite(Number(match.risk_score))).slice(0, 9).reverse();
+      const scoredMatches = completedMatches.filter((match) => match.risk_score != null && Number.isFinite(Number(match.risk_score))).slice(0, 9).reverse();
       if (!matchesData) {
         trendChart.innerHTML = '<span class="overview-trend-empty">Match data unavailable</span>';
       } else if (!scoredMatches.length) {
@@ -275,7 +300,7 @@ async function loadPlayerDashboard() {
       }
     }
 
-    const analyzedMatches = matches.filter((match) => match.risk_score != null && Number.isFinite(Number(match.risk_score)));
+    const analyzedMatches = completedMatches.filter((match) => match.risk_score != null && Number.isFinite(Number(match.risk_score)));
     const weekStart = new Date();
     weekStart.setDate(weekStart.getDate() - 7);
     const analyzedThisWeek = analyzedMatches.filter((match) => {
@@ -325,9 +350,9 @@ async function loadPlayerDashboard() {
     const strongestFactor = updateRiskBreakdown(breakdownScore);
     if (topFactor) topFactor.textContent = `Top factor: ${strongestFactor}`;
 
-    document.getElementById("matchesCount").textContent = matchesData ? Number(matchesData.total_matches ?? matches.length) : "Unavailable";
+    document.getElementById("matchesCount").textContent = matchesData ? Number(matchesData.total_matches ?? completedMatches.length) : "Unavailable";
     const matchesSummary = document.getElementById("matchesSummary");
-    if (matchesSummary) matchesSummary.textContent = `${analyzedMatches.length} analyzed · ${Math.max(0, matches.length - analyzedMatches.length)} pending`;
+    if (matchesSummary) matchesSummary.textContent = `${analyzedMatches.length} analyzed · ${Math.max(0, completedMatches.length - analyzedMatches.length)} awaiting review`;
     document.getElementById("mfaStatus").textContent = securityData ? securityData.mfa_status === "enabled" ? "On" : "Off" : "Unavailable";
     const accountStatus = securityData?.account_status;
     const accountStatusLabels = {
@@ -348,20 +373,33 @@ async function loadPlayerDashboard() {
     if (matchesList) {
       matchesList.innerHTML = !matchesData
         ? '<div class="match-empty"><strong>Match history unavailable</strong><span>The match service could not be reached. Retry after the API and database are available.</span></div>'
-        : matches.slice(0, 10).map(matchCard).join("") || '<div class="match-empty"><strong>No matches yet</strong><span>Play the FPS Microgame to create your first match record.</span></div>';
+        : completedMatches.slice(0, 10).map(matchCard).join("") || '<div class="match-empty"><strong>No completed matches yet</strong><span>Finish a match to see your results and security review here.</span><a class="play-btn" href="#games" data-section="games">Play FPS Microgame</a></div>';
     }
 
     const recentRows = document.getElementById("overviewRecentRows");
     if (recentRows) recentRows.innerHTML = !matchesData
       ? '<tr><td colspan="7">Match history unavailable.</td></tr>'
-      : matches.slice(0, 3).map((match) => `<tr><td><strong>${playerText(match.match_id || "—")}</strong></td><td>${playerText(overviewDate(match.date))}</td><td>${match.kills ?? "—"} / ${match.deaths ?? "—"}</td><td>${match.accuracy == null ? "—" : `${Number(match.accuracy).toFixed(0)}%`}</td><td>${match.headshot_ratio == null ? "—" : `${(Number(match.headshot_ratio) * 100).toFixed(0)}%`}</td><td>${overviewRiskBadge(match)}</td><td><a href="#matches" data-section="matches">Details</a></td></tr>`).join("") || '<tr><td colspan="7">Your first match will appear here.</td></tr>';
+      : completedMatches.slice(0, 3).map((match) => `<tr><td><strong>${playerText(match.match_id || "—")}</strong></td><td>${playerText(overviewDate(match.date))}</td><td>${match.kills ?? "—"} / ${match.deaths ?? "—"}</td><td>${match.accuracy == null ? "—" : `${Number(match.accuracy).toFixed(0)}%`}</td><td>${match.headshot_ratio == null ? "—" : `${(Number(match.headshot_ratio) * 100).toFixed(0)}%`}</td><td>${overviewRiskBadge(match)}</td><td><a href="#matches" data-section="matches">Details</a></td></tr>`).join("") || '<tr><td colspan="7">No completed matches yet. <a href="#games" data-section="games">Play now</a></td></tr>';
     const returnedFromGame = sessionStorage.getItem("securefps_game_completed") === "1";
     if (returnedFromGame) {
       sessionStorage.removeItem("securefps_game_completed");
       const previousMatch = sessionStorage.getItem("securefps_match_before_game") || "";
       sessionStorage.removeItem("securefps_match_before_game");
-      const completedMatch = matches.find((match) => String(match.status).toLowerCase() === "completed");
-      if (completedMatch && completedMatch.id !== previousMatch) showMatchReview(completedMatch);
+      const completedMatch = completedMatches[0];
+      if (completedMatch && completedMatch.id !== previousMatch) {
+        showMatchReview(completedMatch);
+        const honourScore = Number(securityData?.honour_score ?? 100);
+        const honourAwarded = Number(completedMatch.honour_awarded ?? 0);
+        const honourMessage = honourAwarded > 0
+          ? `Honour increased by ${honourAwarded} to ${honourScore}/100.`
+          : `Match complete. Honour score: ${honourScore}/100.`;
+        window.showAppToast?.(honourMessage, "success");
+      }
+    }
+    const abandonNotice = sessionStorage.getItem("securefps_abandon_notice");
+    if (abandonNotice) {
+      sessionStorage.removeItem("securefps_abandon_notice");
+      window.showAppToast?.(abandonNotice, "warning");
     }
 
     const securityStatus = document.getElementById("securityStatus");
@@ -369,6 +407,7 @@ async function loadPlayerDashboard() {
       const ipRows = history.map((entry) => `<tr><td>${playerText(entry.ip_address || "Unknown")}</td><td>${playerText(playerDate(entry.timestamp))}</td><td>${playerText(entry.authentication_method || "Password + MFA")}</td><td><span class="badge ${entry.success === false ? "bad" : "good"}">${entry.success === false ? "Failed" : "Success"}</span></td></tr>`).join("");
       const warnings = Array.isArray(securityData.security_warnings) ? securityData.security_warnings : [];
       securityStatus.innerHTML = `
+        <article class="security-card honour-score-card" data-honour-risk="${Number(securityData.honour_score ?? 100) >= 80 ? "low" : Number(securityData.honour_score ?? 100) >= 50 ? "medium" : "high"}"><div class="security-card-label">Honour score</div><div class="security-card-value honour-score-value">${Number(securityData.honour_score ?? 100)}/100</div><div class="security-card-meta">${securityData.play_restricted_until ? `Match access paused until ${playerText(playerDate(securityData.play_restricted_until))}` : "Leaving unfinished matches reduces Honour"}</div></article>
         <article class="security-card"><div class="security-card-label">MFA / 2FA</div><div class="security-card-value">${securityData.mfa_status === "enabled" ? "Enabled" : "Disabled"}</div><div class="security-card-meta">Authenticator protection</div></article>
         <article class="security-card"><div class="security-card-label">Active sessions</div><div class="security-card-value">${activeSessions.length}</div><div class="security-card-meta">Devices currently signed in</div></article>
         <article class="security-card"><div class="security-card-label">Last login</div><div class="security-card-value security-card-value-small">${playerText(playerDate(securityData.last_login))}</div><div class="security-card-meta">Most recent successful sign in</div></article>

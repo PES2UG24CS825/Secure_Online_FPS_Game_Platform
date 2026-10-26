@@ -136,8 +136,9 @@ def get_matches():
         {"_id": user_oid},
         {"hacker_profile": 1, "account_type": 1},
     ) or {}
-    total_matches = game_sessions.count_documents({"user_id": user_oid})
-    player_matches = list(game_sessions.find({"user_id": user_oid}).sort("started_at", -1).limit(10))
+    completed_match_filter = {"user_id": user_oid, "status": "completed"}
+    total_matches = game_sessions.count_documents(completed_match_filter)
+    player_matches = list(game_sessions.find(completed_match_filter).sort("started_at", -1).limit(10))
     analyses = {}
     for item in game_events.find(
         {"user_id": user_oid, "analysis_type": "game_session"}
@@ -179,6 +180,7 @@ def get_matches():
             "kills": kills,
             "deaths": deaths,
             "kd": round(kills / max(deaths, 1), 2),
+            "honour_awarded": game_session.get("honour_awarded"),
             "accuracy": round(float(raw.get("accuracy", 0) or 0) * 100, 1),
             "headshot_ratio": raw.get("headshot_ratio"),
             "risk_score": analysis.get("risk_score", result.get("risk_score")),
@@ -471,6 +473,12 @@ def get_security_summary():
 
     user_oid = ObjectId(user_id)
     user = users.find_one({"_id": user_oid}) or {}
+    play_restricted_until = user.get("play_restricted_until")
+    if isinstance(play_restricted_until, datetime):
+        if play_restricted_until.tzinfo is None:
+            play_restricted_until = play_restricted_until.replace(tzinfo=timezone.utc)
+        if play_restricted_until <= datetime.now(timezone.utc):
+            play_restricted_until = None
     recent_login = login_history.find_one(
         {"user_id": user_oid, "type": "login_success"},
         sort=[("created_at", -1)],
@@ -494,6 +502,9 @@ def get_security_summary():
     return jsonify({
         "mfa_status": "enabled" if user.get("mfa_enabled") else "disabled",
         "account_status": user.get("account_status") or ("suspended" if user.get("revoked") else "active"),
+        "honour_score": user.get("honour_score", 100),
+        "play_restricted_until": play_restricted_until.isoformat()
+            if play_restricted_until else None,
         "security_warnings": [
             {
                 "note": item.get("note", "A gameplay security warning was recorded."),

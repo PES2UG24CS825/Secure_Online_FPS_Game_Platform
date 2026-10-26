@@ -19,38 +19,41 @@ HACKERS = (
 )
 
 
-def main():
-    if os.getenv("APP_ENV", "").strip().lower() not in {"development", "dev", "local"}:
-        print("Hacker account seeding is disabled outside development mode.")
-        return 1
-
-    password = os.getenv("HACKER_DEMO_PASSWORD", "")
-    mfa_secret = os.getenv("HACKER_DEMO_MFA_SECRET", "").strip()
+def seed_hacker_accounts(users, password, mfa_secret):
     if not password or not mfa_secret:
-        print("Set HACKER_DEMO_PASSWORD and HACKER_DEMO_MFA_SECRET before seeding.")
-        return 1
+        raise ValueError("Set HACKER_DEMO_PASSWORD and HACKER_DEMO_MFA_SECRET before seeding.")
 
     import pyotp
     from pymongo.errors import DuplicateKeyError
 
-    from database.db import users
     from services.auth import hash_password, validate_password
 
     if not validate_password(password):
-        print("HACKER_DEMO_PASSWORD must meet the existing account password policy.")
-        return 1
+        raise ValueError("HACKER_DEMO_PASSWORD must meet the existing account password policy.")
     try:
         pyotp.TOTP(mfa_secret)
-    except (TypeError, ValueError):
-        print("HACKER_DEMO_MFA_SECRET must be a valid TOTP secret.")
-        return 1
+    except (TypeError, ValueError) as error:
+        raise ValueError("HACKER_DEMO_MFA_SECRET must be a valid TOTP secret.") from error
 
     now = datetime.now(timezone.utc)
     password_hash = hash_password(password)
+    created = []
+    updated = []
     for email, name, profile in HACKERS:
+        username = email.split("@", 1)[0]
+        existing = users.find_one({"$or": [{"email": email}, {"username": username}]})
+        if existing and not (
+            existing.get("email") == email
+            and existing.get("username") == username
+            and existing.get("role") == "player"
+            and existing.get("demo") is True
+            and existing.get("account_type") == "demo_test"
+            and existing.get("hacker_profile") == profile
+        ):
+            raise ValueError(f"Refusing to modify a conflicting non-demo account for {email}.")
         account = {
             "name": name,
-            "username": email.split("@", 1)[0],
+            "username": username,
             "email": email,
             "password_hash": password_hash,
             "mfa_secret": mfa_secret,
@@ -59,6 +62,8 @@ def main():
             "demo": True,
             "account_type": "demo_test",
             "hacker_profile": profile,
+            "account_status": "active",
+            "revoked": False,
         }
         try:
             result = users.update_one(
@@ -70,9 +75,31 @@ def main():
                 upsert=True,
             )
         except DuplicateKeyError:
-            print(f"Refusing to overwrite a conflicting account for {email}.")
-            return 1
-        print(f"{'Created' if result.upserted_id else 'Updated'} {email} ({profile}).")
+            raise ValueError(f"Refusing to overwrite a conflicting account for {email}.")
+        (created if result.upserted_id else updated).append(email)
+    return {"players": [email for email, _, _ in HACKERS], "created": created, "updated": updated}
+
+
+def main():
+    if os.getenv("APP_ENV", "").strip().lower() not in {"development", "dev", "local"}:
+        print("Hacker account seeding is disabled outside development mode.")
+        return 1
+
+    from database.db import users
+    try:
+        result = seed_hacker_accounts(
+            users,
+            os.getenv("HACKER_DEMO_PASSWORD", ""),
+            os.getenv("HACKER_DEMO_MFA_SECRET", "").strip(),
+        )
+    except ValueError as error:
+        print(error)
+        return 1
+
+    for email in result["created"]:
+        print(f"Created {email}.")
+    for email in result["updated"]:
+        print(f"Updated {email}.")
 
     return 0
 
