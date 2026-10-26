@@ -197,7 +197,7 @@ def hacker_detection_reason(profile):
     }.get(profile, "Cheat-specific gameplay pattern detected.")
 
 
-def hacker_enforcement_score(model_score, raw_features):
+def hacker_enforcement_score(model_score, raw_features, profile=None):
     evidence_score = (
         (raw_features.get("accuracy") or 0) * 2
         + (raw_features.get("fire_rate") or 0) * 0.05
@@ -205,10 +205,17 @@ def hacker_enforcement_score(model_score, raw_features):
         + (raw_features.get("kdr") or 0) * 0.05
         + (1 - (raw_features.get("aim_smoothness") or 0)) * 100
     )
-    return round(
-        90 + min(9.9, max(0.1, round(model_score * 0.1 + evidence_score, 2))),
-        2,
-    )
+    profile_baselines = {
+        "aimbot": 92.0,
+        "wallhack": 88.0,
+        "speedhack": 94.0,
+        "silent_aim": 87.0,
+    }
+    baseline = profile_baselines.get(profile, 90.0)
+    bounded_model_score = min(100.0, max(0.0, float(model_score or 0)))
+    model_adjustment = (bounded_model_score - 50.0) * 0.03
+    evidence_adjustment = min(0.5, max(-0.5, (evidence_score - 50.0) / 200.0))
+    return round(min(99.0, max(86.0, baseline + model_adjustment + evidence_adjustment)), 2)
 
 
 def auto_ban_hacker(user_id, session_id, account, result, raw_features):
@@ -1169,6 +1176,7 @@ def analyze_game_session(
                 result["risk_score"] = hacker_enforcement_score(
                     model_score,
                     raw_features,
+                    account.get("hacker_profile"),
                 )
 
         except Exception as exc:
@@ -2758,6 +2766,8 @@ def admin_overview():
                             alert.get("risk_score") or 0,
                         ),
                         alert.get("raw_features") or {},
+                        alert.get("hacker_profile")
+                        or player_profiles.get(str(alert.get("user_id", ""))),
                     )
                     if (
                         (
