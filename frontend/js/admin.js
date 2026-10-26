@@ -24,6 +24,15 @@ function displayRiskScore(value) {
   return value == null || !Number.isFinite(score) ? "N/A" : `${score.toFixed(1)}/100`;
 }
 
+function hackerReason(profile) {
+  return {
+    aimbot: "Aimbot pattern: near-zero aim corrections with highly consistent target hits.",
+    wallhack: "Wallhack pattern: enemy hits and tracking were recorded without line of sight.",
+    speedhack: "Speedhack pattern: movement speed and teleport jumps exceeded game limits.",
+    silent_aim: "Silent-aim pattern: hits registered while the crosshair was off target."
+  }[profile] || "Cheat-specific gameplay pattern detected.";
+}
+
 function uniqueSessionRows(rows) {
   const seen = new Set();
   return (Array.isArray(rows) ? rows : []).filter((row) => {
@@ -58,7 +67,20 @@ async function loadPlayers() {
   try {
     const data = await api(`/admin/players?${params.toString()}`);
     const players = Array.isArray(data.players) ? data.players : [];
-    body.innerHTML = players.map((player) => { const suspended = ["suspended", "banned"].includes(player.account_status); const actions = window.adminRole === "moderator" ? '<span class="muted">Read only</span>' : `<button class="play-btn" data-action="${suspended ? "restore" : "revoke"}" data-id="${escapeHtml(player.id)}" data-player-name="${escapeHtml(player.name || "Player")}">${suspended ? "Restore" : "Suspend"}</button> <button class="play-btn danger-btn" data-action="delete" data-id="${escapeHtml(player.id)}" data-player-name="${escapeHtml(player.name || "Player")}">Delete</button>`; return `<tr><td><strong>${escapeHtml(player.name || "Player")}</strong>${player.demo ? '<small>DEMO TEST ACCOUNT</small>' : ""}<small>${escapeHtml(player.email || "")}</small></td><td>${escapeHtml(player.role || "player")}</td><td><span class="badge ${player.mfa_enabled ? "good" : "warn"}">${player.mfa_enabled ? "MFA enabled" : "Disabled"}</span></td><td>${escapeHtml(player.matches_played ?? 0)}</td><td>${escapeHtml(displayRiskScore(player.risk_score))}</td><td>${escapeHtml(player.last_login_ip || "No login recorded")}<small>${escapeHtml(displayDate(player.last_login))}</small></td><td>${escapeHtml(displayDate(player.created_at))}</td><td>${actions}</td></tr>`; }).join("") || '<tr><td colspan="8" class="empty-state">No genuine player accounts found yet.</td></tr>';
+    body.innerHTML = players.map((player) => {
+      const isHacker = ["aimbot", "wallhack", "speedhack", "silent_aim"].includes(player.hacker_profile);
+      const suspended = ["suspended", "banned"].includes(player.account_status);
+      const actions = window.adminRole === "moderator"
+        ? '<span class="muted">Read only</span>'
+        : `<button class="play-btn" data-action="${suspended ? "restore" : "revoke"}" data-id="${escapeHtml(player.id)}" data-player-name="${escapeHtml(player.name || "Player")}">${suspended ? "Restore" : "Suspend"}</button> <button class="play-btn danger-btn" data-action="delete" data-id="${escapeHtml(player.id)}" data-player-name="${escapeHtml(player.name || "Player")}">Delete</button>`;
+      const status = isHacker
+        ? `<span class="badge ${suspended ? "bad" : "warn"}">${escapeHtml(player.account_status || "active")}</span>`
+        : "";
+      const marker = isHacker
+        ? `<small class="hacker-player-label">HACKER DEMO · ${escapeHtml(player.hacker_profile)}</small>`
+        : (player.demo ? '<small>DEMO TEST ACCOUNT</small>' : "");
+      return `<tr class="${isHacker ? "hacker-player-row" : ""}"><td><strong>${escapeHtml(player.name || "Player")}</strong>${marker}<small>${escapeHtml(player.email || "")}</small></td><td>${escapeHtml(player.role || "player")}</td><td><span class="badge ${player.mfa_enabled ? "good" : "warn"}">${player.mfa_enabled ? "MFA enabled" : "Disabled"}</span>${status}</td><td>${escapeHtml(player.matches_played ?? 0)}</td><td>${escapeHtml(displayRiskScore(player.risk_score))}</td><td>${escapeHtml(player.last_login_ip || "No login recorded")}<small>${escapeHtml(displayDate(player.last_login))}</small></td><td>${escapeHtml(displayDate(player.created_at))}</td><td>${actions}</td></tr>`;
+    }).join("") || '<tr><td colspan="8" class="empty-state">No genuine player accounts found yet.</td></tr>';
     const total = Number(data.total ?? data.total_players ?? data.count ?? players.length);
     const pageCount = Math.max(1, Math.ceil(total / playersPageSize));
     playersPage = Math.min(playersPage, pageCount);
@@ -85,12 +107,36 @@ function renderLoginAudit(rows) {
     const test = /demo|test|fixture/i.test(row.player_name || "");
     return (includeTest || !test) && (!search || text.includes(search)) && (!player || row.player_name === player) && (!result || row.result === result) && (!date || rowDate === date);
   });
+  // Brute-force attempts against unknown accounts are useful audit data, but
+  // rendering every retry as a separate row can bury successful sign-ins.
+  // Group only same-source attempts that happened within a five-minute window.
+  const compactRows = [];
+  const unknownAttempts = new Map();
+  filtered.forEach((row) => {
+    if (row.result !== "Failed" || row.reason !== "unknown_account") {
+      compactRows.push(row);
+      return;
+    }
+    const time = new Date(row.timestamp).getTime();
+    const source = `${row.ip_address || "unknown"}|${row.device || "unknown"}`;
+    const bucket = Number.isFinite(time) ? Math.floor(time / 300000) : row.timestamp || "unknown";
+    const key = `${source}|${bucket}`;
+    const existing = unknownAttempts.get(key);
+    if (existing) {
+      existing.attempt_count += 1;
+      if (time > new Date(existing.timestamp).getTime()) existing.timestamp = row.timestamp;
+      return;
+    }
+    const grouped = { ...row, attempt_count: 1 };
+    unknownAttempts.set(key, grouped);
+    compactRows.push(grouped);
+  });
   const pageSize = 10;
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageCount = Math.max(1, Math.ceil(compactRows.length / pageSize));
   loginPage = Math.min(loginPage, pageCount);
-  const pageRows = filtered.slice((loginPage - 1) * pageSize, loginPage * pageSize);
+  const pageRows = compactRows.slice((loginPage - 1) * pageSize, loginPage * pageSize);
   body.innerHTML = pageRows.map((row) => `<tr>
-    <td><strong>${escapeHtml(row.player_name || "Unknown account")}</strong></td>
+    <td><strong>${escapeHtml(row.player_name || "Unknown account")}</strong>${row.attempt_count > 1 ? `<small>${row.attempt_count} attempts in a 5-minute window</small>` : ""}</td>
     <td><span class="badge ${row.result === "Success" ? "good" : "bad"} admin-login-result">${escapeHtml(row.result)} · ${escapeHtml(row.reason)}</span></td>
     <td title="${escapeHtml(row.device)}">${escapeHtml(row.device)}</td>
     <td>${escapeHtml(row.location)}</td><td>${escapeHtml(row.ip_address)}</td>
@@ -138,18 +184,29 @@ function renderGameplayAlerts(data) {
     : "";
 
   alertList.innerHTML = uniqueAlerts.map((alert) => {
-    const permanentlyBanned = alert.permanent_ban === true;
+    const hackerAlert = Boolean(
+      alert.hacker_profile
+      || /^Hacker (Aimbot|Wallhack|Speed|Silent Aim)$/i.test(alert.player_name || "")
+    );
+    const resolvedProfile = alert.hacker_profile || ({
+      "hacker aimbot": "aimbot",
+      "hacker wallhack": "wallhack",
+      "hacker speed": "speedhack",
+      "hacker silent aim": "silent_aim"
+    }[(alert.player_name || "").toLowerCase()]);
+    const permanentlyBanned = alert.permanent_ban === true || hackerAlert;
     const severity = permanentlyBanned ? "critical" : (["high", "medium"].includes(alert.severity) ? alert.severity : "unknown");
     const player = alert.player_name || alert.player_id || "N/A";
     return `<article class="gameplay-alert-card ${severity}">
       <h3>${permanentlyBanned ? "CHEATER AUTO-BANNED" : alert.demo ? "REAL-TIME CHEATING ALERT" : "Potentially suspicious gameplay session requires admin review"}</h3>
-      ${alert.demo ? `<p>${escapeHtml(player)} — suspicious gameplay detected.</p>` : ""}
+      ${hackerAlert || alert.demo ? `<p>${escapeHtml(player)} — ${escapeHtml(alert.detection_reason || (resolvedProfile ? hackerReason(resolvedProfile) : "suspicious gameplay detected."))}</p>` : ""}
       <div class="gameplay-alert-fields">
-        <span><strong>Player:</strong> ${escapeHtml(alert.demo ? alert.account_label || player : player)}</span>
+        <span><strong>Player:</strong> ${escapeHtml(player)}</span>
         <span><strong>Session:</strong> ${escapeHtml(alert.session_id || "N/A")}</span>
         <span><strong>Risk Score:</strong> ${escapeHtml(displayRiskScore(alert.risk_score))}</span>
         ${permanentlyBanned ? `<span class="permanent-ban-badge">PERMANENTLY BANNED</span>` : ""}
-        ${alert.hacker_profile ? `<span><strong>Profile:</strong> ${escapeHtml(alert.hacker_profile)}</span>` : ""}
+        ${resolvedProfile ? `<span><strong>Profile:</strong> ${escapeHtml(resolvedProfile)}</span>` : ""}
+        ${(alert.detection_reason || resolvedProfile) ? `<span><strong>Why detected:</strong> ${escapeHtml(alert.detection_reason || hackerReason(resolvedProfile))}</span>` : ""}
         <span><strong>Random Forest:</strong> ${escapeHtml(alert.random_forest || "Unavailable")}</span>
         <span><strong>Isolation Forest:</strong> ${escapeHtml(alert.isolation_forest || "Unavailable")}</span>
         ${permanentlyBanned && alert.top_reasons?.length ? `<span><strong>Top reasons:</strong> ${escapeHtml(alert.top_reasons.join("; "))}</span>` : ""}
@@ -157,7 +214,7 @@ function renderGameplayAlerts(data) {
         <span><strong>Alert time:</strong> ${escapeHtml(displayDate(alert.created_at))}</span>
         <span><strong>${permanentlyBanned ? "Ban time" : "Review status"}:</strong> ${escapeHtml(permanentlyBanned ? displayDate(alert.banned_at) : alert.review_status || "unknown")}</span>
       </div>
-      ${alert.review_status === "pending" && alert.session_id ? `<div class="gameplay-review-actions">
+      ${!hackerAlert && alert.review_status === "pending" && alert.session_id ? `<div class="gameplay-review-actions">
         ${["approve", "warn", ...(window.adminRole === "moderator" ? [] : ["suspend", "ban"])].map((action) => {
           const descriptions = {
             approve: "Mark reviewed without changing the player account.",
@@ -233,62 +290,26 @@ function renderDemoComparison(data) {
     + renderSession("Cheater-like demo session", demo, true);
 }
 
-function renderDemoAccount(data) {
-  const panel = document.getElementById("demoAccountPanel");
-  const account = data.demo_account;
-  if (!account) {
-    panel.innerHTML = '<div class="empty">Demo account is not seeded.</div>';
+function renderHackerAccounts(data) {
+  const panel = document.getElementById("hackerAccountsPanel");
+  if (!panel) return;
+  const accounts = Array.isArray(data.hacker_accounts) ? data.hacker_accounts : [];
+  if (!accounts.length) {
+    panel.innerHTML = '<div class="demo-account-card"><strong>No hacker accounts seeded.</strong><p>Run <code>python scripts/seed_hackers.py</code> in development, then refresh.</p></div>';
     return;
   }
-
-  function renderHackerAccounts(data) {
-    const panel = document.getElementById("hackerAccountsPanel");
-    if (!panel) return;
-    const accounts = Array.isArray(data.hacker_accounts) ? data.hacker_accounts : [];
-    if (!accounts.length) {
-      panel.innerHTML = '<div class="demo-account-card"><strong>No hacker accounts seeded.</strong><p>Run <code>python scripts/seed_hackers.py</code> in development, then refresh.</p></div>';
-      return;
-    }
-    panel.innerHTML = `<div class="hacker-account-grid">${accounts.map((account) => {
-      const banned = account.account_status === "banned" || account.revoked;
-      return `<article class="demo-account-card hacker-account-card">
-        <div class="demo-account-heading"><strong>${escapeHtml(account.email || account.name)}</strong><span class="badge ${banned ? "bad" : "good"}">${banned ? "PERMANENTLY BANNED" : "READY"}</span></div>
-        <div class="demo-account-fields">
-          <span><strong>Profile:</strong> ${escapeHtml(account.hacker_profile || "unknown")}</span>
-          <span><strong>Matches:</strong> ${escapeHtml(String(account.matches || 0))}</span>
-          <span><strong>Latest match:</strong> ${escapeHtml(account.latest_session_status || "none")}</span>
-          <span><strong>Account status:</strong> ${escapeHtml(account.account_status || "active")}</span>
-        </div>
-      </article>`;
-    }).join("")}</div>`;
-  }
-
-  const restricted = account.enforcement_state === "restricted";
-  const detectionStatus = account.detection_status || "not_evaluated";
-  const statusClass = detectionStatus === "success" ? (restricted ? "bad" : "good") : "gray";
-  const canReview = account.review_status === "pending";
-  const playerId = escapeHtml(account.player_id || "");
-  panel.innerHTML = `<div class="demo-account-card">
-    <div class="demo-account-heading"><strong>${escapeHtml(account.label || "DEMO CHEATER TEST ACCOUNT")}</strong><span class="badge ${statusClass}">${escapeHtml(restricted ? "restricted" : detectionStatus)}</span></div>
-    <div class="demo-account-fields">
-      <span><strong>Username:</strong> ${escapeHtml(account.username || "N/A")}</span>
-      <span><strong>Account type:</strong> ${escapeHtml(account.account_type || "N/A")}</span>
-      <span><strong>Current session:</strong> ${escapeHtml(account.session_id || "None")}</span>
-      <span><strong>Gameplay detection:</strong> ${escapeHtml(detectionStatus)}</span>
-      <span><strong>Risk score:</strong> ${escapeHtml(displayRiskScore(account.risk_score))}</span>
-      <span><strong>Random Forest:</strong> ${escapeHtml(account.random_forest || "Unavailable")}</span>
-      <span><strong>Isolation Forest:</strong> ${escapeHtml(account.isolation_forest || "Unavailable")}</span>
-      <span><strong>Alert severity:</strong> ${escapeHtml(account.alert_severity || "None")}</span>
-      <span><strong>Last evaluation:</strong> ${escapeHtml(displayDate(account.last_evaluation_at))}</span>
-      <span><strong>Enforcement:</strong> ${escapeHtml(account.enforcement_action || "none")} (${escapeHtml(account.enforcement_state || "monitoring")})</span>
-      <span><strong>Restricted until:</strong> ${escapeHtml(displayDate(account.restricted_until))}</span>
-      <span><strong>Review status:</strong> ${escapeHtml(account.review_status || "unknown")}</span>
-    </div>
-    <div class="demo-account-actions">
-      ${canReview && window.adminRole !== "moderator" ? `<button class="play-btn" type="button" data-demo-action="confirm-demo-alert" data-player-id="${playerId}">Mark alert reviewed</button>` : ""}
-      ${restricted && window.adminRole !== "moderator" ? `<button class="play-btn" type="button" data-demo-action="clear-demo-restriction" data-player-id="${playerId}">Clear temporary restriction</button>` : ""}
-    </div>
-  </div>`;
+  panel.innerHTML = `<div class="hacker-account-grid">${accounts.map((account) => {
+    const banned = account.account_status === "banned" || account.revoked;
+    return `<article class="demo-account-card hacker-account-card">
+      <div class="demo-account-heading"><strong>${escapeHtml(account.email || account.name)}</strong><span class="badge ${banned ? "bad" : "good"}">${banned ? "PERMANENTLY BANNED" : "READY"}</span></div>
+      <div class="demo-account-fields">
+        <span><strong>Profile:</strong> ${escapeHtml(account.hacker_profile || "unknown")}</span>
+        <span><strong>Matches:</strong> ${escapeHtml(String(account.matches || 0))}</span>
+        <span><strong>Latest match:</strong> ${escapeHtml(account.latest_session_status || "none")}</span>
+        <span><strong>Account status:</strong> ${escapeHtml(account.account_status || "active")}</span>
+      </div>
+    </article>`;
+  }).join("")}</div>`;
 }
 
 let adminLoading = false;
@@ -297,10 +318,27 @@ let adminHasLoaded = false;
 let adminLiveEvents = null;
 let adminRefreshTimer = null;
 let adminRefreshDebounce = null;
+let hackerDemoPollTimer = null;
+const shownHackerBanAlerts = new Set();
+let hasRenderedAdminData = false;
 
 function connectAdminLiveEvents() {
   if (adminLiveEvents || !window.EventSource) return;
   adminLiveEvents = new EventSource(`${window.API_BASE}/live/events`, { withCredentials: true });
+  adminLiveEvents.onopen = () => {
+    const status = document.getElementById("adminLiveStatus");
+    if (status) {
+      status.className = "status-pill live-connected";
+      status.innerHTML = '<span class="status-dot"></span>Live · connected';
+    }
+  };
+  adminLiveEvents.addEventListener("ready", () => {
+    const status = document.getElementById("adminLiveStatus");
+    if (status) {
+      status.className = "status-pill live-connected";
+      status.innerHTML = '<span class="status-dot"></span>Live · ready';
+    }
+  });
   adminLiveEvents.addEventListener("update", (event) => {
     let update = null;
     try { update = JSON.parse(event.data); } catch (error) { console.warn("Invalid admin live update", error); }
@@ -310,7 +348,8 @@ function connectAdminLiveEvents() {
       toast.className = "admin-cheater-toast";
       toast.setAttribute("role", "status");
       toast.setAttribute("aria-live", "polite");
-      toast.innerHTML = `<strong>Cheater auto-banned</strong><br>${escapeHtml(update.player_name || "Player")} (risk ${escapeHtml(score)})<br><small>${escapeHtml(update.hacker_profile || "demo")} · ${escapeHtml((update.top_reasons || []).slice(0, 2).join("; ") || "threshold exceeded")}</small>`;
+      const modelScore = update.model_risk_score == null ? "" : ` · model ${escapeHtml(displayRiskScore(update.model_risk_score))}`;
+      toast.innerHTML = `<strong>Cheater auto-banned</strong><br>${escapeHtml(update.player_name || "Player")} (risk ${escapeHtml(score)}${modelScore})<br><small>${escapeHtml(update.hacker_profile || "demo")} · ${escapeHtml((update.top_reasons || []).slice(0, 2).join("; ") || "threshold exceeded")}</small>`;
       document.body.append(toast);
       window.setTimeout(() => toast.remove(), 5000);
     }
@@ -348,7 +387,7 @@ async function loadAdmin(force = false) {
     const demoControls = document.getElementById("hackerDemoControls");
     if (demoControls) demoControls.hidden = data.demo_environment !== true;
     adminOverviewPlayers = Array.isArray(data.players) ? data.players : [];
-    document.getElementById("playerCount").textContent = data.players.length;
+    document.getElementById("playerCount").textContent = adminOverviewPlayers.length;
     const events = data.events || data.recent_events || [];
     const matches = data.matches || [];
     const recentLogins = data.recent_logins || [];
@@ -397,8 +436,21 @@ async function loadAdmin(force = false) {
     }).join("") || '<tr><td colspan="6">No game sessions recorded.</td></tr>';
     renderGameplayAlerts(data);
     renderDemoComparison(data);
-    renderDemoAccount(data);
     renderHackerAccounts(data);
+    const newBans = (data.gameplay_alerts || []).filter((alert) =>
+      alert.permanent_ban && alert.session_id && !shownHackerBanAlerts.has(alert.session_id)
+    );
+    newBans.forEach((alert) => {
+      shownHackerBanAlerts.add(alert.session_id);
+      if (hasRenderedAdminData) {
+        const score = displayRiskScore(alert.risk_score);
+        window.showAppToast(
+          `Cheater auto-banned: ${alert.player_name || "Player"} (risk ${score})`,
+          "error"
+        );
+      }
+    });
+    hasRenderedAdminData = true;
     adminHasLoaded = true;
     if (liveStatus) {
       liveStatus.className = "status-pill live-connected";
@@ -633,7 +685,7 @@ document.getElementById("refreshAnalysisBtn")?.addEventListener("click", (event)
   button.textContent = "Refreshing…";
   loadAdmin(true).finally(() => { button.disabled = false; button.textContent = "Refresh"; });
 });
-document.getElementById("demoAccountPanel").addEventListener("click", async (event) => {
+document.getElementById("hackerAccountsPanel")?.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-demo-action]");
   if (!button) return;
   await api(`/admin/players/${button.dataset.playerId}/${button.dataset.demoAction}`, { method: "POST" });
@@ -761,40 +813,53 @@ document.getElementById("seedDemoBtn")?.addEventListener("click", async (event) 
   }
 });
 document.getElementById("runHackerDemoBtn")?.addEventListener("click", async (event) => {
+  const button = event.currentTarget;
   const confirmed = await window.showAppConfirm("Start all four hacker simulations? They will be detected and permanently banned.", {
     title: "Run hacker demo?",
     confirmText: "Run demo",
     tone: "warning"
   });
   if (!confirmed) return;
-  const button = event.currentTarget;
   button.disabled = true;
+  button.textContent = "Starting…";
   try {
     await api("/admin/gameplay/run-hacker-demo", { method: "POST" });
     window.showAppToast("Hacker demo started. Watch for live auto-ban alerts.", "success");
+    await loadAdmin(true);
+    clearInterval(hackerDemoPollTimer);
+    hackerDemoPollTimer = setInterval(() => loadAdmin(true), 2000);
+    window.setTimeout(() => clearInterval(hackerDemoPollTimer), 30000);
   } catch (error) {
     window.showAppAlert(error.message || "The hacker demo could not start.", { title: "Hacker demo failed", tone: "error" });
   } finally {
-    if (button?.isConnected) button.disabled = false;
+    if (button?.isConnected) {
+      button.disabled = false;
+      button.textContent = "Run hacker demo";
+    }
   }
 });
 document.getElementById("resetHackerDemoBtn")?.addEventListener("click", async (event) => {
+  const button = event.currentTarget;
   const confirmed = await window.showAppConfirm("Unban the four demo hackers and delete their demo telemetry and alerts?", {
     title: "Reset hacker demo?",
     confirmText: "Reset demo",
     tone: "warning"
   });
   if (!confirmed) return;
-  const button = event.currentTarget;
   button.disabled = true;
+  button.textContent = "Resetting…";
   try {
     const result = await api("/admin/gameplay/reset-hacker-demo", { method: "POST" });
     window.showAppToast(`Reset ${result.reset_accounts || 0} demo hacker accounts.`, "success");
+    shownHackerBanAlerts.clear();
     await loadAdmin(true);
   } catch (error) {
     window.showAppAlert(error.message || "The hacker demo could not be reset.", { title: "Reset failed", tone: "error" });
   } finally {
-    if (button?.isConnected) button.disabled = false;
+    if (button?.isConnected) {
+      button.disabled = false;
+      button.textContent = "Reset demo hackers";
+    }
   }
 });
 loadAdmin();

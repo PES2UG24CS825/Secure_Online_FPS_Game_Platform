@@ -135,6 +135,7 @@ def health():
     return {
         "status": "ok" if connected else "unavailable",
         "database": "connected" if connected else "unavailable",
+        "database_name": os.getenv("MONGO_DB", os.getenv("DB_NAME", "secure_fps")),
     }, (200 if connected else 503)
 
 if __name__ == "__main__":
