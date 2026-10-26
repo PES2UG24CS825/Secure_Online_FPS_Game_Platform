@@ -275,25 +275,51 @@ function renderBannedAccounts(data) {
   }).join("") || '<div class="empty">No banned or suspended accounts.</div>';
 }
 
+const expandedHonourPlayers = new Set();
+let honourReportCache = [];
+
 function renderHonourReport(rows) {
   const body = document.getElementById("honourReportRows");
   if (!body) return;
-  const report = Array.isArray(rows) ? rows : [];
-  body.innerHTML = report.map((row) => {
-    const change = Number(row.honour_change || 0);
-    const changeLabel = `${change > 0 ? "+" : ""}${change}`;
-    const scoreBefore = row.honour_before == null ? "—" : row.honour_before;
-    const scoreAfter = row.honour_after == null ? "—" : row.honour_after;
-    const changeTone = change > 0 ? "good" : change < 0 ? "warn" : "gray";
-    return `<tr>
-      <td><strong>${escapeHtml(row.player_name || "Unknown player")}</strong></td>
-      <td>${escapeHtml(row.result || "Honour update")}</td>
-      <td>${escapeHtml(row.session_id || "—")}</td>
+  honourReportCache = Array.isArray(rows) ? rows : [];
+  const groups = new Map();
+  honourReportCache.forEach((row) => {
+    const key = String(row.player_id || row.player_name || "unknown-player");
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  });
+  body.innerHTML = [...groups.entries()].map(([key, playerRows]) => {
+    const latest = playerRows[0];
+    const totalChange = playerRows.reduce((total, row) => total + Number(row.honour_change || 0), 0);
+    const isExpanded = expandedHonourPlayers.has(key);
+    const changeLabel = `${totalChange > 0 ? "+" : ""}${totalChange}`;
+    const changeTone = totalChange > 0 ? "good" : totalChange < 0 ? "warn" : "gray";
+    const summary = `<tr class="honour-player-summary">
+      <td><div class="honour-player-cell"><button class="honour-group-toggle" type="button" data-honour-toggle="${escapeHtml(key)}" aria-expanded="${isExpanded}" aria-label="${isExpanded ? "Collapse" : "Expand"} Honour history for ${escapeHtml(latest.player_name || "player")}">${isExpanded ? "−" : "+"}</button><strong>${escapeHtml(latest.player_name || "Unknown player")}</strong></div></td>
+      <td>${playerRows.length} recorded update${playerRows.length === 1 ? "" : "s"}</td>
+      <td>${escapeHtml(latest.session_id || "—")}</td>
       <td><span class="badge ${changeTone}">${escapeHtml(changeLabel)} Honour</span></td>
-      <td>${escapeHtml(String(scoreBefore))} → ${escapeHtml(String(scoreAfter))}</td>
-      <td>${escapeHtml(row.access_status || "Available")}</td>
-      <td>${escapeHtml(displayDate(row.created_at))}</td>
+      <td>${escapeHtml(String(latest.current_score ?? "—"))}/100</td>
+      <td>${escapeHtml(latest.access_status || "Available")}</td>
+      <td>${escapeHtml(displayDate(latest.created_at))}</td>
     </tr>`;
+    if (!isExpanded) return summary;
+    const details = playerRows.map((row) => {
+      const change = Number(row.honour_change || 0);
+      const rowChange = `${change > 0 ? "+" : ""}${change}`;
+      const rowTone = change > 0 ? "good" : change < 0 ? "warn" : "gray";
+      const before = row.honour_before == null ? "—" : row.honour_before;
+      const after = row.honour_after == null ? "—" : row.honour_after;
+      return `<tr class="honour-player-detail">
+        <td></td><td>${escapeHtml(row.result || "Honour update")}</td>
+        <td>${escapeHtml(row.session_id || "—")}</td>
+        <td><span class="badge ${rowTone}">${escapeHtml(rowChange)} Honour</span></td>
+        <td>${escapeHtml(String(before))} → ${escapeHtml(String(after))}</td>
+        <td>${escapeHtml(row.access_status || "Available")}</td>
+        <td>${escapeHtml(displayDate(row.created_at))}</td>
+      </tr>`;
+    }).join("");
+    return summary + details;
   }).join("") || '<tr><td colspan="7">No Honour changes recorded yet.</td></tr>';
 }
 
@@ -884,6 +910,14 @@ document.getElementById("loginPagination")?.addEventListener("click", (event) =>
 });
 document.getElementById("refreshLogins")?.addEventListener("click", () => loadAdmin(true));
 document.getElementById("refreshHonourReport")?.addEventListener("click", () => loadAdmin(true));
+document.getElementById("honourReportRows")?.addEventListener("click", (event) => {
+  const toggle = event.target.closest("button[data-honour-toggle]");
+  if (!toggle) return;
+  const playerId = toggle.dataset.honourToggle;
+  if (expandedHonourPlayers.has(playerId)) expandedHonourPlayers.delete(playerId);
+  else expandedHonourPlayers.add(playerId);
+  renderHonourReport(honourReportCache);
+});
 document.getElementById("runHackerDemoBtn")?.addEventListener("click", async (event) => {
   const button = event.currentTarget;
   const confirmed = await window.showAppConfirm("Prepare the two normal players and four hacker simulations? The normal players stay active. You will get a separate alert when all four hackers are detected and banned.", {

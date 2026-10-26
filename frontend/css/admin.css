@@ -34,6 +34,14 @@
       margin-top: 16px;
     }
 
+    .honour-report-table .honour-player-summary { background:rgba(207,198,242,.24); }
+    .honour-report-table .honour-player-summary td { font-weight:600; }
+    .honour-report-table .honour-player-detail td:first-child { width:42px; }
+    .honour-player-cell { display:flex; align-items:center; gap:10px; min-width:180px; }
+    .honour-group-toggle { display:inline-grid; place-items:center; flex:0 0 30px; width:30px; height:30px; padding:0; border:1px solid #9D8ED2; border-radius:9px; background:#CFC6F2; color:#4C1D95; font-size:19px; font-weight:700; line-height:1; cursor:pointer; }
+    .honour-group-toggle:hover { background:#B9A9ED; }
+    .honour-group-toggle:focus-visible { outline:3px solid #6D28D9; outline-offset:2px; }
+
     table {
       width: 100%;
       border-collapse: collapse;

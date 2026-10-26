@@ -2421,6 +2421,10 @@ def admin_overview():
         str(player["_id"]): player.get("name", "")
         for player in players
     }
+    player_honour_scores = {
+        str(player["_id"]): player.get("honour_score", 100)
+        for player in players
+    }
     player_profiles = {
         str(player["_id"]): player.get("hacker_profile")
         for player in players
@@ -2453,7 +2457,9 @@ def admin_overview():
         user_key = str(event.get("user_id", ""))
         score_after = event.get("honour_score")
         honour_report_rows.append({
+            "player_id": user_key,
             "player_name": player_names.get(user_key, "Unknown player"),
+            "current_score": player_honour_scores.get(user_key, 100),
             "session_id": event.get("session_id"),
             "result": "Left unfinished match",
             "honour_change": event.get("honour_change", -MATCH_ABANDON_HONOUR_PENALTY),
@@ -2468,7 +2474,9 @@ def admin_overview():
         honour_before = reward.get("honour_before")
         honour_after = reward.get("honour_after")
         honour_report_rows.append({
+            "player_id": user_key,
             "player_name": player_names.get(user_key, "Unknown player"),
+            "current_score": player_honour_scores.get(user_key, 100),
             "session_id": reward.get("session_id"),
             "result": "Completed match",
             "honour_change": honour_change,
