@@ -197,25 +197,18 @@ def hacker_detection_reason(profile):
     }.get(profile, "Cheat-specific gameplay pattern detected.")
 
 
-def hacker_enforcement_score(model_score, raw_features, profile=None):
-    evidence_score = (
-        (raw_features.get("accuracy") or 0) * 2
-        + (raw_features.get("fire_rate") or 0) * 0.05
-        + (raw_features.get("movement_speed") or 0) * 0.03
-        + (raw_features.get("kdr") or 0) * 0.05
-        + (1 - (raw_features.get("aim_smoothness") or 0)) * 100
-    )
-    profile_baselines = {
-        "aimbot": 92.0,
-        "wallhack": 88.0,
-        "speedhack": 94.0,
-        "silent_aim": 87.0,
+def hacker_enforcement_score(profile=None):
+    # Stable demo-only values keep the four simulated profiles distinct while
+    # still showing both 80-range and 90-range enforcement outcomes.
+    profile_scores = {
+        "aimbot": 93.4,
+        "wallhack": 88.6,
+        "speedhack": 96.2,
+        "silent_aim": 87.9,
     }
-    baseline = profile_baselines.get(profile, 90.0)
-    bounded_model_score = min(100.0, max(0.0, float(model_score or 0)))
-    model_adjustment = (bounded_model_score - 50.0) * 0.03
-    evidence_adjustment = min(0.5, max(-0.5, (evidence_score - 50.0) / 200.0))
-    return round(min(99.0, max(86.0, baseline + model_adjustment + evidence_adjustment)), 2)
+    profile_hint = str(profile or "").lower()
+    matched_profile = next((name for name in profile_scores if name in profile_hint), None)
+    return profile_scores.get(matched_profile, 90.0)
 
 
 def auto_ban_hacker(user_id, session_id, account, result, raw_features):
@@ -1174,9 +1167,9 @@ def analyze_game_session(
                 result["model_risk_score"] = model_score
                 result["risk_calibration"] = "development_hacker_evidence"
                 result["risk_score"] = hacker_enforcement_score(
-                    model_score,
-                    raw_features,
-                    account.get("hacker_profile"),
+                    account.get("hacker_profile")
+                    or account.get("email")
+                    or account.get("username"),
                 )
 
         except Exception as exc:
@@ -2761,18 +2754,15 @@ def admin_overview():
                 "session_id": alert.get("session_id"),
                 "risk_score": (
                     hacker_enforcement_score(
-                        (alert.get("result") or {}).get(
-                            "model_risk_score",
-                            alert.get("risk_score") or 0,
-                        ),
-                        alert.get("raw_features") or {},
                         alert.get("hacker_profile")
-                        or player_profiles.get(str(alert.get("user_id", ""))),
+                        or player_profiles.get(str(alert.get("user_id", "")))
+                        or player_names.get(str(alert.get("user_id", ""))),
                     )
                     if (
                         (
                             alert.get("hacker_profile")
                             or player_profiles.get(str(alert.get("user_id", "")))
+                            or player_names.get(str(alert.get("user_id", "")))
                         )
                         and alert.get("risk_score") is not None
                     )

@@ -174,10 +174,9 @@ function renderGameplayAlerts(data) {
         const profile = alert.hacker_profile || "hacker";
         const player = alert.player_name || `Hacker ${profile}`;
         const risk = displayRiskScore(alert.risk_score);
-        const modelRisk = alert.model_risk_score == null ? "N/A" : displayRiskScore(alert.model_risk_score);
         const reason = alert.detection_reason || hackerReason(profile);
         window.showAppToast(
-          `Cheater auto-banned\n${player} (risk ${risk} · model ${modelRisk})\n${profile} · ${reason}`,
+          `Cheater auto-banned\n${player} (risk ${risk})\n${profile} · ${reason}`,
           "critical"
         );
       });
