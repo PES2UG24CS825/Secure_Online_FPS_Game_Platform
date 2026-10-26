@@ -74,9 +74,13 @@ def live_events():
     if not user_id:
         return jsonify({"message": "Authentication required."}), 401
 
-    account = users.find_one({"_id": user_id}, {"role": 1})
+    account = users.find_one({"_id": user_id}, {"role": 1, "revoked": 1, "account_status": 1})
     if not account:
         return jsonify({"message": "Account not found."}), 401
+    if account.get("account_status") == "suspended":
+        return jsonify({"message": "This account has been suspended."}), 403
+    if account.get("revoked") is True or account.get("account_status") == "banned":
+        return jsonify({"message": "This account is permanently banned."}), 403
     channel = "admin" if account.get("role") == "admin" else str(user_id)
     subscriber = queue.Queue(maxsize=50)
     with _live_subscribers_lock:
@@ -454,6 +458,10 @@ def start_game():
         return jsonify({
             "message": "Account not found."
         }), 401
+    if account.get("account_status") == "suspended":
+        return jsonify({"message": "This account has been suspended."}), 403
+    if account.get("revoked") is True or account.get("account_status") == "banned":
+        return jsonify({"message": "This account is permanently banned."}), 403
 
     restricted_until = account.get("demo_restricted_until")
     if restricted_until:
@@ -701,6 +709,13 @@ def receive_game_event():
         return jsonify({
             "message": "Game session has no user."
         }), 400
+    account = users.find_one({"_id": user_id}, {"revoked": 1, "account_status": 1})
+    if account and (
+        account.get("revoked") is True or account.get("account_status") == "banned"
+    ):
+        return jsonify({"message": "This account is permanently banned."}), 403
+    if account and account.get("account_status") == "suspended":
+        return jsonify({"message": "This account has been suspended."}), 403
 
     # -----------------------------------------------------
     # STORE TELEMETRY
@@ -1742,6 +1757,13 @@ def detect():
         return jsonify({
             "message": "Authentication required."
         }), 401
+    account = users.find_one({"_id": user_id}, {"revoked": 1, "account_status": 1})
+    if account and (
+        account.get("revoked") is True or account.get("account_status") == "banned"
+    ):
+        return jsonify({"message": "This account is permanently banned."}), 403
+    if account and account.get("account_status") == "suspended":
+        return jsonify({"message": "This account has been suspended."}), 403
 
     data = request.get_json(
         silent=True

@@ -59,6 +59,16 @@ def validate_auth_session():
 
     from bson import ObjectId
     try:
+        account = users.find_one(
+            {"_id": ObjectId(user_id)},
+            {"account_status": 1, "revoked": 1},
+        )
+        if account and account.get("account_status") == "suspended":
+            session.clear()
+            return jsonify({"message": "This account has been suspended."}), 403
+        if account and (account.get("revoked") is True or account.get("account_status") == "banned"):
+            session.clear()
+            return jsonify({"message": "This account is permanently banned."}), 403
         active_record = sessions_db.find_one(
             {"_id": ObjectId(record_id), "user_id": ObjectId(user_id), "is_active": True},
             {"_id": 1},

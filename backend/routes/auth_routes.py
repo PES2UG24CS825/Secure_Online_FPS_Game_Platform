@@ -18,6 +18,26 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 def utcnow():
     return datetime.now(timezone.utc)
 
+def blocked_account_message(user):
+    status = user.get("account_status")
+    if status == "suspended":
+        return "This account has been suspended. Contact support if you believe this is an error."
+    if status == "banned" or user.get("revoked") is True:
+        return "This account is permanently banned."
+    ban_until = user.get("ban_until")
+    if ban_until and ban_until.tzinfo is None:
+        ban_until = ban_until.replace(tzinfo=timezone.utc)
+    if status == "banned" and ban_until and ban_until <= utcnow():
+        users.update_one(
+            {"_id": user["_id"], "account_status": "banned"},
+            {"$set": {"account_status": "active", "revoked": False, "account_status_updated_at": utcnow()},
+             "$unset": {"ban_until": ""}},
+        )
+        return None
+    if not user.get("revoked") and status not in {"suspended", "banned"}:
+        return None
+    return "This account is permanently banned."
+
 @auth_bp.post("/signup")
 def signup():
     data = request.get_json(silent=True) or {}
@@ -109,6 +129,21 @@ def login():
         })
         return jsonify({"message": "Invalid email or password."}), 401
 
+    blocked_message = blocked_account_message(user)
+    if blocked_message:
+        login_history.insert_one({
+            "user_id": user["_id"],
+            "identifier": email,
+            "type": "login_failed",
+            "status": "failed",
+            "reason": "account_banned" if user.get("account_status") == "banned" else "account_suspended",
+            "ip_address": request.remote_addr or "Unknown",
+            "device": request.user_agent.string[:250],
+            "user_agent": request.user_agent.string[:250],
+            "created_at": utcnow(),
+        })
+        return jsonify({"message": blocked_message}), 403
+
     # The user's pointer is the authoritative lock. Historical session rows
     # can remain active after older clients logged out without a session id.
     active_record_id = user.get("active_auth_session_id")
@@ -187,6 +222,22 @@ def verify_mfa():
     if not user:
         session.clear()
         return jsonify({"message": "User not found."}), 401
+
+    blocked_message = blocked_account_message(user)
+    if blocked_message:
+        session.clear()
+        login_history.insert_one({
+            "user_id": user["_id"],
+            "identifier": user.get("email"),
+            "type": "login_failed",
+            "status": "failed",
+            "reason": "account_banned" if user.get("account_status") == "banned" else "account_suspended",
+            "ip_address": request.remote_addr or "Unknown",
+            "device": request.user_agent.string[:250],
+            "user_agent": request.user_agent.string[:250],
+            "created_at": utcnow(),
+        })
+        return jsonify({"message": blocked_message}), 403
 
     attempts = int(session.get("mfa_attempts", 0))
     if attempts >= 5:
