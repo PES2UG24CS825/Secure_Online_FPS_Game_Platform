@@ -147,7 +147,7 @@ def login():
     # The user's pointer is the authoritative lock. Historical session rows
     # can remain active after older clients logged out without a session id.
     active_record_id = user.get("active_auth_session_id")
-    session_takeover = False
+    session_takeover = bool(data.get("takeover"))
     if active_record_id:
         from bson import ObjectId
         try:
@@ -171,7 +171,7 @@ def login():
                 last_activity
                 and utcnow() - last_activity <= timedelta(seconds=AUTH_SESSION_IDLE_TIMEOUT_SECONDS)
             )
-            if is_recent:
+            if is_recent and not session_takeover:
                 login_history.insert_one({
                     "user_id": user["_id"],
                     "identifier": email,
@@ -184,9 +184,10 @@ def login():
                     "created_at": utcnow(),
                 })
                 return jsonify({
-                    "message": "This account is already signed in in another browser. Log out there before signing in here."
+                    "message": "This account is already signed in in another browser. Log out there first, or choose Sign in here to end that session.",
+                    "can_takeover": True,
                 }), 409
-            else:
+            elif not is_recent or session_takeover:
                 sessions_db.update_one(
                     {"_id": ObjectId(active_record_id), "user_id": user["_id"]},
                     {"$set": {"is_active": False, "last_activity": utcnow()}},
@@ -352,6 +353,7 @@ def me():
 def logout():
     record_id = session.get("auth_session_record_id")
     user_id = session.get("user_id")
+    pending_user_id = session.get("mfa_pending_user")
     if record_id:
         from bson import ObjectId
         try:
@@ -362,13 +364,40 @@ def logout():
             )
         except Exception:
             pass
-        if user_id:
-            try:
+    if user_id:
+        try:
+            # Clear the account pointer even if an old browser lost its
+            # session-record cookie; otherwise another browser remains locked.
+            users.update_one(
+                {"_id": ObjectId(user_id)},
+                {"$unset": {"active_auth_session_id": ""}},
+            )
+        except Exception:
+            pass
+    elif pending_user_id:
+        try:
+            from bson import ObjectId
+            pending_oid = ObjectId(pending_user_id)
+            account = users.find_one(
+                {"_id": pending_oid},
+                {"active_auth_session_id": 1},
+            ) or {}
+            pending_record_id = account.get("active_auth_session_id")
+            pending_record = None
+            if pending_record_id:
+                try:
+                    pending_record = sessions_db.find_one({
+                        "_id": ObjectId(pending_record_id),
+                        "user_id": pending_oid,
+                    }, {"is_active": 1})
+                except Exception:
+                    pending_record = None
+            if pending_record and not pending_record.get("is_active", False):
                 users.update_one(
-                    {"_id": ObjectId(user_id), "active_auth_session_id": record_id},
+                    {"_id": pending_oid, "active_auth_session_id": pending_record_id},
                     {"$unset": {"active_auth_session_id": ""}},
                 )
-            except Exception:
-                pass
+        except Exception:
+            pass
     session.clear()
     return jsonify({"message": "Logged out successfully."})

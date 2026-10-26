@@ -14,14 +14,28 @@ loginForm.addEventListener("submit", async (event) => {
     submitButton.textContent = "Checking credentials...";
   }
 
+  const credentials = {
+    email: document.getElementById("email").value,
+    password: document.getElementById("password").value
+  };
   try {
-    const data = await api("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({
-        email: document.getElementById("email").value,
-        password: document.getElementById("password").value
-      })
-    });
+    let data;
+    try {
+      data = await api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify(credentials)
+      });
+    } catch (error) {
+      if (error.status !== 409 || !error.data?.can_takeover) throw error;
+      const confirmed = window.confirm(
+        "This account is active in another browser. Sign in here and end that session?"
+      );
+      if (!confirmed) throw error;
+      data = await api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ ...credentials, takeover: true })
+      });
+    }
     if (data.mfa_required) {
       const params = new URLSearchParams();
       if (data.replace_other_session) params.set("replace", "1");

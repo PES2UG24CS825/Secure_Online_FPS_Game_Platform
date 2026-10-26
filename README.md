@@ -160,3 +160,7 @@ ban, and database-write paths; it is not a mock-only result.
   runs. The dashboard also refreshes every 15 seconds if SSE reconnects.
 - **401/403 after a run:** the account was probably permanently banned. Use
   **Reset demo hackers**, then sign in again.
+- **Account already signed in:** the login page now offers **Sign in here**.
+  Confirm it to end the old browser session and continue with MFA. If you close a
+  browser before signing out, wait for the configured idle timeout or use this
+  explicit takeover option; no account data is deleted.
