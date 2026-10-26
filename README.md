@@ -57,27 +57,42 @@ Keep the backend running on port 5000 while signing in.
 
 ## Run on another laptop
 
-1. Connect the host and other laptop to the same Wi-Fi. If the network isolates
-   devices, use the host's Windows Mobile hotspot instead.
-2. On the host laptop, run `start_demo.bat` from the project root. It starts
-   Flask in LAN mode, detects the host's current private IPv4 address, and prints
-   the exact URL to open. LAN mode disables Flask debug and leaves MongoDB on
-   the host laptop.
-3. If Windows Firewall blocks the page, run PowerShell as Administrator and
-   execute `allow_firewall.ps1`. It allows TCP port 5000 on the Private profile
-   only. For a trusted home or hotspot network marked Public by Windows, change
-   that network profile to Private in Windows Settings; do not open the port on
-   the Public profile.
-4. On the other laptop, open the printed `http://<host-ip>:5000/login.html`
-   address. The host laptop can use `http://127.0.0.1:5000/login.html`.
+Follow these steps on Windows. The host laptop runs MongoDB and Flask; the other
+laptop only needs a browser.
+
+1. **Connect both laptops to the same network.** Use the same Wi-Fi, or turn on
+   Mobile hotspot on the host and connect the other laptop to it.
+2. **Check MongoDB on the host.** Start the local MongoDB service if it is not
+   already running. MongoDB stays on the host; do not open port 27017.
+3. **Allow the demo through Windows Firewall once, if needed.** On the host,
+   open PowerShell as Administrator, go to the project folder, and run:
+   ```powershell
+   .\allow_firewall.ps1
+   ```
+   This adds an inbound rule for TCP port 5000 on the Private profile only. If
+   Windows marks a trusted home or hotspot network as Public, change that
+   network's profile to Private in Windows Settings; do not open the Public
+   profile.
+4. **Start the demo on the host.** In the project folder, double-click
+   `start_demo.bat` (or run it in Command Prompt). Keep the backend window open.
+   It detects the host's current private IP and prints both the other-laptop URL
+   and the host's localhost URL. LAN mode is enabled only for this run, and
+   Flask debug stays off.
+5. **Open the demo on the other laptop.** Type the printed URL, for example
+   `http://192.168.1.20:5000/login.html`, into its browser. Use the exact IP
+   printed on the host; it can change when you reconnect to Wi-Fi. Sign in there
+   as usual. On the host, use the printed `http://127.0.0.1:5000/login.html`
+   URL.
 
 Troubleshooting:
 
-- Confirm both laptops are on the same Wi-Fi or hotspot and that the host
-  backend window is still running.
-- Check the active network profile and the Private-only firewall rule.
-- College and office Wi-Fi may block connections between devices. Use a
-  personal hotspot if that network isolates clients.
+- If the page does not open, confirm both laptops are on the same Wi-Fi or
+  hotspot, `start_demo.bat` is still running, and you used the host's printed IP
+  with port `5000`.
+- Check that Windows Firewall allows TCP port 5000 on the host's Private
+  profile. The other laptop does not need the firewall script.
+- College and office Wi-Fi may isolate connected devices. Use the host's
+  personal/mobile hotspot if devices on that network cannot reach each other.
 - Do not expose MongoDB port 27017; the demo connects to MongoDB locally on the
   host laptop.
 
