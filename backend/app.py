@@ -1,8 +1,10 @@
 import os
+import mimetypes
+from pathlib import Path
 from datetime import datetime, timezone
 
 import pyotp
-from flask import Flask, jsonify, request, session
+from flask import Flask, jsonify, redirect, request, send_from_directory, session
 from flask_cors import CORS
 from database.db import sessions_db, test_connection, users
 from routes.auth_routes import auth_bp
@@ -10,7 +12,8 @@ from routes.game_routes import game_bp
 from routes.player_routes import player_bp
 from services.auth import hash_password, validate_password
 
-app = Flask(__name__)
+FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
+app = Flask(__name__, static_folder=None)
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-only-change-this-secret")
 AUTH_SESSION_IDLE_TIMEOUT_SECONDS = int(os.getenv("AUTH_SESSION_IDLE_TIMEOUT_SECONDS", "120"))
 app.config.update(
@@ -36,6 +39,67 @@ CORS(
 app.register_blueprint(auth_bp)
 app.register_blueprint(game_bp)
 app.register_blueprint(player_bp)
+
+
+@app.get("/")
+def frontend_home():
+    return redirect("/login.html")
+
+
+def _accepts_encoding(accept_encoding, encoding):
+    for item in accept_encoding.split(","):
+        name, *parameters = item.strip().lower().split(";", 1)
+        if name != encoding:
+            continue
+        quality = 1.0
+        if parameters:
+            for parameter in parameters[0].split(";"):
+                key, separator, value = parameter.strip().partition("=")
+                if separator and key == "q":
+                    try:
+                        quality = float(value)
+                    except ValueError:
+                        quality = 0.0
+        return quality > 0
+    return False
+
+
+@app.get("/<path:filename>")
+def frontend_file(filename):
+    served_filename = filename
+    content_filename = filename
+    content_encoding = None
+
+    if filename.endswith(".br"):
+        content_filename = filename[:-3]
+        content_encoding = "br"
+    elif filename.endswith(".gz"):
+        content_filename = filename[:-3]
+        content_encoding = "gzip"
+    else:
+        accepted = request.headers.get("Accept-Encoding", "")
+        for encoding, suffix in (("br", ".br"), ("gzip", ".gz")):
+            if not _accepts_encoding(accepted, encoding):
+                continue
+            candidate = FRONTEND_DIR / f"{filename}{suffix}"
+            if candidate.is_file():
+                served_filename = f"{filename}{suffix}"
+                content_encoding = encoding
+                break
+
+    response = send_from_directory(FRONTEND_DIR, served_filename, conditional=True)
+    suffix = Path(content_filename).suffix.lower()
+    content_type = {
+        ".wasm": "application/wasm",
+        ".data": "application/octet-stream",
+        ".js": "application/javascript",
+    }.get(suffix) or mimetypes.guess_type(content_filename)[0]
+    if content_type:
+        response.headers["Content-Type"] = content_type
+    if content_encoding:
+        response.headers["Content-Encoding"] = content_encoding
+        response.vary.add("Accept-Encoding")
+    return response
 
 
 @app.before_request
@@ -141,4 +205,10 @@ def health():
 if __name__ == "__main__":
     # Development defaults are documented credentials; override them in deployment.
     ensure_default_admin()
-    app.run(host="127.0.0.1", port=5000, debug=True, threaded=True)
+    debug_enabled = os.getenv("FLASK_DEBUG", "1").strip().lower() in {"1", "true", "yes", "on"}
+    app.run(
+        host=os.getenv("FLASK_HOST", "127.0.0.1"),
+        port=int(os.getenv("FLASK_PORT", "5000")),
+        debug=debug_enabled,
+        threaded=True,
+    )
