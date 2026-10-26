@@ -234,6 +234,8 @@ def auto_ban_hacker(user_id, session_id, account, result, raw_features):
         "session_id": session_id,
         "risk_score": risk_score,
         "reasons": reasons,
+        "hacker_profile": account.get("hacker_profile"),
+        "banned_at": banned_at,
         "created_at": banned_at,
     })
     publish_live_update(
@@ -2623,6 +2625,72 @@ def seed_admin_demo():
         )
         created_sessions.append({"session_id": session_id, "label": label, "analysis": result})
     return jsonify({"success": True, "sessions": created_sessions}), 201
+
+
+def _hacker_demo_allowed():
+    return os.getenv("APP_ENV", "").strip().lower() in {"development", "dev", "local"}
+
+
+@game_bp.post("/admin/gameplay/run-hacker-demo")
+def run_hacker_demo():
+    if not current_admin():
+        return jsonify({"message": "Admin access required."}), 403
+    if not _hacker_demo_allowed():
+        return jsonify({"message": "Hacker demo is available only in development mode."}), 403
+
+    from scripts.simulate_hacker import PROFILES, run_profile
+
+    def run_profile_later(profile, delay):
+        time.sleep(delay)
+        try:
+            run_profile(profile, 0.05)
+        except Exception as exc:
+            print(f"[SecureFPS] Hacker demo {profile} failed: {exc}")
+
+    for index, profile in enumerate(PROFILES):
+        threading.Thread(
+            target=run_profile_later,
+            args=(profile, index * 2),
+            daemon=True,
+            name=f"hacker-demo-{profile}",
+        ).start()
+    return jsonify({"success": True, "profiles": list(PROFILES)}), 202
+
+
+@game_bp.post("/admin/gameplay/reset-hacker-demo")
+def reset_hacker_demo():
+    if not current_admin():
+        return jsonify({"message": "Admin access required."}), 403
+    if not _hacker_demo_allowed():
+        return jsonify({"message": "Hacker demo is available only in development mode."}), 403
+
+    hacker_filter = {
+        "role": "player",
+        "account_type": "demo_test",
+        "hacker_profile": {"$in": ["aimbot", "wallhack", "speedhack", "silent_aim"]},
+    }
+    hacker_ids = [user["_id"] for user in users.find(hacker_filter, {"_id": 1})]
+    if not hacker_ids:
+        return jsonify({"success": True, "reset_accounts": 0})
+
+    users.update_many(
+        {"_id": {"$in": hacker_ids}},
+        {
+            "$set": {"revoked": False, "account_status": "active"},
+            "$unset": {
+                "banned_at": "",
+                "ban_reason": "",
+                "banned_by": "",
+                "demo_restricted_until": "",
+                "demo_restriction_reason": "",
+                "demo_restriction_session_id": "",
+                "demo_restriction_status": "",
+            },
+        },
+    )
+    for collection in (game_telemetry, game_events, game_sessions, security_events, sessions_db, login_history):
+        collection.delete_many({"user_id": {"$in": hacker_ids}})
+    return jsonify({"success": True, "reset_accounts": len(hacker_ids)}), 200
 
 
 # =========================================================

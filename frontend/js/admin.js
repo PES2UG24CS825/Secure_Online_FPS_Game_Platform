@@ -735,6 +735,41 @@ document.getElementById("seedDemoBtn")?.addEventListener("click", async (event) 
     event.currentTarget.disabled = false;
   }
 });
+document.getElementById("runHackerDemoBtn")?.addEventListener("click", async (event) => {
+  const confirmed = await window.showAppConfirm("Start all four hacker simulations? They will be detected and permanently banned.", {
+    title: "Run hacker demo?",
+    confirmText: "Run demo",
+    tone: "warning"
+  });
+  if (!confirmed) return;
+  event.currentTarget.disabled = true;
+  try {
+    await api("/admin/gameplay/run-hacker-demo", { method: "POST" });
+    window.showAppToast("Hacker demo started. Watch for live auto-ban alerts.", "success");
+  } catch (error) {
+    window.showAppAlert(error.message || "The hacker demo could not start.", { title: "Hacker demo failed", tone: "error" });
+  } finally {
+    event.currentTarget.disabled = false;
+  }
+});
+document.getElementById("resetHackerDemoBtn")?.addEventListener("click", async (event) => {
+  const confirmed = await window.showAppConfirm("Unban the four demo hackers and delete their demo telemetry and alerts?", {
+    title: "Reset hacker demo?",
+    confirmText: "Reset demo",
+    tone: "warning"
+  });
+  if (!confirmed) return;
+  event.currentTarget.disabled = true;
+  try {
+    const result = await api("/admin/gameplay/reset-hacker-demo", { method: "POST" });
+    window.showAppToast(`Reset ${result.reset_accounts || 0} demo hacker accounts.`, "success");
+    await loadAdmin(true);
+  } catch (error) {
+    window.showAppAlert(error.message || "The hacker demo could not be reset.", { title: "Reset failed", tone: "error" });
+  } finally {
+    event.currentTarget.disabled = false;
+  }
+});
 loadAdmin();
 // Keep a slower fallback refresh in case the event stream is interrupted.
 adminRefreshTimer = setInterval(() => {
