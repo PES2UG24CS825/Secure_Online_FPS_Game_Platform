@@ -1,278 +1,101 @@
-# Secure FPS Gaming Platform
+# SecureFPS demo
 
-This repository contains the SecureFPS final-year demonstration platform:
-authenticated FPS gameplay, MFA, MongoDB persistence, ML-based gameplay analysis,
-live admin alerts, and a development-only hacker detection fixture.
+SecureFPS is a Flask and MongoDB demo for FPS gameplay, account security, and
+gameplay telemetry analysis.
 
-## Stack
-Frontend: HTML, CSS, JavaScript
-Backend: Flask
-Database: MongoDB
-Security: bcrypt + TOTP MFA + HttpOnly Flask session
-ML: Random Forest + Isolation Forest
+## Run locally
 
-## 1. Start MongoDB
-Make sure MongoDB is running locally.
+1. Start MongoDB on this computer. The app uses the local database
+   `secure_fps` by default.
+2. In a terminal, install the backend requirements and create `backend/.env`:
 
-## 2. Backend
-Open a terminal:
-```bash
-cd backend
-python -m venv .venv
-# Windows:
-.venv\Scripts\activate
-# macOS/Linux:
-# source .venv/bin/activate
+   ```powershell
+   cd backend
+   python -m venv .venv
+   .\.venv\Scripts\activate
+   pip install -r requirements.txt
+   Copy-Item .env.example .env
+   ```
 
-pip install -r requirements.txt
-```
+   Set a private `FLASK_SECRET_KEY` in `.env`.
+3. Start Flask:
 
-Copy `.env.example` to `.env` and set a strong FLASK_SECRET_KEY.
+   ```powershell
+   python app.py
+   ```
 
-Run:
-```bash
-python app.py
-```
+4. Open <http://127.0.0.1:5000/login.html>. Flask serves the frontend and API
+   on the same port. The old frontend server on port 5500 also works if needed:
 
-Backend: http://127.0.0.1:5000
+   ```powershell
+   cd frontend
+   python -m http.server 5500
+   ```
 
-The local admin account is created automatically on startup. Defaults are:
-- Email: `admin1@gmail.com`
-- Password: `Admin@12345`
-- MFA key: `JBSWY3DPEHPK3PXP`
+The development admin defaults are `admin1@gmail.com` / `Admin@12345` with MFA
+secret `JBSWY3DPEHPK3PXP`. Change these values before sharing or deploying the
+demo.
 
-Set `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `ADMIN_MFA_SECRET` before deployment to replace these development credentials.
+## Connect another laptop (Windows)
 
-## 3. Frontend
-From the frontend directory, run:
-```bash
-cd frontend
-python -m http.server 5500
-```
+The host computer runs MongoDB and SecureFPS. The other laptop only needs a
+browser.
 
-Open the group project login page:
-`http://127.0.0.1:5500/login.html`
+1. Connect both computers to the same Wi-Fi. If that network blocks connections
+between devices, use the host's Mobile hotspot.
+2. Make sure MongoDB is running on the host.
+3. If Windows Firewall blocks access, open PowerShell as Administrator in the
+   project folder and run this once:
 
-Keep the backend running on port 5000 while signing in.
-
-## Run on another laptop
-
-Follow these steps on Windows. The host laptop runs MongoDB and Flask; the other
-laptop only needs a browser.
-
-1. **Connect both laptops to the same network.** Use the same Wi-Fi, or turn on
-   Mobile hotspot on the host and connect the other laptop to it.
-2. **Check MongoDB on the host.** Start the local MongoDB service if it is not
-   already running. MongoDB stays on the host; do not open port 27017.
-3. **Allow the demo through Windows Firewall once, if needed.** On the host,
-   open PowerShell as Administrator, go to the project folder, and run:
    ```powershell
    .\allow_firewall.ps1
    ```
-   This adds an inbound rule for TCP port 5000 on the Private profile only. If
-   Windows marks a trusted home or hotspot network as Public, change that
-   network's profile to Private in Windows Settings; do not open the Public
-   profile.
-4. **Start the demo on the host.** In the project folder, double-click
-   `start_demo.bat` (or run it in Command Prompt). Keep the backend window open.
-   It detects the host's current private IP and prints both the other-laptop URL
-   and the host's localhost URL. LAN mode is enabled only for this run, and
-   Flask debug stays off.
-5. **Open the demo on the other laptop.** Type the printed URL, for example
-   `http://192.168.1.20:5000/login.html`, into its browser. Use the exact IP
-   printed on the host; it can change when you reconnect to Wi-Fi. Sign in there
-   as usual. On the host, use the printed `http://127.0.0.1:5000/login.html`
-   URL.
 
-Troubleshooting:
+   This allows TCP port 5000 on the Private network profile only. Set a trusted
+   home or hotspot network to Private in Windows Settings if needed.
+4. On the host, double-click `start_demo.bat` and keep its backend window open.
+   It prints the URL for the other computer and a localhost URL for the host.
+5. On the other laptop, open the printed `http://<host-ip>:5000/login.html`
+   address. Use the exact IP printed by the script.
 
-- If the page does not open, confirm both laptops are on the same Wi-Fi or
-  hotspot, `start_demo.bat` is still running, and you used the host's printed IP
-  with port `5000`.
-- Check that Windows Firewall allows TCP port 5000 on the host's Private
-  profile. The other laptop does not need the firewall script.
-- College and office Wi-Fi may isolate connected devices. Use the host's
-  personal/mobile hotspot if devices on that network cannot reach each other.
-- Do not expose MongoDB port 27017; the demo connects to MongoDB locally on the
-  host laptop.
+Only port 5000 needs to be reachable from the other laptop. Keep MongoDB bound
+to the host; do not expose port 27017. LAN mode is off by default, and Flask
+debug is off when started in LAN mode.
 
-## 4. ML models
-Put your trained files here:
-- ml_models/random_forest_model.pkl
-- ml_models/isolation_forest_model.pkl
+If the page does not load, check that both computers are on the same network,
+the backend window is still open, the printed IP is current, and Windows
+Firewall allows port 5000 on the Private profile. College and office Wi-Fi may
+isolate devices; try a personal hotspot in that case.
 
-The feature order must match:
-reaction_time, accuracy, headshot_ratio, fire_rate, movement_speed, aim_smoothness, kdr
+**WebGL note:** the checked-in Unity build may still contain a localhost API
+address. Rebuild the WebGL game from `unity-games/FPS_Microgame` after updating
+the Unity client before testing gameplay telemetry from another laptop.
 
-## 5. Unity
-The single supported game is the FPS Microgame. Its Unity project is `unity-games/FPS_Microgame`; the WebGL build loaded by the platform is `frontend/public/games/FPS_Microgame/`.
+## Optional: four hacker demo accounts
 
-## Live dashboard and risk analysis
-The player and admin dashboards subscribe to the authenticated `/api/live/events` server-sent event stream. Gameplay telemetry, match completion, detections, and risk results notify the dashboards immediately. A 15-second refresh remains as a recovery path if the stream disconnects.
+This development-only demo seeds four test accounts and can run simulated
+gameplay from the admin console. Do not enable it for production or real users.
 
-Live analysis starts after 24 telemetry events and runs at most once every five seconds when all five model inputs are measurable. Configure this with `GAMEPLAY_REALTIME_ENABLED`, `GAMEPLAY_REALTIME_MIN_EVENTS`, `GAMEPLAY_REALTIME_WINDOW_EVENTS`, and `GAMEPLAY_REALTIME_INTERVAL_SECONDS` in `backend/.env`.
-
-MongoDB uses `MONGO_DB` when set, or `DB_NAME` from the example configuration. The
-project database is `secure_fps`; keep the backend and MongoDB running while
-playing. Dashboards read saved sessions and analysis from this database.
-
-## Admin console behavior
-
-Open the admin console after signing in as an administrator:
-
-```text
-http://127.0.0.1:5500/admin.html
-```
-
-### Players directory
-
-The Players directory intentionally excludes generated API-test fixtures such as
-`playerXXXXXXXX@example.com` and `Test Player`. It shows:
-
-- genuine player accounts;
-- the four reserved hacker accounts, marked `HACKER DEMO`;
-- match count, MFA state, risk, account status, and admin actions.
-
-The preserved `demo_cheater` development fixture is used by the original
-`Seed demo data` comparison flow but is not shown as a genuine player.
-
-### Gameplay alerts
-
-- Normal-player alerts remain reviewable with **Approve**, **Warn**, **Suspend**,
-  and **Ban** actions.
-- Hacker demo alerts are enforcement evidence, not manual-review alerts. They
-  show **CHEATER AUTO-BANNED**, **PERMANENTLY BANNED**, the hacker profile,
-  model results, the measured risk score, and the reason for detection.
-- Hacker profiles have different evidence-based scores; the score is not a
-  single hardcoded value. The original ML score is retained separately as
-  `model_risk_score`.
-- When a hacker is banned while the admin page is open, a red, accessible
-  real-time popup appears at the top of the overview without a page refresh.
-- Before a run, use **Reset demo hackers** so stale alerts and matches are
-  removed. The overview then starts with no hacker alerts. Alerts appear only
-  after the next run.
-
-## Security notes
-- Do not store plaintext passwords.
-- The MFA secret/QR is returned only during local account setup for this student prototype. In production, complete MFA enrollment through a controlled setup flow and do not expose the secret after setup.
-- Use HTTPS and set SESSION_COOKIE_SECURE=True in production.
-- Add CSRF protection, rate limiting, email verification, audit logging, and secure secret management before production deployment.
-
-## Development hacker demo
-
-This is a development-only presentation fixture. It is blocked when
-`APP_ENV=production`. Never enable it for real users or production data.
-
-1. In `backend/.env`, set:
-
-   ```env
-   APP_ENV=development
-   HACKER_DEMO_PASSWORD=HackerDemoPassword123!
-   HACKER_DEMO_MFA_SECRET=JBSWY3DPEHPK3PXP
-   DEMO_HACKER_BAN_RISK_THRESHOLD=85
-   ```
-
-   The password and MFA secret are local demo values; do not commit `backend/.env`.
-   When both trained models classify a hacker fixture as cheating/anomalous, the
-   development-only enforcement score is calibrated to at least 85 for the demo;
-   the original model score is retained as `model_risk_score`.
-2. With MongoDB running, seed the four accounts:
+1. In `backend/.env`, set `APP_ENV=development`, `HACKER_DEMO_PASSWORD`,
+   `HACKER_DEMO_MFA_SECRET`, and `DEMO_HACKER_BAN_RISK_THRESHOLD=85`.
+2. With MongoDB running, seed the accounts:
 
    ```powershell
    cd backend
    .\.venv\Scripts\python.exe scripts\seed_hackers.py
    ```
 
-   The accounts are `hacker_aimbot@example.test`, `hacker_wallhack@example.test`,
-   `hacker_speed@example.test`, and `hacker_silent@example.test`. They all use the
-   configured password and TOTP secret. The seed command is safe to run repeatedly.
-3. Restart the backend after changing `.env`, then sign in as an admin. Open
-   **Game monitoring** to confirm all four accounts and their match counts are listed.
-4. Click **Run hacker demo** and confirm. Four simulations start two seconds apart.
-   The admin Gameplay security alerts list updates without a page refresh, shows the
-   model outputs, profile-specific reasons, different evidence-based risk scores,
-   and a red **PERMANENTLY BANNED** badge when a demo account is automatically
-   banned. The red popup appears at the top of the overview.
-5. To replay the presentation, click **Reset demo hackers**, confirm, and run the
-   seed command again if the accounts were removed manually. Reset only affects the
-   four `account_type=demo_test` hacker accounts.
+3. Restart Flask, sign in as an admin, open **Game monitoring**, and choose
+   **Run hacker demo**. Use **Reset demo hackers** to clear the demo results.
 
-Each simulator can also be run directly:
+The accounts are `hacker_aimbot@example.test`,
+`hacker_wallhack@example.test`, `hacker_speed@example.test`, and
+`hacker_silent@example.test`. All use the configured demo password and MFA
+secret. Do not commit `backend/.env`.
 
-```powershell
-cd backend
-.\.venv\Scripts\python.exe scripts\simulate_hacker.py aimbot --fast
-.\.venv\Scripts\python.exe scripts\simulate_hacker.py all --fast
-```
+## Project paths
 
-The simulator uses the real login, MFA, game-start, telemetry, and game-complete
-endpoints. A banned hacker cannot log in or submit more gameplay events. Their
-completed/terminated matches remain visible in the admin Game history and in the
-player Match history when the account is reset and logged in before the next run.
-
-### What each hacker demonstrates
-
-| Account | Profile | Evidence shown in the alert |
-|---|---|---|
-| `hacker_aimbot@example.test` | `aimbot` | Near-zero aim corrections and highly consistent target hits |
-| `hacker_wallhack@example.test` | `wallhack` | Hits/tracking against enemies without line of sight |
-| `hacker_speed@example.test` | `speedhack` | Excessive movement speed and teleport jumps |
-| `hacker_silent@example.test` | `silent_aim` | Hits registered while the crosshair is off target |
-
-Each alert also lists the Random Forest classification, Isolation Forest
-classification, top contributing features, model score, enforcement score,
-session ID, and ban time.
-
-### If a reviewer asks you to play one hacker account
-
-Use this exact sequence so the reviewer can see both the gameplay and the stored
-evidence:
-
-1. In the admin console, click **Reset demo hackers**.
-2. Log in using one seeded account, for example
-   `hacker_aimbot@example.test`, with `HACKER_DEMO_PASSWORD`.
-3. Enter the FPS Microgame and play for at least 10 seconds. The normal game
-   client sends each telemetry event to `/api/game-events`; the backend stores
-   it in `game_telemetry` under the current `session_id`.
-4. Open the admin **Game monitoring** page. Show:
-   - the hacker account card and its match count;
-   - **Game history** with the saved session;
-   - **Analyzed sessions** with the feature values and model results;
-   - **Gameplay security alerts** with the risk score and
-     **PERMANENTLY BANNED** badge.
-5. In MongoDB, the same evidence is stored in `game_sessions`,
-   `game_telemetry`, `game_events`, and `security_events`. The auto-ban record
-   has type `auto_ban`, the user ID, session ID, risk score, reasons, and ban
-   timestamp.
-
-For a guaranteed, repeatable cheating signal during a short presentation, use
-**Run hacker demo** instead of pretending that ordinary human mouse movement is
-an aimbot. It still uses the real login, MFA, game-start, telemetry, analysis,
-ban, and database-write paths; it is not a mock-only result.
-
-### Troubleshooting
-
-- **Accounts are missing:** run the seed command from the `backend` directory and
-  verify `APP_ENV=development`; then refresh the admin page.
-- **Only old hacker alerts are visible:** click **Reset demo hackers**, wait for
-  the reset confirmation, then run the demo again. Reset removes the four
-  hackers' demo telemetry, sessions, analyses, and security alerts only.
-- **Generated Test Player rows are visible:** refresh the Players view. The
-  directory excludes `playerXXXXXXXX@example.com` fixtures; do not use the
-  `Include test data` checkbox in the sign-in audit unless reviewing test login
-  records.
-- **No automatic ban:** add `DEMO_HACKER_BAN_RISK_THRESHOLD=85` to the actual
-  `backend/.env` (not only `.env.example`) and restart Flask.
-- **No live alert:** keep the admin page open and signed in while the simulation
-  runs. The popup requires the admin page to remain open; the dashboard also
-  refreshes every 15 seconds if SSE reconnects.
-- **API or database unavailable:** verify
-  `http://127.0.0.1:5000/api/health` returns `database: connected`, then restart
-  Flask from `backend` using the project virtual environment:
-  `.venv\Scripts\python.exe app.py`.
-- **401/403 after a run:** the account was probably permanently banned. Use
-  **Reset demo hackers**, then sign in again.
-- **Account already signed in:** the login page now offers **Sign in here**.
-  Confirm it to end the old browser session and continue with MFA. If you close a
-  browser before signing out, wait for the configured idle timeout or use this
-  explicit takeover option; no account data is deleted.
+- Backend: `backend/` (Flask API and MongoDB access)
+- Frontend: `frontend/`
+- Unity project: `unity-games/FPS_Microgame/`
+- Unity WebGL build: `frontend/public/games/FPS_Microgame/`
