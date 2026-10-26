@@ -55,6 +55,32 @@ Open the group project login page:
 
 Keep the backend running on port 5000 while signing in.
 
+## Run on another laptop
+
+1. Connect the host and other laptop to the same Wi-Fi. If the network isolates
+   devices, use the host's Windows Mobile hotspot instead.
+2. On the host laptop, run `start_demo.bat` from the project root. It starts
+   Flask in LAN mode, detects the host's current private IPv4 address, and prints
+   the exact URL to open. LAN mode disables Flask debug and leaves MongoDB on
+   the host laptop.
+3. If Windows Firewall blocks the page, run PowerShell as Administrator and
+   execute `allow_firewall.ps1`. It allows TCP port 5000 on the Private profile
+   only. For a trusted home or hotspot network marked Public by Windows, change
+   that network profile to Private in Windows Settings; do not open the port on
+   the Public profile.
+4. On the other laptop, open the printed `http://<host-ip>:5000/login.html`
+   address. The host laptop can use `http://127.0.0.1:5000/login.html`.
+
+Troubleshooting:
+
+- Confirm both laptops are on the same Wi-Fi or hotspot and that the host
+  backend window is still running.
+- Check the active network profile and the Private-only firewall rule.
+- College and office Wi-Fi may block connections between devices. Use a
+  personal hotspot if that network isolates clients.
+- Do not expose MongoDB port 27017; the demo connects to MongoDB locally on the
+  host laptop.
+
 ## 4. ML models
 Put your trained files here:
 - ml_models/random_forest_model.pkl
