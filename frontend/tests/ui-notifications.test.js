@@ -63,14 +63,15 @@ test("app notifications share one accessible stack instead of covering each othe
   showAppToast("Saved", "success");
   showAppToast("Review needed", "warning");
   showAppToast("Request failed", "error");
+  showAppToast("Cheater auto-banned", "critical");
 
   assert.equal(document.body.children.length, 1);
   const [region] = document.body.children;
   assert.equal(region.className, "app-toast-region");
   assert.equal(region.attributes.role, "status");
   assert.equal(region.attributes["aria-live"], "polite");
-  assert.deepEqual(region.children.map((toast) => toast.dataset.tone), ["success", "warning", "error"]);
-  assert.deepEqual(region.children.map((toast) => toast.textContent), ["Saved", "Review needed", "Request failed"]);
+  assert.deepEqual(region.children.map((toast) => toast.dataset.tone), ["success", "warning", "error", "critical"]);
+  assert.deepEqual(region.children.map((toast) => toast.textContent), ["Saved", "Review needed", "Request failed", "Cheater auto-banned"]);
 });
 
 test("notification stack cleans itself up after the last toast expires", () => {

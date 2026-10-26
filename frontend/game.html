@@ -149,15 +149,10 @@
             if (ending || confirmingLeave) return;
             confirmingLeave = true;
             leaveWarning.hidden = false;
-            let confirmed;
-            if (typeof window.showAppConfirm === "function") {
-                confirmed = await window.showAppConfirm(
-                    "If this match is unfinished, leaving gives no coins or XP and reduces your Honour score by 20. If Honour falls below 80, you cannot start another match for 30 minutes. Continue leaving?",
-                    { title: "Leave match?", confirmText: "Leave match", tone: "warning" }
-                );
-            } else {
-                confirmed = window.confirm("If this match is unfinished, you will receive no match rewards and lose 20 Honour. Continue leaving?");
-            }
+            const confirmed = await window.showAppConfirm(
+                "If this match is unfinished, leaving gives no coins or XP and reduces your Honour score by 20. If Honour falls below 80, you cannot start another match for 30 minutes. Continue leaving?",
+                { title: "Leave match?", confirmText: "Leave match", tone: "warning" }
+            );
             confirmingLeave = false;
             if (!confirmed) {
                 leaveWarning.hidden = true;
