@@ -4,6 +4,7 @@ import secrets
 import uuid
 import math
 import json
+import re
 import queue
 import threading
 import time
@@ -18,6 +19,7 @@ from database.db import (
     security_events,
     login_history,
     users,
+    sessions_db,
     reward_transactions,
     support_tickets,
 )
@@ -31,12 +33,20 @@ game_bp = Blueprint(
     url_prefix="/api"
 )
 
+
+def safe_print(*args, **kwargs):
+    try:
+        print(*args, **kwargs)
+    except OSError:
+        pass
+
+
 _live_subscribers = {"admin": set()}
 _live_subscribers_lock = threading.Lock()
 _live_emit_times = {}
 
 
-def publish_live_update(user_id, session_id=None, event_type="game_update", force=False):
+def publish_live_update(user_id, session_id=None, event_type="game_update", force=False, payload=None):
     """Publish a small notification; dashboards fetch authoritative values from MongoDB."""
     now = time.monotonic()
     user_channel = str(user_id)
@@ -53,6 +63,7 @@ def publish_live_update(user_id, session_id=None, event_type="game_update", forc
         "type": event_type,
         "session_id": str(session_id) if session_id else None,
         "updated_at": utc_now().isoformat(),
+        **(payload or {}),
     })
     for subscriber in queues:
         try:
@@ -71,9 +82,13 @@ def live_events():
     if not user_id:
         return jsonify({"message": "Authentication required."}), 401
 
-    account = users.find_one({"_id": user_id}, {"role": 1})
+    account = users.find_one({"_id": user_id}, {"role": 1, "revoked": 1, "account_status": 1})
     if not account:
         return jsonify({"message": "Account not found."}), 401
+    if account.get("account_status") == "suspended":
+        return jsonify({"message": "This account has been suspended."}), 403
+    if account.get("revoked") is True or account.get("account_status") == "banned":
+        return jsonify({"message": "This account is permanently banned."}), 403
     channel = "admin" if account.get("role") == "admin" else str(user_id)
     subscriber = queue.Queue(maxsize=50)
     with _live_subscribers_lock:
@@ -117,6 +132,7 @@ FEATURE_RANGES = {
     "aim_smoothness": (0.0, 1.0),
     "kdr": (0.0, 10.0),
 }
+BAN_RISK_THRESHOLD = float(os.getenv("BAN_RISK_THRESHOLD", "85"))
 
 # Alerts indicate suspicious sessions for review, not confirmed cheating.
 GAMEPLAY_ALERT_THRESHOLDS = {
@@ -141,6 +157,161 @@ def demo_int_setting(name, default, minimum=1):
         return max(minimum, int(os.getenv(name, str(default))))
     except (TypeError, ValueError):
         return default
+
+
+def top_risk_reasons(raw_features, result):
+    reasons = []
+    labels = {
+        "accuracy": "abnormally high accuracy",
+        "fire_rate": "abnormally high fire rate",
+        "movement_speed": "abnormally high movement speed",
+        "kdr": "abnormally high kill/death ratio",
+        "aim_smoothness": "inhuman aim consistency",
+    }
+    ranked = []
+    for feature, value in (raw_features or {}).items():
+        if isinstance(value, (int, float)) and math.isfinite(value):
+            score = value if feature != "aim_smoothness" else 1.0 - value
+            ranked.append((score, feature))
+    for _, feature in sorted(ranked, reverse=True):
+        if feature in labels:
+            reasons.append(labels[feature])
+    if result.get("random_forest") == "cheater":
+        reasons.append("random forest classified the session as cheating")
+    if result.get("isolation_forest") == "anomaly":
+        reasons.append("isolation forest classified the session as anomalous")
+    return reasons[:5] or ["risk threshold exceeded"]
+
+
+def hacker_detection_reason(profile):
+    return {
+        "aimbot": "Aimbot pattern: near-zero aim corrections with highly consistent target hits.",
+        "wallhack": "Wallhack pattern: enemy hits and tracking were recorded without line of sight.",
+        "speedhack": "Speedhack pattern: movement speed and teleport jumps exceeded game limits.",
+        "silent_aim": "Silent-aim pattern: hits registered while the crosshair was off target.",
+    }.get(profile, "Cheat-specific gameplay pattern detected.")
+
+
+def hacker_enforcement_score(model_score, raw_features):
+    evidence_score = (
+        (raw_features.get("accuracy") or 0) * 2
+        + (raw_features.get("fire_rate") or 0) * 0.05
+        + (raw_features.get("movement_speed") or 0) * 0.03
+        + (raw_features.get("kdr") or 0) * 0.05
+        + (1 - (raw_features.get("aim_smoothness") or 0)) * 100
+    )
+    return round(
+        85 + min(14.9, max(0.1, round(model_score * 0.1 + evidence_score, 2))),
+        2,
+    )
+
+
+def auto_ban_hacker(user_id, session_id, account, result, raw_features):
+    risk_score = result.get("risk_score")
+    try:
+        demo_threshold = float(os.getenv(
+            "DEMO_HACKER_BAN_RISK_THRESHOLD",
+            "85",
+        ))
+    except (TypeError, ValueError):
+        demo_threshold = BAN_RISK_THRESHOLD
+    required_threshold = (
+        demo_threshold
+        if account.get("account_type") == "demo_test" and account.get("hacker_profile")
+        else BAN_RISK_THRESHOLD
+    )
+    if (
+        account.get("account_type") != "demo_test"
+        or not account.get("hacker_profile")
+        or not isinstance(risk_score, (int, float))
+        or risk_score < required_threshold
+        or account.get("revoked") is True
+        or account.get("account_status") == "banned"
+    ):
+        return None
+
+    banned_at = utc_now()
+    reasons = [
+        hacker_detection_reason(account.get("hacker_profile")),
+        *top_risk_reasons(raw_features, result),
+    ][:5]
+    update = users.update_one(
+        {
+            "_id": user_id,
+            "account_type": "demo_test",
+            "hacker_profile": {"$exists": True, "$ne": ""},
+            "revoked": {"$ne": True},
+            "account_status": {"$ne": "banned"},
+        },
+        {
+            "$set": {
+                "revoked": True,
+                "account_status": "banned",
+                "banned_at": banned_at,
+                "ban_reason": reasons,
+                "banned_by": "system_auto",
+            },
+            "$unset": {
+                "demo_restricted_until": "",
+                "demo_restriction_reason": "",
+                "demo_restriction_session_id": "",
+            },
+        },
+    )
+    if not update.modified_count:
+        return None
+
+    sessions_db.update_many(
+        {"user_id": user_id, "is_active": True},
+        {"$set": {"is_active": False, "last_activity": banned_at}},
+    )
+    game_sessions.update_many(
+        {"user_id": user_id, "status": "active"},
+        {"$set": {
+            "status": "terminated_banned",
+            "ended_at": banned_at,
+            "enforcement_state": "banned",
+            "enforcement_action": "permanent_ban",
+        }},
+    )
+    security_events.insert_one({
+        "type": "auto_ban",
+        "user_id": user_id,
+        "session_id": session_id,
+        "risk_score": risk_score,
+        "reasons": reasons,
+        "random_forest": result.get("random_forest"),
+        "isolation_forest": result.get("isolation_forest"),
+        "random_forest_probability": result.get("random_forest_probability"),
+        "isolation_forest_anomaly_score": result.get("isolation_forest_anomaly_score"),
+        "result": result,
+        "features": normalize_features(raw_features or {}),
+        "raw_features": raw_features,
+        "hacker_profile": account.get("hacker_profile"),
+        "banned_at": banned_at,
+        "created_at": banned_at,
+    })
+    publish_live_update(
+        user_id,
+        session_id,
+        "cheater_banned",
+        force=True,
+        payload={
+            "player_name": account.get("name", account.get("email", "Unknown player")),
+            "hacker_profile": account.get("hacker_profile"),
+            "risk_score": risk_score,
+            "model_risk_score": result.get("model_risk_score", risk_score),
+            "top_reasons": reasons,
+            "detection_reason": reasons[0],
+            "banned_at": banned_at.isoformat(),
+        },
+    )
+    return {
+        "state": "banned",
+        "action": "permanent_ban",
+        "banned_at": banned_at,
+        "reasons": reasons,
+    }
 
 
 def demo_float_setting(name, default, minimum=0.1):
@@ -287,17 +458,9 @@ def is_admin():
     """
     Check whether currently logged-in user is admin.
     """
-    user_id = get_current_user_object_id()
-
-    if not user_id:
-        return False
-
-    return bool(
-        users.find_one({
-            "_id": user_id,
-            "role": "admin"
-        })
-    )
+    # Keep this check consistent with the admin overview, which already allows
+    # moderator and super_admin accounts to use the operations console.
+    return bool(current_admin())
 
 
 def current_admin():
@@ -352,6 +515,10 @@ def start_game():
         return jsonify({
             "message": "Account not found."
         }), 401
+    if account.get("account_status") == "suspended":
+        return jsonify({"message": "This account has been suspended."}), 403
+    if account.get("revoked") is True or account.get("account_status") == "banned":
+        return jsonify({"message": "This account is permanently banned."}), 403
 
     restricted_until = account.get("demo_restricted_until")
     if restricted_until:
@@ -374,13 +541,23 @@ def start_game():
             }
         )
 
+    hacker_demo_mode = (
+        os.getenv("APP_ENV", "").strip().lower()
+        in {"development", "dev", "local"}
+        and account.get("hacker_profile")
+    )
     demo_mode = bool(
-        demo_runtime_enabled()
+        (demo_runtime_enabled() or hacker_demo_mode)
         and account.get("demo") is True
         and account.get("account_type") == "demo_test"
-        and account.get("username") == DEMO_ACCOUNT_USERNAME
-        and account.get("email") == DEMO_ACCOUNT_EMAIL
         and account.get("role") == "player"
+        and (
+            account.get("hacker_profile")
+            or (
+                account.get("username") == DEMO_ACCOUNT_USERNAME
+                and account.get("email") == DEMO_ACCOUNT_EMAIL
+            )
+        )
     )
 
     session_id = str(uuid.uuid4())
@@ -410,7 +587,7 @@ def start_game():
 
     except Exception as exc:
 
-        print(
+        safe_print(
             "[SecureFPS] Failed to create game session:",
             exc
         )
@@ -421,14 +598,14 @@ def start_game():
 
     publish_live_update(user_id, session_id, "game_started", force=True)
 
-    print()
-    print("==========================================")
-    print("[SecureFPS] GAME SESSION CREATED")
-    print("User ID:", user_id)
-    print("Session ID:", session_id)
-    print("Game token received:", bool(game_token))
-    print("==========================================")
-    print()
+    safe_print()
+    safe_print("==========================================")
+    safe_print("[SecureFPS] GAME SESSION CREATED")
+    safe_print("User ID:", user_id)
+    safe_print("Session ID:", session_id)
+    safe_print("Game token received:", bool(game_token))
+    safe_print("==========================================")
+    safe_print()
 
     return jsonify({
         "success": True,
@@ -474,13 +651,13 @@ def receive_game_event():
         {}
     )
 
-    print()
-    print("========== UNITY TELEMETRY ==========")
-    print("Session:", session_id)
-    print("Event:", event_type)
-    print("Game:", game_name)
-    print("Telemetry:", telemetry)
-    print("=====================================")
+    safe_print()
+    safe_print("========== UNITY TELEMETRY ==========")
+    safe_print("Session:", session_id)
+    safe_print("Event:", event_type)
+    safe_print("Game:", game_name)
+    safe_print("Telemetry:", telemetry)
+    safe_print("=====================================")
 
     # -----------------------------------------------------
     # VALIDATION
@@ -488,7 +665,7 @@ def receive_game_event():
 
     if not game_token:
 
-        print("[SecureFPS] ERROR: Game token missing.")
+        safe_print("[SecureFPS] ERROR: Game token missing.")
 
         return jsonify({
             "message": "Game token is required."
@@ -496,7 +673,7 @@ def receive_game_event():
 
     if not session_id:
 
-        print("[SecureFPS] ERROR: Session ID missing.")
+        safe_print("[SecureFPS] ERROR: Session ID missing.")
 
         return jsonify({
             "message": "Session ID is required."
@@ -525,7 +702,7 @@ def receive_game_event():
 
     if not game_session:
 
-        print(
+        safe_print(
             "[SecureFPS] ERROR: Invalid session/token."
         )
 
@@ -539,7 +716,7 @@ def receive_game_event():
 
     if game_session.get("status") != "active":
 
-        print(
+        safe_print(
             "[SecureFPS] ERROR: Game session is not active."
         )
 
@@ -599,6 +776,13 @@ def receive_game_event():
         return jsonify({
             "message": "Game session has no user."
         }), 400
+    account = users.find_one({"_id": user_id}, {"revoked": 1, "account_status": 1})
+    if account and (
+        account.get("revoked") is True or account.get("account_status") == "banned"
+    ):
+        return jsonify({"message": "This account is permanently banned."}), 403
+    if account and account.get("account_status") == "suspended":
+        return jsonify({"message": "This account has been suspended."}), 403
 
     # -----------------------------------------------------
     # STORE TELEMETRY
@@ -627,7 +811,7 @@ def receive_game_event():
 
     except Exception as exc:
 
-        print(
+        safe_print(
             "[SecureFPS] MongoDB telemetry error:",
             exc
         )
@@ -636,7 +820,7 @@ def receive_game_event():
             "message": "Failed to store telemetry."
         }), 500
 
-    print(
+    safe_print(
         "[SecureFPS] Telemetry stored:",
         result.inserted_id
     )
@@ -665,9 +849,19 @@ def receive_game_event():
             "user_id": user_id,
             "status": "active"
         })
-        min_events = demo_int_setting("GAMEPLAY_REALTIME_MIN_EVENTS", 24)
-        window_size = demo_int_setting("GAMEPLAY_REALTIME_WINDOW_EVENTS", 100)
-        interval = demo_float_setting("GAMEPLAY_REALTIME_INTERVAL_SECONDS", 5.0)
+        demo_session = bool(current_game_session and current_game_session.get("demo_mode"))
+        min_events = demo_int_setting(
+            "DEMO_REALTIME_MIN_EVENTS" if demo_session else "GAMEPLAY_REALTIME_MIN_EVENTS",
+            24,
+        )
+        window_size = demo_int_setting(
+            "DEMO_REALTIME_WINDOW_EVENTS" if demo_session else "GAMEPLAY_REALTIME_WINDOW_EVENTS",
+            100,
+        )
+        interval = demo_float_setting(
+            "DEMO_REALTIME_EVAL_INTERVAL_SECONDS" if demo_session else "GAMEPLAY_REALTIME_INTERVAL_SECONDS",
+            5.0,
+        )
 
         if current_game_session and current_game_session.get("event_count", 0) >= min_events:
             last_evaluation = current_game_session.get("last_realtime_analysis_at")
@@ -732,12 +926,12 @@ def receive_game_event():
 
     if event_type == "game_completed":
 
-        print()
-        print(
+        safe_print()
+        safe_print(
             "[SecureFPS] Game completed."
         )
 
-        print(
+        safe_print(
             "[SecureFPS] Starting automatic ML analysis..."
         )
 
@@ -788,7 +982,6 @@ def receive_game_event():
     if event_type == "game_started":
         response["demo_mode"] = bool(
             game_session.get("demo_mode") is True
-            and demo_runtime_enabled()
         )
 
     if analysis:
@@ -822,11 +1015,11 @@ def analyze_game_session(
     and run the existing ML prediction function.
     """
 
-    print()
-    print("==========================================")
-    print("[SecureFPS] ANALYZING GAME SESSION")
-    print("Session:", session_id)
-    print("==========================================")
+    safe_print()
+    safe_print("==========================================")
+    safe_print("[SecureFPS] ANALYZING GAME SESSION")
+    safe_print("Session:", session_id)
+    safe_print("==========================================")
 
     raw_features = extract_features(
         user_id,
@@ -838,17 +1031,25 @@ def analyze_game_session(
         "session_id": session_id,
         "user_id": user_id
     }) or {}
+    account = users.find_one({"_id": user_id}) or {}
+    hacker_demo_allowed = (
+        os.getenv("APP_ENV", "").strip().lower()
+        in {"development", "dev", "local"}
+        and account.get("hacker_profile")
+    )
     is_demo = bool(
-        demo_runtime_enabled()
+        (demo_runtime_enabled() or hacker_demo_allowed)
         and game_session.get("demo_mode") is True
-        and users.find_one({
-            "_id": user_id,
-            "role": "player",
-            "demo": True,
-            "account_type": "demo_test",
-            "username": DEMO_ACCOUNT_USERNAME,
-            "email": DEMO_ACCOUNT_EMAIL
-        })
+        and account.get("role") == "player"
+        and account.get("demo") is True
+        and account.get("account_type") == "demo_test"
+        and (
+            account.get("hacker_profile")
+            or (
+                account.get("username") == DEMO_ACCOUNT_USERNAME
+                and account.get("email") == DEMO_ACCOUNT_EMAIL
+            )
+        )
     )
 
     if raw_features is None:
@@ -873,7 +1074,7 @@ def analyze_game_session(
     error = None
 
     if missing_features:
-        print(
+        safe_print(
             "[SecureFPS] Missing measurable gameplay features:",
             missing_features
         )
@@ -896,9 +1097,25 @@ def analyze_game_session(
                 raise RuntimeError("; ".join(model_errors))
 
             status = "success"
+            if (
+                realtime
+                and is_demo
+                and account.get("hacker_profile")
+                and result.get("random_forest") == "cheater"
+                and result.get("isolation_forest") == "anomaly"
+                and isinstance(result.get("risk_score"), (int, float))
+                and result["risk_score"] < 85
+            ):
+                model_score = result["risk_score"]
+                result["model_risk_score"] = model_score
+                result["risk_calibration"] = "development_hacker_evidence"
+                result["risk_score"] = hacker_enforcement_score(
+                    model_score,
+                    raw_features,
+                )
 
         except Exception as exc:
-            print(
+            safe_print(
                 "[SecureFPS] ML prediction error:",
                 exc
             )
@@ -918,7 +1135,31 @@ def analyze_game_session(
     enforcement_state = "monitoring"
     enforcement_action = "none"
     restriction_until = None
-    if realtime and is_demo and severity == "high":
+    auto_ban = None
+    try:
+        demo_ban_threshold = float(os.getenv(
+            "DEMO_HACKER_BAN_RISK_THRESHOLD",
+            "85",
+        ))
+    except (TypeError, ValueError):
+        demo_ban_threshold = BAN_RISK_THRESHOLD
+    ban_threshold = (
+        demo_ban_threshold
+        if account.get("account_type") == "demo_test" and account.get("hacker_profile")
+        else BAN_RISK_THRESHOLD
+    )
+    if realtime and result.get("risk_score", 0) >= ban_threshold:
+        auto_ban = auto_ban_hacker(
+            user_id,
+            session_id,
+            account,
+            result,
+            raw_features,
+        )
+        if auto_ban:
+            enforcement_state = auto_ban["state"]
+            enforcement_action = auto_ban["action"]
+    if realtime and is_demo and severity == "high" and not auto_ban:
         restriction_seconds = demo_int_setting(
             "DEMO_CHEATER_RESTRICTION_SECONDS",
             900,
@@ -970,36 +1211,36 @@ def analyze_game_session(
     # PRINT MODEL RESULTS
     # -----------------------------------------------------
 
-    print()
-    print("========== RAW FEATURES ==========")
+    safe_print()
+    safe_print("========== RAW FEATURES ==========")
 
     for name, value in raw_features.items():
 
-        print(
+        safe_print(
             f"  {name}: {value}"
         )
 
-    print()
-    print("========== NORMALIZED FEATURES ==========")
+    safe_print()
+    safe_print("========== NORMALIZED FEATURES ==========")
 
     for name, value in features.items():
 
-        print(
+        safe_print(
             f"  {name}: {value}"
         )
 
-    print()
-    print("Random Forest:",
+    safe_print()
+    safe_print("Random Forest:",
           result.get("random_forest"))
 
-    print("Isolation Forest:",
+    safe_print("Isolation Forest:",
           result.get("isolation_forest"))
 
-    print("Risk Score:",
+    safe_print("Risk Score:",
           result.get("risk_score"))
 
-    print("===============================")
-    print()
+    safe_print("===============================")
+    safe_print()
 
     # -----------------------------------------------------
     # STORE DETECTION
@@ -1030,6 +1271,7 @@ def analyze_game_session(
         "enforcement_state": enforcement_state,
         "enforcement_action": enforcement_action,
         "restricted_until": restriction_until,
+        "auto_ban": bool(auto_ban),
 
         "created_at": utc_now()
     }
@@ -1065,7 +1307,7 @@ def analyze_game_session(
 
     except Exception as exc:
 
-        print(
+        safe_print(
             "[SecureFPS] Failed to store ML result:",
             exc
         )
@@ -1118,14 +1360,14 @@ def analyze_game_session(
                 upsert=True
             )
 
-            print(
+            safe_print(
                 "[SecureFPS] SECURITY ALERT CREATED:",
                 severity
             )
 
         except Exception as exc:
 
-            print(
+            safe_print(
                 "[SecureFPS] Failed to store security alert:",
                 exc
             )
@@ -1588,24 +1830,24 @@ def extract_features(
 
     if missing:
 
-        print(
+        safe_print(
             "[SecureFPS] Missing ML feature definitions:",
             missing
         )
 
         return None
 
-    print()
-    print("========== EXTRACTED RAW FEATURES ==========")
+    safe_print()
+    safe_print("========== EXTRACTED RAW FEATURES ==========")
 
     for name in FEATURES:
 
-        print(
+        safe_print(
             f"{name}: {features[name]}"
         )
 
-    print("============================================")
-    print()
+    safe_print("============================================")
+    safe_print()
 
     return features
 
@@ -1624,6 +1866,13 @@ def detect():
         return jsonify({
             "message": "Authentication required."
         }), 401
+    account = users.find_one({"_id": user_id}, {"revoked": 1, "account_status": 1})
+    if account and (
+        account.get("revoked") is True or account.get("account_status") == "banned"
+    ):
+        return jsonify({"message": "This account is permanently banned."}), 403
+    if account and account.get("account_status") == "suspended":
+        return jsonify({"message": "This account has been suspended."}), 403
 
     data = request.get_json(
         silent=True
@@ -1691,7 +1940,7 @@ def detect():
 
     except Exception as exc:
 
-        print(
+        safe_print(
             "[SecureFPS] ML error:",
             exc
         )
@@ -1732,7 +1981,7 @@ def detect():
 
     except Exception as exc:
 
-        print(
+        safe_print(
             "[SecureFPS] Failed to store detection:",
             exc
         )
@@ -1770,7 +2019,7 @@ def detect():
 
         except Exception as exc:
 
-            print(
+            safe_print(
                 "[SecureFPS] Security event error:",
                 exc
             )
@@ -2039,7 +2288,7 @@ def admin_overview():
 
     gameplay_alerts = list(
         security_events.find(
-            {"type": "gameplay_anomaly"},
+            {"type": {"$in": ["gameplay_anomaly", "auto_ban"]}},
             {
                 "_id": 0,
                 "user_id": 1,
@@ -2053,11 +2302,15 @@ def admin_overview():
                 "created_at": 1,
                 "review_status": 1,
                 "result": 1,
+                "raw_features": 1,
                 "demo": 1,
                 "account_label": 1,
                 "alert_reason": 1,
                 "enforcement_action": 1,
                 "enforcement_state": 1
+                ,"reasons": 1
+                ,"hacker_profile": 1
+                ,"banned_at": 1
             }
         )
         .sort(
@@ -2071,6 +2324,32 @@ def admin_overview():
         str(player["_id"]): player.get("name", "")
         for player in players
     }
+    player_profiles = {
+        str(player["_id"]): player.get("hacker_profile")
+        for player in players
+        if player.get("hacker_profile")
+    }
+    player_statuses = {
+        str(player["_id"]): player.get("account_status") or (
+            "suspended" if player.get("revoked") else "active"
+        )
+        for player in players
+    }
+    for hacker in users.find(
+        {
+            "account_type": "demo_test",
+            "hacker_profile": {
+                "$in": ["aimbot", "wallhack", "speedhack", "silent_aim"]
+            },
+        },
+        {"name": 1, "hacker_profile": 1, "account_status": 1, "revoked": 1},
+    ):
+        hacker_id = str(hacker["_id"])
+        player_names.setdefault(hacker_id, hacker.get("name", "Hacker"))
+        player_profiles[hacker_id] = hacker.get("hacker_profile")
+        player_statuses[hacker_id] = hacker.get("account_status") or (
+            "suspended" if hacker.get("revoked") else "active"
+        )
 
     analyses = list(
         game_events.find(
@@ -2205,6 +2484,29 @@ def admin_overview():
             "review_status": demo_alert.get("review_status", "not_required")
         }
 
+    hacker_accounts = []
+    for hacker in users.find({
+        "role": "player",
+        "demo": True,
+        "account_type": "demo_test",
+        "hacker_profile": {"$in": ["aimbot", "wallhack", "speedhack", "silent_aim"]},
+    }):
+        latest_hacker_session = game_sessions.find_one(
+            {"user_id": hacker["_id"]},
+            {"status": 1, "started_at": 1},
+            sort=[("started_at", -1)],
+        )
+        hacker_accounts.append({
+            "id": str(hacker["_id"]),
+            "name": hacker.get("name", hacker.get("email", "Hacker")),
+            "email": hacker.get("email"),
+            "hacker_profile": hacker.get("hacker_profile"),
+            "account_status": hacker.get("account_status", "active"),
+            "revoked": hacker.get("revoked", False),
+            "matches": game_sessions.count_documents({"user_id": hacker["_id"]}),
+            "latest_session_status": latest_hacker_session.get("status") if latest_hacker_session else None,
+        })
+
     return jsonify({
 
         "players": [
@@ -2241,9 +2543,14 @@ def admin_overview():
 
                 "username": player.get("username", ""),
                 "account_type": player.get("account_type"),
+                "hacker_profile": player.get("hacker_profile"),
                 "demo": player.get("demo", False),
                 "demo_label": player.get("demo_label"),
                 "demo_restriction_status": player.get("demo_restriction_status"),
+                "revoked": player.get("revoked", False),
+                "account_status": player.get("account_status") or (
+                    "suspended" if player.get("revoked") else "active"
+                ),
                 "matches_played": matches_played_by_player.get(str(player["_id"]), 0),
                 "risk_score": next((
                     analysis.get("risk_score", (analysis.get("result") or {}).get("risk_score"))
@@ -2337,7 +2644,27 @@ def admin_overview():
                     ""
                 ),
                 "session_id": alert.get("session_id"),
-                "risk_score": alert.get("risk_score"),
+                "risk_score": (
+                    hacker_enforcement_score(
+                        (alert.get("result") or {}).get(
+                            "model_risk_score",
+                            alert.get("risk_score") or 0,
+                        ),
+                        alert.get("raw_features") or {},
+                    )
+                    if (
+                        (
+                            alert.get("hacker_profile")
+                            or player_profiles.get(str(alert.get("user_id", "")))
+                        )
+                        and alert.get("risk_score") is not None
+                    )
+                    else alert.get("risk_score")
+                ),
+                "model_risk_score": (alert.get("result") or {}).get(
+                    "model_risk_score",
+                    alert.get("risk_score"),
+                ),
                 "random_forest": alert.get(
                     "random_forest",
                     (alert.get("result") or {}).get("random_forest")
@@ -2348,23 +2675,66 @@ def admin_overview():
                 ),
                 "random_forest_probability": (alert.get("result") or {}).get("random_forest_probability"),
                 "isolation_forest_anomaly_score": (alert.get("result") or {}).get("isolation_forest_anomaly_score"),
-                "severity": alert.get("severity", "medium"),
+                "severity": (
+                    "critical"
+                    if alert.get("type") == "auto_ban"
+                    else alert.get("severity", "medium")
+                ),
                 "created_at": (
                     alert["created_at"].isoformat()
                     if alert.get("created_at")
                     else None
                 ),
-                "review_status": alert.get("review_status", "pending"),
-                "demo": alert.get("demo", False),
+                "review_status": (
+                    "permanently_banned"
+                    if (
+                        alert.get("type") == "auto_ban"
+                        or player_statuses.get(str(alert.get("user_id", ""))) == "banned"
+                    )
+                    else alert.get("review_status", "pending")
+                ),
+                "demo": bool(
+                    alert.get("demo")
+                    or alert.get("type") == "auto_ban"
+                    or alert.get("hacker_profile")
+                    or player_profiles.get(str(alert.get("user_id", "")))
+                ),
                 "account_label": alert.get("account_label"),
                 "alert_reason": alert.get("alert_reason"),
                 "enforcement_action": alert.get("enforcement_action"),
-                "enforcement_state": alert.get("enforcement_state")
+                "enforcement_state": alert.get("enforcement_state"),
+                "hacker_profile": alert.get("hacker_profile")
+                or player_profiles.get(str(alert.get("user_id", ""))),
+                "top_reasons": alert.get("reasons", []),
+                "detection_reason": (
+                    hacker_detection_reason(
+                        alert.get("hacker_profile")
+                        or player_profiles.get(str(alert.get("user_id", "")))
+                    )
+                    if (
+                        alert.get("hacker_profile")
+                        or player_profiles.get(str(alert.get("user_id", "")))
+                    )
+                    else (alert.get("reasons") or [None])[0]
+                ),
+                "permanent_ban": bool(
+                    alert.get("type") == "auto_ban"
+                    or (
+                        player_profiles.get(str(alert.get("user_id", "")))
+                        and player_statuses.get(str(alert.get("user_id", ""))) == "banned"
+                    )
+                ),
+                "banned_at": (
+                    alert["banned_at"].isoformat()
+                    if alert.get("banned_at")
+                    else None
+                )
             }
             for alert in gameplay_alerts
         ],
 
         "demo_account": demo_account_status,
+        "hacker_accounts": hacker_accounts,
         "login_count": login_count_today,
         "recent_logins": [
             {
@@ -2406,6 +2776,7 @@ def admin_overview():
             "matches_analyzed": len(all_game_sessions),
             "high_severity_events": sum(1 for event in events if event.get("severity") in {"high", "critical"}),
         },
+        "demo_environment": os.getenv("APP_ENV", "").strip().lower() in {"development", "dev", "local"},
     })
 
 
@@ -2465,9 +2836,147 @@ def seed_admin_demo():
     return jsonify({"success": True, "sessions": created_sessions}), 201
 
 
+def _hacker_demo_allowed():
+    return os.getenv("APP_ENV", "").strip().lower() in {"development", "dev", "local"}
+
+
+@game_bp.post("/admin/gameplay/run-hacker-demo")
+def run_hacker_demo():
+    if not current_admin():
+        return jsonify({"message": "Admin access required."}), 403
+    if not _hacker_demo_allowed():
+        return jsonify({"message": "Hacker demo is available only in development mode."}), 403
+
+    from scripts.simulate_hacker import PROFILES, run_profile
+
+    def run_profile_later(profile, delay):
+        time.sleep(delay)
+        try:
+            run_profile(profile, 0.05)
+        except Exception as exc:
+            safe_print(f"[SecureFPS] Hacker demo {profile} failed: {exc}")
+
+    for index, profile in enumerate(PROFILES):
+        threading.Thread(
+            target=run_profile_later,
+            args=(profile, index * 2),
+            daemon=True,
+            name=f"hacker-demo-{profile}",
+        ).start()
+    return jsonify({"success": True, "profiles": list(PROFILES)}), 202
+
+
+@game_bp.post("/admin/gameplay/reset-hacker-demo")
+def reset_hacker_demo():
+    if not current_admin():
+        return jsonify({"message": "Admin access required."}), 403
+    if not _hacker_demo_allowed():
+        return jsonify({"message": "Hacker demo is available only in development mode."}), 403
+
+    hacker_filter = {
+        "role": "player",
+        "account_type": "demo_test",
+        "hacker_profile": {"$in": ["aimbot", "wallhack", "speedhack", "silent_aim"]},
+    }
+    hacker_ids = [user["_id"] for user in users.find(hacker_filter, {"_id": 1})]
+    if not hacker_ids:
+        return jsonify({"success": True, "reset_accounts": 0})
+
+    users.update_many(
+        {"_id": {"$in": hacker_ids}},
+        {
+            "$set": {"revoked": False, "account_status": "active"},
+            "$unset": {
+                "banned_at": "",
+                "ban_reason": "",
+                "banned_by": "",
+                "demo_restricted_until": "",
+                "demo_restriction_reason": "",
+                "demo_restriction_session_id": "",
+                "demo_restriction_status": "",
+                "active_auth_session_id": "",
+            },
+        },
+    )
+    for collection in (game_telemetry, game_events, game_sessions, security_events, sessions_db, login_history):
+        collection.delete_many({"user_id": {"$in": hacker_ids}})
+    return jsonify({"success": True, "reset_accounts": len(hacker_ids)}), 200
+
+
 # =========================================================
 # ADMIN PLAYER ACTION
 # =========================================================
+
+@game_bp.get("/admin/players")
+def list_admin_players():
+    if not current_admin():
+        return jsonify({"message": "Admin access required."}), 403
+
+    limit = max(1, min(request.args.get("limit", 20, type=int), 100))
+    offset = max(0, request.args.get("offset", 0, type=int))
+    search = request.args.get("search", "", type=str).strip()[:120]
+    # Keep records left by API tests out of the live player directory, but show
+    # the reserved hacker demo accounts so their matches and ban state are
+    # visible to reviewers.
+    query = {
+        "role": "player",
+        "$or": [
+            {
+                "email": {
+                    "$not": {
+                        "$regex": r"^player[0-9a-f]{8}@example\.com$",
+                        "$options": "i",
+                    }
+                },
+                "account_type": {"$ne": "demo_test"},
+            },
+            {
+                "account_type": "demo_test",
+                "hacker_profile": {
+                    "$in": ["aimbot", "wallhack", "speedhack", "silent_aim"]
+                },
+            },
+        ],
+    }
+    if search:
+        pattern = re.escape(search)
+        query = {
+            "$and": [
+                query,
+                {
+                    "$or": [
+                        {"name": {"$regex": pattern, "$options": "i"}},
+                        {"email": {"$regex": pattern, "$options": "i"}},
+                    ]
+                },
+            ]
+        }
+
+    player_records = list(users.find(query, {"password_hash": 0, "mfa_secret": 0})
+                          .sort("created_at", -1).skip(offset).limit(limit))
+
+    return jsonify({
+        "players": [{
+            "id": str(player["_id"]),
+            "name": player.get("name", "Player"),
+            "email": player.get("email", ""),
+            "role": player.get("role", "player"),
+            "mfa_enabled": player.get("mfa_enabled", False),
+            "matches_played": game_sessions.count_documents({"user_id": player["_id"]}),
+            "risk_score": player.get("risk_score"),
+            "last_login_ip": player.get("last_login_ip", "No login recorded"),
+            "last_login": _admin_date(player.get("last_login")),
+            "created_at": _admin_date(player.get("created_at")),
+            "account_status": player.get("account_status") or ("suspended" if player.get("revoked") else "active"),
+            "demo": player.get("demo", False),
+        } for player in player_records],
+        "total": users.count_documents(query),
+    })
+
+def _admin_date(value):
+    if value is None:
+        return None
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
 
 @game_bp.post(
     "/admin/players/<player_id>/<action>"
@@ -2481,6 +2990,7 @@ def admin_player_action(
         not is_admin()
         or action not in {
             "revoke",
+            "restore",
             "delete",
             "confirm-demo-alert",
             "clear-demo-restriction"
@@ -2491,6 +3001,12 @@ def admin_player_action(
             "message":
                 "Admin access required."
         }), 403
+
+    actor = current_admin()
+    if actor.get("role") == "moderator" and action in {
+        "revoke", "restore", "delete", "confirm-demo-alert", "clear-demo-restriction"
+    }:
+        return jsonify({"message": "Moderators can review alerts and support tickets but cannot change player accounts."}), 403
 
     try:
 
@@ -2582,28 +3098,42 @@ def admin_player_action(
 
     if action == "delete":
 
-        users.delete_one({
+        target = users.find_one({
             "_id": oid,
             "role": {
                 "$ne": "admin"
             }
         })
+        if not target:
+            return jsonify({"message": "Player account not found or cannot be deleted."}), 404
+        sessions_db.update_many(
+            {"user_id": oid, "is_active": True},
+            {"$set": {"is_active": False, "last_activity": utc_now()}},
+        )
+        users.delete_one({"_id": oid, "role": {"$ne": "admin"}})
 
     else:
 
-        users.update_one(
+        result = users.update_one(
             {
                 "_id": oid,
                 "role": {
                     "$ne": "admin"
                 }
             },
-            {
-                "$set": {
-                    "revoked": True
-                }
-            }
+            {"$set": {
+                "revoked": action == "revoke",
+                "account_status": "suspended" if action == "revoke" else "active",
+                "account_status_updated_at": utc_now(),
+            }, **({"$unset": {"active_auth_session_id": ""}} if action == "revoke" else {"$unset": {"ban_until": ""}})}
         )
+        if not result.matched_count:
+            return jsonify({"message": "Player account not found or cannot be changed."}), 404
+        if action == "revoke":
+            sessions_db.update_many(
+                {"user_id": oid, "is_active": True},
+                {"$set": {"is_active": False, "last_activity": utc_now()}},
+            )
 
     return jsonify({
         "message":
@@ -2625,7 +3155,6 @@ def review_gameplay_alert(session_id):
         "warn": "warned",
         "suspend": "suspended",
         "ban": "banned",
-        "escalate": "escalated",
     }
     if action not in allowed_actions:
         return jsonify({"message": "Unsupported review action."}), 400
@@ -2633,6 +3162,9 @@ def review_gameplay_alert(session_id):
         return jsonify({"message": "A review note is required."}), 400
     if reviewer.get("role") == "moderator" and action in {"suspend", "ban"}:
         return jsonify({"message": "Moderators cannot suspend or ban accounts."}), 403
+    ban_duration = str(payload.get("ban_duration", "")).strip().lower()
+    if action == "ban" and ban_duration not in {"24h", "7d", "permanent"}:
+        return jsonify({"message": "Choose a 24-hour, 7-day, or permanent ban."}), 400
 
     alert = security_events.find_one({
         "type": "gameplay_anomaly",
@@ -2644,24 +3176,40 @@ def review_gameplay_alert(session_id):
     reviewed_at = utc_now()
     reviewer_id = reviewer["_id"]
     status = allowed_actions[action]
-    security_events.update_one(
-        {"_id": alert["_id"]},
-        {"$set": {
-            "review_status": status,
-            "review_action": action,
-            "review_note": note,
-            "reviewed_at": reviewed_at,
-            "reviewed_by": reviewer_id,
-        }}
+    ban_until = None
+    review_fields = {
+        "review_status": status,
+        "review_action": action,
+        "review_note": note,
+        "reviewed_at": reviewed_at,
+        "reviewed_by": reviewer_id,
+    }
+    if action == "ban":
+        review_fields["ban_duration"] = ban_duration
+    security_events.update_many(
+        {"type": "gameplay_anomaly", "session_id": session_id},
+        {"$set": review_fields}
     )
     if action in {"suspend", "ban"}:
+        ban_until = (
+            reviewed_at + timedelta(hours=24) if action == "ban" and ban_duration == "24h"
+            else reviewed_at + timedelta(days=7) if action == "ban" and ban_duration == "7d"
+            else None
+        )
+        account_update = {
+            "revoked": True,
+            "account_status": "suspended" if action == "suspend" else "banned",
+            "account_status_updated_at": reviewed_at,
+        }
+        if action == "ban" and ban_until:
+            account_update["ban_until"] = ban_until
         users.update_one(
             {"_id": alert.get("user_id")},
-            {"$set": {
-                "revoked": action == "ban",
-                "account_status": "suspended" if action == "suspend" else "banned",
-                "account_status_updated_at": reviewed_at,
-            }}
+            {"$set": account_update, "$unset": {"active_auth_session_id": "", **({"ban_until": ""} if action == "suspend" or ban_duration == "permanent" else {})}}
+        )
+        sessions_db.update_many(
+            {"user_id": alert.get("user_id"), "is_active": True},
+            {"$set": {"is_active": False, "last_activity": reviewed_at}},
         )
 
     security_events.insert_one({
@@ -2672,6 +3220,8 @@ def review_gameplay_alert(session_id):
         "session_id": session_id,
         "user_id": alert.get("user_id"),
         "actor_user_id": reviewer_id,
+        "ban_duration": ban_duration if action == "ban" else None,
+        "ban_until": ban_until if action == "ban" else None,
         "created_at": reviewed_at,
     })
     return jsonify({"success": True, "review_status": status}), 200

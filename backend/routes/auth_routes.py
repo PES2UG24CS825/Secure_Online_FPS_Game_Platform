@@ -18,6 +18,26 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 def utcnow():
     return datetime.now(timezone.utc)
 
+def blocked_account_message(user):
+    status = user.get("account_status")
+    if status == "suspended":
+        return "This account has been suspended. Contact support if you believe this is an error."
+    if status == "banned" or user.get("revoked") is True:
+        return "This account is permanently banned."
+    ban_until = user.get("ban_until")
+    if ban_until and ban_until.tzinfo is None:
+        ban_until = ban_until.replace(tzinfo=timezone.utc)
+    if status == "banned" and ban_until and ban_until <= utcnow():
+        users.update_one(
+            {"_id": user["_id"], "account_status": "banned"},
+            {"$set": {"account_status": "active", "revoked": False, "account_status_updated_at": utcnow()},
+             "$unset": {"ban_until": ""}},
+        )
+        return None
+    if not user.get("revoked") and status not in {"suspended", "banned"}:
+        return None
+    return "This account is permanently banned."
+
 @auth_bp.post("/signup")
 def signup():
     data = request.get_json(silent=True) or {}
@@ -109,10 +129,25 @@ def login():
         })
         return jsonify({"message": "Invalid email or password."}), 401
 
+    blocked_message = blocked_account_message(user)
+    if blocked_message:
+        login_history.insert_one({
+            "user_id": user["_id"],
+            "identifier": email,
+            "type": "login_failed",
+            "status": "failed",
+            "reason": "account_banned" if user.get("account_status") == "banned" else "account_suspended",
+            "ip_address": request.remote_addr or "Unknown",
+            "device": request.user_agent.string[:250],
+            "user_agent": request.user_agent.string[:250],
+            "created_at": utcnow(),
+        })
+        return jsonify({"message": blocked_message}), 403
+
     # The user's pointer is the authoritative lock. Historical session rows
     # can remain active after older clients logged out without a session id.
     active_record_id = user.get("active_auth_session_id")
-    session_takeover = False
+    session_takeover = bool(data.get("takeover"))
     if active_record_id:
         from bson import ObjectId
         try:
@@ -136,7 +171,7 @@ def login():
                 last_activity
                 and utcnow() - last_activity <= timedelta(seconds=AUTH_SESSION_IDLE_TIMEOUT_SECONDS)
             )
-            if is_recent:
+            if is_recent and not session_takeover:
                 login_history.insert_one({
                     "user_id": user["_id"],
                     "identifier": email,
@@ -149,9 +184,10 @@ def login():
                     "created_at": utcnow(),
                 })
                 return jsonify({
-                    "message": "This account is already signed in in another browser. Log out there before signing in here."
+                    "message": "This account is already signed in in another browser. Log out there first, or choose Sign in here to end that session.",
+                    "can_takeover": True,
                 }), 409
-            else:
+            elif not is_recent or session_takeover:
                 sessions_db.update_one(
                     {"_id": ObjectId(active_record_id), "user_id": user["_id"]},
                     {"$set": {"is_active": False, "last_activity": utcnow()}},
@@ -187,6 +223,22 @@ def verify_mfa():
     if not user:
         session.clear()
         return jsonify({"message": "User not found."}), 401
+
+    blocked_message = blocked_account_message(user)
+    if blocked_message:
+        session.clear()
+        login_history.insert_one({
+            "user_id": user["_id"],
+            "identifier": user.get("email"),
+            "type": "login_failed",
+            "status": "failed",
+            "reason": "account_banned" if user.get("account_status") == "banned" else "account_suspended",
+            "ip_address": request.remote_addr or "Unknown",
+            "device": request.user_agent.string[:250],
+            "user_agent": request.user_agent.string[:250],
+            "created_at": utcnow(),
+        })
+        return jsonify({"message": blocked_message}), 403
 
     attempts = int(session.get("mfa_attempts", 0))
     if attempts >= 5:
@@ -301,6 +353,7 @@ def me():
 def logout():
     record_id = session.get("auth_session_record_id")
     user_id = session.get("user_id")
+    pending_user_id = session.get("mfa_pending_user")
     if record_id:
         from bson import ObjectId
         try:
@@ -311,13 +364,40 @@ def logout():
             )
         except Exception:
             pass
-        if user_id:
-            try:
+    if user_id:
+        try:
+            # Clear the account pointer even if an old browser lost its
+            # session-record cookie; otherwise another browser remains locked.
+            users.update_one(
+                {"_id": ObjectId(user_id)},
+                {"$unset": {"active_auth_session_id": ""}},
+            )
+        except Exception:
+            pass
+    elif pending_user_id:
+        try:
+            from bson import ObjectId
+            pending_oid = ObjectId(pending_user_id)
+            account = users.find_one(
+                {"_id": pending_oid},
+                {"active_auth_session_id": 1},
+            ) or {}
+            pending_record_id = account.get("active_auth_session_id")
+            pending_record = None
+            if pending_record_id:
+                try:
+                    pending_record = sessions_db.find_one({
+                        "_id": ObjectId(pending_record_id),
+                        "user_id": pending_oid,
+                    }, {"is_active": 1})
+                except Exception:
+                    pending_record = None
+            if pending_record and not pending_record.get("is_active", False):
                 users.update_one(
-                    {"_id": ObjectId(user_id), "active_auth_session_id": record_id},
+                    {"_id": pending_oid, "active_auth_session_id": pending_record_id},
                     {"$unset": {"active_auth_session_id": ""}},
                 )
-            except Exception:
-                pass
+        except Exception:
+            pass
     session.clear()
     return jsonify({"message": "Logged out successfully."})

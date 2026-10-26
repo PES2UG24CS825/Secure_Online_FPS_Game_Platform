@@ -6,6 +6,7 @@
 
     <title>FPS Microgame | Secure FPS Platform</title>
     <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg">
+    <link rel="stylesheet" href="css/ui-polish.css">
 
     <style>
         * {
@@ -195,12 +196,20 @@
         }
 
         const apiScript = document.createElement("script");
-        apiScript.src = "js/api.js?v=brand-lockup-1";
+        const configScript = document.createElement("script");
+        configScript.src = "js/config.js";
+        configScript.onload = () => {
+            apiScript.src = "js/api.js";
+        };
+        configScript.onerror = () => {
+            gameStatus.textContent = "The game service configuration could not be loaded. Return to the dashboard and try again.";
+        };
+        document.head.appendChild(configScript);
         apiScript.onload = () => loadSecureGame();
         apiScript.onerror = () => {
             gameStatus.textContent = "The game service configuration could not be loaded. Return to the dashboard and try again.";
         };
-        document.head.appendChild(apiScript);
+        configScript.addEventListener("load", () => document.head.appendChild(apiScript), { once: true });
         gameFrame.style.display = "none";
     </script>
 

@@ -1,5 +1,9 @@
 const loginForm = document.getElementById("loginForm");
 const message = document.getElementById("message");
+const requestedDestination = new URLSearchParams(window.location.search).get("next");
+const nextDestination = ["game.html", "player.html", "admin.html"].includes(requestedDestination)
+  ? requestedDestination
+  : "";
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -10,23 +14,41 @@ loginForm.addEventListener("submit", async (event) => {
     submitButton.textContent = "Checking credentials...";
   }
 
+  const credentials = {
+    email: document.getElementById("email").value,
+    password: document.getElementById("password").value
+  };
   try {
-    const data = await api("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({
-        email: document.getElementById("email").value,
-        password: document.getElementById("password").value
-      })
-    });
-
+    let data;
+    try {
+      data = await api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify(credentials)
+      });
+    } catch (error) {
+      if (error.status !== 409 || !error.data?.can_takeover) throw error;
+      const confirmed = window.confirm(
+        "This account is active in another browser. Sign in here and end that session?"
+      );
+      if (!confirmed) throw error;
+      data = await api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ ...credentials, takeover: true })
+      });
+    }
     if (data.mfa_required) {
-      message.textContent = "Password accepted. Enter your authenticator code.";
-      window.location.href = "mfa.html";
+      const params = new URLSearchParams();
+      if (data.replace_other_session) params.set("replace", "1");
+      if (nextDestination) params.set("next", nextDestination);
+      window.location.replace(`mfa.html${params.toString() ? `?${params}` : ""}`);
       return;
     }
     message.textContent = data.message || "Unable to continue sign-in.";
   } catch (error) {
-    message.textContent = error.message;
+    message.textContent = error.message || "Unable to connect to the authentication server.";
+    if (error.status === 409) {
+      window.showAppAlert(error.message, { title: "Account already signed in", tone: "warning" });
+    }
     if (submitButton) {
       submitButton.disabled = false;
       submitButton.textContent = "Continue to MFA →";

@@ -1,0 +1,119 @@
+button,
+.primary-btn,
+.play-btn,
+.ghost-btn,
+.link-btn {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.form .primary-btn,
+.form button[type="submit"] {
+  min-height: 48px;
+  font-size: 15px;
+}
+
+.admin-table-wrap td button,
+.overview-recent-table td button {
+  min-height: 34px;
+}
+
+.password-toggle {
+  width: 36px !important;
+  height: 36px !important;
+  min-height: 36px;
+  padding: 0 !important;
+  color: #4C1D95 !important;
+}
+
+.ghost-btn {
+  color: #4C1D95;
+  border-color: #9D8ED2;
+  background: transparent;
+}
+
+.ghost-btn:hover {
+  background: #F0ECFF;
+}
+
+.player-page .overview-leaderboard .dashboard-panel-head a,
+.player-page .overview-recent-panel .dashboard-panel-head a,
+.player-page .overview-alert-link,
+.player-page .overview-glance-action,
+.section-title a {
+  border: 0;
+  background: transparent;
+  color: #4C1D95;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 3px solid #6D28D9;
+  outline-offset: 2px;
+}
+
+@media (max-width: 700px) {
+  button,
+  .primary-btn,
+  .play-btn,
+  .ghost-btn,
+  .link-btn {
+    min-height: 44px;
+  }
+}
+
+.app-toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1000;
+  max-width: min(360px, calc(100vw - 40px));
+  padding: 12px 16px;
+  border: 1px solid #9D8ED2;
+  border-radius: 10px;
+  background: #FFFFFF;
+  color: #1B1730;
+  box-shadow: 0 12px 30px rgba(27, 23, 48, .18);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.app-toast[data-tone="error"] {
+  border-color: #B91C1C;
+  color: #991B1B;
+}
+
+.confirm-name-input {
+  width: 100%;
+  min-height: 40px;
+  margin: 4px 0 14px;
+  padding: 8px 10px;
+  border: 1px solid #C3BFE0;
+  border-radius: 10px;
+  color: #1B1730;
+}
+
+.loading-skeleton span {
+  display: block;
+  height: 14px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #E5E0F5 25%, #F7F5FF 50%, #E5E0F5 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.2s infinite;
+}
+
+@keyframes skeleton-shimmer {
+  to { background-position: -200% 0; }
+}

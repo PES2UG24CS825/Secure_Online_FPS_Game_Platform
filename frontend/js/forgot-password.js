@@ -16,6 +16,7 @@ forgotForm.addEventListener("submit", async (event) => {
     });
     message.textContent = data.message;
   } catch (error) {
-    message.textContent = error.message;
+    message.textContent = error.message || "The password reset request could not be completed. Please try again.";
+    message.classList.add("error-text");
   }
 });

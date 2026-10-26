@@ -136,7 +136,7 @@ function connectPlayerLiveEvents() {
 function matchCard(match) {
   const value = (field) => match[field] == null ? "—" : Number(match[field]);
   const state = String(match.status || "unknown").toLowerCase();
-  const badge = state === "completed" ? "good" : state === "active" ? "warn" : "gray";
+  const badge = state === "terminated_banned" ? "bad" : state === "completed" ? "good" : state === "active" ? "warn" : "gray";
   const duration = match.duration == null ? "—" : `${Math.max(0, Number(match.duration))}s`;
   const accuracy = match.accuracy == null ? "—" : `${Number(match.accuracy).toFixed(1)}%`;
   const analysisStatus = String(match.analysis_status || "pending").replaceAll("_", " ");
@@ -146,9 +146,9 @@ function matchCard(match) {
     : state === "active" ? '<p class="match-analysis-note">Risk review starts when this match is completed.</p>'
     : '<p class="match-analysis-note">Risk review is pending for this match.</p>';
   return `<article class="match-card">
-    <div class="match-card-head"><div><span class="match-card-kicker">FPS Microgame</span><h3>Match ${playerText(match.match_id || "—")}</h3><div class="match-card-date">${playerText(playerDate(match.date))}</div></div><span class="badge ${badge}">${playerText(state)}</span></div>
+    <div class="match-card-head"><div><span class="match-card-kicker">FPS Microgame${match.demo_test ? ` · ${playerText(match.hacker_profile || "hacker demo")}` : ""}</span><h3>Match ${playerText(match.match_id || "—")}</h3><div class="match-card-date">${playerText(playerDate(match.date))}</div></div><span class="badge ${badge}">${playerText(state === "terminated_banned" ? "PERMANENTLY BANNED" : state)}</span></div>
     <div class="match-stat-grid"><div class="match-stat"><span>Kills</span><strong>${value("kills")}</strong></div><div class="match-stat"><span>Deaths</span><strong>${value("deaths")}</strong></div><div class="match-stat"><span>K/D</span><strong>${match.kd == null ? "—" : Number(match.kd).toFixed(2)}</strong></div><div class="match-stat"><span>Duration</span><strong>${duration}</strong></div><div class="match-stat"><span>Accuracy</span><strong>${accuracy}</strong></div><div class="match-stat"><span>Analysis</span><strong>${playerText(analysisStatus)}</strong></div></div>
-    <div class="match-risk"><span>Security risk score</span><strong>${playerText(playerRisk(match.risk_score))}</strong></div>${analysisNote}
+    <div class="match-risk"><span>Security risk score</span><strong>${playerText(playerRisk(match.risk_score))}</strong></div>${match.enforcement_action ? `<p class="match-analysis-note"><strong>Detection result:</strong> ${playerText(String(match.enforcement_action).replaceAll("_", " "))}</p>` : ""}${analysisNote}
   </article>`;
 }
 
@@ -179,7 +179,7 @@ async function loadPlayerDashboard() {
   try {
     const me = await api("/auth/me");
     if (!me?.user || me.user.role !== "player") {
-      window.location.replace("login.html");
+      window.location.replace("login.html?next=game.html");
       return;
     }
     connectPlayerLiveEvents();
@@ -329,8 +329,16 @@ async function loadPlayerDashboard() {
     const matchesSummary = document.getElementById("matchesSummary");
     if (matchesSummary) matchesSummary.textContent = `${analyzedMatches.length} analyzed · ${Math.max(0, matches.length - analyzedMatches.length)} pending`;
     document.getElementById("mfaStatus").textContent = securityData ? securityData.mfa_status === "enabled" ? "On" : "Off" : "Unavailable";
-    document.getElementById("accountStatus").textContent = securityData ? securityData.account_status === "active" ? "Clean" : "Suspended" : "Unavailable";
-    document.getElementById("accountStatus").classList.toggle("success-text", securityData?.account_status === "active");
+    const accountStatus = securityData?.account_status;
+    const accountStatusLabels = {
+      active: "Active",
+      suspended: "Suspended",
+      banned: "Banned",
+      restricted: "Restricted"
+    };
+    const accountStatusNode = document.getElementById("accountStatus");
+    accountStatusNode.textContent = accountStatusLabels[accountStatus] || "Unavailable";
+    accountStatusNode.classList.toggle("success-text", accountStatus === "active");
     if (risk == null && !securityData) {
       if (scoreNode) scoreNode.textContent = "—";
     }
@@ -359,11 +367,13 @@ async function loadPlayerDashboard() {
     const securityStatus = document.getElementById("securityStatus");
     if (securityStatus && securityData) {
       const ipRows = history.map((entry) => `<tr><td>${playerText(entry.ip_address || "Unknown")}</td><td>${playerText(playerDate(entry.timestamp))}</td><td>${playerText(entry.authentication_method || "Password + MFA")}</td><td><span class="badge ${entry.success === false ? "bad" : "good"}">${entry.success === false ? "Failed" : "Success"}</span></td></tr>`).join("");
+      const warnings = Array.isArray(securityData.security_warnings) ? securityData.security_warnings : [];
       securityStatus.innerHTML = `
         <article class="security-card"><div class="security-card-label">MFA / 2FA</div><div class="security-card-value">${securityData.mfa_status === "enabled" ? "Enabled" : "Disabled"}</div><div class="security-card-meta">Authenticator protection</div></article>
         <article class="security-card"><div class="security-card-label">Active sessions</div><div class="security-card-value">${activeSessions.length}</div><div class="security-card-meta">Devices currently signed in</div></article>
         <article class="security-card"><div class="security-card-label">Last login</div><div class="security-card-value security-card-value-small">${playerText(playerDate(securityData.last_login))}</div><div class="security-card-meta">Most recent successful sign in</div></article>
         <article class="security-card"><div class="security-card-label">Latest login IP</div><div class="security-card-value">${playerText(history[0]?.ip_address || "Not recorded")}</div><div class="security-card-meta">Address observed by the server</div></article>
+        ${warnings.length ? `<section class="security-history security-warnings"><h3>Security warnings</h3><p class="page-description">A moderator reviewed gameplay activity on your account.</p>${warnings.map((warning) => `<article class="security-warning"><strong>${playerText(playerDate(warning.created_at))}</strong><p>${playerText(warning.note)}</p></article>`).join("")}</section>` : ""}
         <section class="security-history"><h3>Login IP address history</h3><p class="page-description">Successful sign-ins are recorded after password and MFA verification.</p><div class="admin-table-wrap"><table><thead><tr><th>IP address</th><th>Signed in</th><th>Authentication</th><th>Result</th></tr></thead><tbody>${ipRows || '<tr><td colspan="4">No sign-in history recorded yet.</td></tr>'}</tbody></table></div></section>
         <section class="security-history"><h3>Active sign-in locations</h3><div class="admin-table-wrap"><table><thead><tr><th>IP address</th><th>Device</th><th>Last activity</th></tr></thead><tbody>${activeSessions.map((item) => `<tr><td>${playerText(item.ip_address || "Unknown")}</td><td>${playerText(item.device || "Unknown device")}</td><td>${playerText(playerDate(item.last_activity))}</td></tr>`).join("") || '<tr><td colspan="3">No active session records.</td></tr>'}</tbody></table></div></section>`;
     }
@@ -484,12 +494,21 @@ async function loadPlayerDashboard() {
       if (notice) {
         notice.hidden = false;
         notice.textContent = `Player API request failed: ${failedSections.join("; ")}.`;
+        notice.classList.remove("security-warning-notice");
       }
       const liveStatus = document.getElementById("playerLiveStatus");
       if (liveStatus) liveStatus.textContent = "Connection issue";
     } else {
       const notice = document.getElementById("dashboardNotice");
-      if (notice) notice.hidden = true;
+      const latestWarning = securityData?.security_warnings?.[0];
+      if (notice && latestWarning) {
+        notice.hidden = false;
+        notice.textContent = `Security warning: ${latestWarning.note}`;
+        notice.classList.add("security-warning-notice");
+      } else if (notice) {
+        notice.hidden = true;
+        notice.classList.remove("security-warning-notice");
+      }
       const liveStatus = document.getElementById("playerLiveStatus");
       if (liveStatus) liveStatus.textContent = `Live · updated ${new Date().toLocaleTimeString()}`;
     }
