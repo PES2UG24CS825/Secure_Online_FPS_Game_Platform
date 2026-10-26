@@ -2179,7 +2179,7 @@ def admin_overview():
 
     gameplay_alerts = list(
         security_events.find(
-            {"type": "gameplay_anomaly"},
+            {"type": {"$in": ["gameplay_anomaly", "auto_ban"]}},
             {
                 "_id": 0,
                 "user_id": 1,
@@ -2198,6 +2198,9 @@ def admin_overview():
                 "alert_reason": 1,
                 "enforcement_action": 1,
                 "enforcement_state": 1
+                ,"reasons": 1
+                ,"hacker_profile": 1
+                ,"banned_at": 1
             }
         )
         .sort(
@@ -2488,18 +2491,34 @@ def admin_overview():
                 ),
                 "random_forest_probability": (alert.get("result") or {}).get("random_forest_probability"),
                 "isolation_forest_anomaly_score": (alert.get("result") or {}).get("isolation_forest_anomaly_score"),
-                "severity": alert.get("severity", "medium"),
+                "severity": (
+                    "critical"
+                    if alert.get("type") == "auto_ban"
+                    else alert.get("severity", "medium")
+                ),
                 "created_at": (
                     alert["created_at"].isoformat()
                     if alert.get("created_at")
                     else None
                 ),
-                "review_status": alert.get("review_status", "pending"),
-                "demo": alert.get("demo", False),
+                "review_status": (
+                    "permanently_banned"
+                    if alert.get("type") == "auto_ban"
+                    else alert.get("review_status", "pending")
+                ),
+                "demo": alert.get("demo", alert.get("type") == "auto_ban"),
                 "account_label": alert.get("account_label"),
                 "alert_reason": alert.get("alert_reason"),
                 "enforcement_action": alert.get("enforcement_action"),
-                "enforcement_state": alert.get("enforcement_state")
+                "enforcement_state": alert.get("enforcement_state"),
+                "hacker_profile": alert.get("hacker_profile"),
+                "top_reasons": alert.get("reasons", []),
+                "permanent_ban": alert.get("type") == "auto_ban",
+                "banned_at": (
+                    alert["banned_at"].isoformat()
+                    if alert.get("banned_at")
+                    else None
+                )
             }
             for alert in gameplay_alerts
         ],
@@ -2546,6 +2565,7 @@ def admin_overview():
             "matches_analyzed": len(all_game_sessions),
             "high_severity_events": sum(1 for event in events if event.get("severity") in {"high", "critical"}),
         },
+        "demo_environment": os.getenv("APP_ENV", "").strip().lower() in {"development", "dev", "local"},
     })
 
 
