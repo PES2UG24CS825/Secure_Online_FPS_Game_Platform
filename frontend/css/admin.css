@@ -38,9 +38,18 @@
     .honour-report-table .honour-player-summary td { font-weight:600; }
     .honour-report-table .honour-player-detail td:first-child { width:42px; }
     .honour-player-cell { display:flex; align-items:center; gap:10px; min-width:180px; }
-    .honour-group-toggle { display:inline-grid; place-items:center; flex:0 0 30px; width:30px; height:30px; padding:0; border:1px solid #9D8ED2; border-radius:9px; background:#CFC6F2; color:#4C1D95; font-size:19px; font-weight:700; line-height:1; cursor:pointer; }
-    .honour-group-toggle:hover { background:#B9A9ED; }
+    .honour-group-toggle { display:inline-grid; place-items:center; flex:0 0 28px; width:28px; height:28px; padding:0; border:0; border-radius:50%; background:transparent; color:#6D28D9; cursor:pointer; transition:background .16s ease, transform .16s ease; }
+    .honour-group-toggle svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+    .honour-group-toggle:hover { background:rgba(109,40,217,.1); }
     .honour-group-toggle:focus-visible { outline:3px solid #6D28D9; outline-offset:2px; }
+    .honour-score-meter { display:grid; gap:5px; min-width:138px; }
+    .honour-score-meter strong { font-size:12px; font-weight:700; }
+    .honour-score-track { height:7px; overflow:hidden; border-radius:999px; background:#D7D3E8; }
+    .honour-score-track span { display:block; height:100%; border-radius:inherit; background:#16A36A; transition:width .25s ease; }
+    .honour-score-meter[data-level="warn"] .honour-score-track span { background:#D18B13; }
+    .honour-score-meter[data-level="medium"] .honour-score-track span { background:#E26B36; }
+    .honour-score-meter[data-level="bad"] .honour-score-track span { background:#C84242; }
+    .honour-score-ticks { display:flex; justify-content:space-between; color:#6B6688; font-size:9px; line-height:1; }
 
     table {
       width: 100%;
@@ -135,9 +144,11 @@
       color: #1B1730;
     }
 
-    .admin-sidebar { position:fixed; inset:0 auto 0 0; width:240px; height:100vh; box-sizing:border-box; padding:24px 18px; overflow-y:auto; z-index:100; background:#E9E7F5; border-right:1px solid #C3BFE0; }
+    .admin-sidebar { position:fixed; inset:0 auto 0 0; display:flex; flex-direction:column; width:240px; height:100vh; box-sizing:border-box; padding:24px 18px; overflow-y:auto; z-index:100; background:rgba(233,231,245,.66); backdrop-filter:blur(9px); border-right:1px solid rgba(195,191,224,.8); }
     .admin-sidebar .brand { margin-bottom:34px; }
     .admin-sidebar nav { display:grid; gap:6px; }
+    .admin-sidebar-mascots { display:flex; align-items:flex-end; justify-content:center; flex:1 1 auto; min-height:170px; margin-top:auto; overflow:hidden; pointer-events:none; }
+    .admin-sidebar-mascots img { display:block; width:min(100%, 190px); max-height:30vh; object-fit:contain; object-position:center bottom; filter:drop-shadow(0 8px 18px rgba(37,22,63,.22)); }
     .admin-nav-btn { display:flex; align-items:center; justify-content:flex-start; gap:12px; width:100%; padding:12px 13px; border:1px solid transparent; border-radius:10px; color:#53507A; background:transparent; font:inherit; font-size:13px; text-align:left; cursor:pointer; transition:background .18s ease,color .18s ease,border-color .18s ease; }
     .admin-nav-btn:hover { color:#4C1D95; background:rgba(207,198,242,.55); }
     .admin-nav-btn.active { color:#4C1D95; background:#CFC6F2; border-color:#C3BFE0; box-shadow:inset 3px 0 #6D28D9; }
@@ -199,6 +210,7 @@
     @media (max-width: 900px) {
       .admin-page { display:block; }
       .admin-sidebar { position:static; width:100%; height:auto; border-right:0; border-bottom:1px solid rgba(255,255,255,.1); }
+      .admin-sidebar-mascots { display:none; }
       .admin-sidebar .brand { margin-bottom:16px; }
       .admin-sidebar nav { grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); }
       .admin-main-wrapper { margin:0; width:100%; }
@@ -273,4 +285,65 @@
       .admin-page .login-audit-table td { overflow-wrap:anywhere; }
       .admin-page .login-audit-table .admin-login-result { max-width:100%; box-sizing:border-box; white-space:normal; }
       .admin-page .admin-filter-row > * { min-width:0; }
+    }
+
+    /* Admin visual polish: quieter navigation, clearer actions, and restrained status colors. */
+    .admin-page .admin-nav-btn { border-radius:9px; transition:background-color .16s ease,color .16s ease,border-color .16s ease; }
+    .admin-page .admin-nav-btn.active { background:#F4F1FC; border-color:#DED8EF; box-shadow:inset 3px 0 #6D28D9; }
+    .admin-page .admin-nav-icon { background:transparent; color:#746B91; }
+    .admin-page .admin-nav-btn.active .admin-nav-icon,
+    .admin-page .admin-nav-btn:hover .admin-nav-icon { color:#6D28D9; }
+    .admin-page .admin-nav-icon svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+    .admin-page .panel,
+    .admin-page .stat-card { border-color:#D5D0E5; border-radius:14px; box-shadow:0 8px 24px rgba(35,25,67,.045); }
+    .admin-page .play-btn,
+    .admin-page .ghost-btn { min-height:40px; border-radius:8px; font-weight:650; transition:background-color .16s ease,border-color .16s ease,box-shadow .16s ease,transform .16s ease; }
+    .admin-page .play-btn:hover,
+    .admin-page .ghost-btn:hover { transform:translateY(-1px); box-shadow:0 3px 9px rgba(45,28,92,.1); }
+    .admin-page .play-btn:active,
+    .admin-page .ghost-btn:active { transform:translateY(0); }
+    .admin-page .badge,
+    .admin-page .risk-badge { border:1px solid transparent; font-weight:650; letter-spacing:.01em; }
+    .admin-page .badge.good,
+    .admin-page .risk-badge.low { background:#E5F3EB; color:#246B47; border-color:#CFE7D8; }
+    .admin-page .badge.warn,
+    .admin-page .risk-badge.medium { background:#FBF1DD; color:#875A12; border-color:#EFDFBD; }
+    .admin-page .badge.bad,
+    .admin-page .risk-badge.high { background:#F8E7E7; color:#9B3434; border-color:#EED0D0; }
+    .admin-page .permanent-ban-badge { background:#F8E7E7; color:#9B3434; border:1px solid #EED0D0; font-size:10px; font-weight:700; }
+    .admin-page th { letter-spacing:.035em; }
+    .admin-page .hacker-account-card { border-left-width:3px; border-radius:12px; }
+    .admin-page .admin-event-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:16px; padding:14px 0; border-bottom:1px solid #D5D0E5; }
+    .admin-page .admin-event-copy { display:grid; gap:5px; min-width:0; }
+    .admin-page .admin-event-copy strong { color:#211B36; font-size:12px; }
+    .admin-page .admin-event-copy small { display:block; color:#625D78; font-size:11px; line-height:1.5; overflow-wrap:anywhere; }
+    .admin-page .admin-event-meta { display:grid; justify-items:end; gap:7px; white-space:nowrap; }
+    .admin-page .admin-event-meta time { color:#625D78; font-size:10px; }
+    .admin-page .analysis-results-table { min-width:1480px; table-layout:fixed; }
+    .admin-page .analysis-results-table th,
+    .admin-page .analysis-results-table td { line-height:1.45; vertical-align:middle; overflow-wrap:anywhere; }
+    .admin-page .analysis-results-table th:nth-child(1) { width:205px; }
+    .admin-page .analysis-results-table th:nth-child(2) { width:140px; }
+    .admin-page .analysis-results-table th:nth-child(3) { width:160px; }
+    .admin-page .analysis-results-table th:nth-child(4),
+    .admin-page .analysis-results-table th:nth-child(6),
+    .admin-page .analysis-results-table th:nth-child(7) { width:135px; }
+    .admin-page .analysis-results-table th:nth-child(5),
+    .admin-page .analysis-results-table th:nth-child(8) { width:100px; }
+    .admin-page .analysis-results-table th:nth-child(9) { width:130px; }
+    .admin-page .analysis-results-table th:nth-child(10) { width:155px; }
+    .admin-page .analysis-results-table th:nth-child(11) { width:125px; }
+    @media (max-width: 700px) {
+      .admin-page .admin-event-row { grid-template-columns:minmax(0,1fr); gap:10px; }
+      .admin-page .admin-event-meta { display:flex; align-items:center; justify-content:space-between; }
+    }
+
+    .admin-page {
+      background: linear-gradient(rgba(222,220,238,.86), rgba(222,220,238,.86)),
+        url("../public/backgrounds/sakura-dawn.jpg") center / cover fixed,
+        var(--bg);
+    }
+    .admin-page .admin-sidebar {
+      background: rgba(233,231,245,.66);
+      backdrop-filter: blur(9px);
     }

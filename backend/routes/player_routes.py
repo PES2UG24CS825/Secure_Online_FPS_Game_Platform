@@ -61,8 +61,8 @@ def get_profile():
         "mfa_enabled": user.get("mfa_enabled", False),
         "created_at": user["created_at"].isoformat() if user.get("created_at") else None,
         "profile_customization": user.get("profile_customization", {
-            "avatar": "initial",
-            "banner": "midnight",
+            "avatar": "chibi-female-2",
+            "banner": "frontline",
         }),
     })
 
@@ -78,8 +78,8 @@ def update_profile_customization():
     banner = data.get("banner")
     avatar_image = data.get("avatar_image") or None
     banner_image = data.get("banner_image") or None
-    allowed_avatars = {"initial", "shield", "target", "bolt"}
-    allowed_banners = {"midnight", "arctic", "ember", "forest"}
+    allowed_avatars = {"chibi-male-1", "chibi-female-1", "chibi-female-2"}
+    allowed_banners = {"sakura", "frontline", "dawn", "neon"}
     if avatar_image:
         avatar = "custom"
     if banner_image:
@@ -473,12 +473,8 @@ def get_security_summary():
 
     user_oid = ObjectId(user_id)
     user = users.find_one({"_id": user_oid}) or {}
-    play_restricted_until = user.get("play_restricted_until")
-    if isinstance(play_restricted_until, datetime):
-        if play_restricted_until.tzinfo is None:
-            play_restricted_until = play_restricted_until.replace(tzinfo=timezone.utc)
-        if play_restricted_until <= datetime.now(timezone.utc):
-            play_restricted_until = None
+    # Honour no longer pauses matchmaking; don't expose legacy cooldown timestamps.
+    play_restricted_until = None
     recent_login = login_history.find_one(
         {"user_id": user_oid, "type": "login_success"},
         sort=[("created_at", -1)],

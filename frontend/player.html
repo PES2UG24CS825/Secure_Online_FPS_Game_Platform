@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SecureFPS | Player Console</title>
-  <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg">
+  <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg?v=2">
 
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/player.css">
   <link rel="stylesheet" href="css/ui-polish.css">
 </head>
 
-<body class="dashboard-page player-page">
+<body class="dashboard-page player-page" data-player-banner="frontline">
 
   <!-- ============================================================
        SIDEBAR
@@ -20,11 +20,7 @@
   <aside class="sidebar">
 
     <div class="brand">
-      <img class="brand-mark" src="public/securefps-mark.svg" alt="SecureFPS logo">
-      <div>
-        <strong>SecureFPS</strong>
-        <small>Gaming Security</small>
-      </div>
+      <img class="brand-lockup" src="public/securefps-logo-crop.png?v=1" alt="SecureFPS Gaming Security">
     </div>
 
     <nav id="playerNavigation">
@@ -110,6 +106,7 @@
         <div class="overview-glance-stat"><strong id="matchesToday">—</strong><small>matches analyzed today</small></div>
         <div class="overview-glance-stat"><strong id="playerRank">—</strong><small>your fair-play rank</small></div>
         <button type="button" class="overview-glance-action" data-detection-info>How detection works</button>
+        <div class="overview-glance-mascot" aria-hidden="true"><span>GG!</span><img id="playerMascotSticker" src="public/avatars/chibi-female-2.png" alt=""></div>
       </section>
 
       <section class="overview-risk-grid" aria-label="Current risk summary">
@@ -141,7 +138,7 @@
       <div class="section-title">
         <div><p class="eyebrow">COMMUNITY</p><h2>Performance leaderboard</h2><p class="page-description">Ranked by match performance: kills, K/D ratio, accuracy, and completed matches.</p></div>
       </div>
-      <div class="leaderboard-hero"><div class="leaderboard-hero-icon">★</div><div><strong id="leaderboardRank">—</strong><span>Your current rank</span></div><div><strong id="leaderboardKills">—</strong><span>Total kills</span></div><div><strong id="leaderboardKd">—</strong><span>K/D ratio</span></div></div>
+      <div class="leaderboard-hero"><div class="leaderboard-hero-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 4h8v4a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5v2a4 4 0 0 0 4 4M16 6h3v2a4 4 0 0 1-4 4M12 12v5m-4 3h8m-7-3h6"/></svg></div><div><strong id="leaderboardRank">—</strong><span>Your current rank</span></div><div><strong id="leaderboardKills">—</strong><span>Total kills</span></div><div><strong id="leaderboardKd">—</strong><span>K/D ratio</span></div><div class="leaderboard-hero-mascot" aria-hidden="true"><span>Good luck!</span><img id="leaderboardMascotSticker" src="public/avatars/chibi-female-2.png" alt=""></div></div>
       <section class="leaderboard-card"><div class="dashboard-panel-head"><div><h2>Top performers</h2><span class="dashboard-panel-caption">Kills, K/D, accuracy, completed matches</span></div><button class="play-btn" id="refreshLeaderboard" type="button">Refresh</button></div><div id="leaderboardList" class="leaderboard-list"><div class="empty">Loading leaderboard…</div></div></section>
     </section>
 
@@ -173,6 +170,7 @@
 
           <div class="game-art art-one">
             <span>FPS 01</span>
+            <div class="game-art-mascot" aria-hidden="true"><span>Ready up!</span><img id="gameHubMascotSticker" src="public/avatars/chibi-female-2.png" alt=""></div>
           </div>
 
           <div class="game-info">
@@ -232,7 +230,7 @@
             Finished FPS Microgame sessions and their review status.
           </p>
         </div>
-
+        <div class="section-mascot" aria-hidden="true"><span>GG! Review your matches.</span><img id="matchesMascotSticker" src="public/avatars/chibi-female-2.png" alt=""></div>
       </div>
 
 
@@ -260,7 +258,7 @@
             Monitor the security of your SecureFPS account.
           </p>
         </div>
-
+        <div class="section-mascot" aria-hidden="true"><span>Stay protected!</span><img id="securityMascotSticker" src="public/avatars/chibi-female-2.png" alt=""></div>
       </div>
 
 
@@ -329,7 +327,7 @@
     </section>
 
     <section id="rewards" class="player-view">
-      <div class="section-title"><div><p class="eyebrow">PLAYER REWARDS</p><h2>Your rewards</h2><p class="page-description">Earn coins and XP for daily sign-ins and completed matches.</p></div></div>
+      <div class="section-title"><div><p class="eyebrow">PLAYER REWARDS</p><h2>Your rewards</h2><p class="page-description">Earn coins and XP for daily sign-ins and completed matches.</p></div><div class="section-mascot" aria-hidden="true"><span>Keep earning!</span><img id="rewardsMascotSticker" src="public/avatars/chibi-female-2.png" alt=""></div></div>
       <div class="reward-summary" id="rewardSummary"><article class="reward-balance"><span>Coins</span><strong id="rewardCoins">—</strong></article><article class="reward-balance"><span>Experience</span><strong id="rewardXp">— XP</strong><small id="rewardLevel">Level 1</small></article><article class="reward-balance"><span>Daily streak</span><strong id="rewardStreak">— days</strong><small id="dailyRewardMessage">Daily bonus: 25 coins + 25 XP</small></article></div>
       <section class="profile-card reward-store"><div class="dashboard-panel-head"><div><h2>Cosmetic store</h2><span class="dashboard-panel-caption">Spend coins on profile badges</span></div></div><div class="reward-store-grid" id="rewardStore"><div class="empty">Loading rewards…</div></div></section>
       <section class="profile-card reward-history"><div class="dashboard-panel-head"><div><h2>Recent rewards</h2><span class="dashboard-panel-caption">Daily and match earnings</span></div></div><div id="rewardHistory" class="list"><div class="empty">Loading reward activity…</div></div></section>
@@ -338,7 +336,7 @@
     <section id="support" class="player-view">
       <div class="section-title"><div><p class="eyebrow">PLAYER SUPPORT</p><h2>How can we help?</h2><p class="page-description">Browse quick answers or send a message to the SecureFPS admin team.</p></div></div>
       <div class="support-layout">
-        <section class="profile-card support-assistant"><h3>SecureFPS helper</h3><p class="appearance-hint">Choose a common question or ask about account access, matches, security, or rewards.</p><div class="support-faq-list" id="supportFaqList"></div><div class="support-answer" id="supportAnswer" role="status" aria-live="polite">Select a question to see a suggested solution.</div><form id="supportQuestionForm" class="support-form"><label>Ask a question<input id="supportQuestion" maxlength="240" required placeholder="For example: Where are my match rewards?"></label><button class="play-btn" type="submit">Ask the helper</button></form></section>
+        <section class="profile-card support-assistant"><h3>SecureFPS helper</h3><p class="appearance-hint">Choose a common question or ask about account access, matches, security, or rewards.</p><div class="support-faq-list" id="supportFaqList"></div><div class="support-answer" id="supportAnswer" role="status" aria-live="polite">Select a question to see a suggested solution.</div><form id="supportQuestionForm" class="support-form"><label>Ask a question<input id="supportQuestion" maxlength="240" required placeholder="For example: Where are my match rewards?"></label><button class="play-btn" type="submit">Ask the helper</button></form><div class="support-mascot" aria-hidden="true"><span>Need a hand?</span><img id="supportMascotSticker" src="public/avatars/chibi-female-2.png" alt=""></div></section>
         <section class="profile-card support-contact"><h3>Contact support</h3><form id="supportTicketForm" class="support-form"><label>Topic<select id="supportCategory" required><option value="account">Account or sign-in</option><option value="match">Match or results</option><option value="security">Security review</option><option value="rewards">Rewards or store</option><option value="other">Other</option></select></label><label>Message<textarea id="supportMessage" rows="5" maxlength="3000" required placeholder="Describe what happened and what you need help with."></textarea></label><label>Screenshot or proof (optional)<input id="supportAttachment" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPG, or WebP up to 3 MB.</small></label><button class="play-btn" id="sendSupportTicket" type="submit">Send to admin</button><span id="supportFormStatus" class="appearance-status" role="status"></span></form></section>
       </div>
       <section class="profile-card support-ticket-history"><div class="dashboard-panel-head"><div><h2>Your support messages</h2><span class="dashboard-panel-caption">Replies from admin appear here</span></div><button class="play-btn" id="refreshSupportTickets" type="button">Refresh</button></div><div id="supportTicketList" class="list"><div class="empty">Loading messages…</div></div></section>
@@ -370,7 +368,7 @@
 
         <section class="profile-card">
 
-          <div class="profile-banner" id="profileBanner" data-banner="midnight" aria-label="Profile banner preview"></div>
+          <div class="profile-banner" id="profileBanner" data-banner="frontline" aria-label="Profile banner preview"><img class="profile-banner-mascot" id="profileBannerMascot" src="public/avatars/chibi-female-2.png" alt="" aria-hidden="true"></div>
 
           <div class="profile-identity">
 
@@ -410,10 +408,10 @@
           <div class="appearance-group">
             <h3>Banner background</h3>
             <div class="appearance-options" id="bannerOptions" role="group" aria-label="Choose banner background">
-              <button class="appearance-option banner-option" type="button" data-banner="midnight" aria-label="Midnight banner" aria-pressed="true"></button>
-              <button class="appearance-option banner-option" type="button" data-banner="arctic" aria-label="Arctic banner" aria-pressed="false"></button>
-              <button class="appearance-option banner-option" type="button" data-banner="ember" aria-label="Ember banner" aria-pressed="false"></button>
-              <button class="appearance-option banner-option" type="button" data-banner="forest" aria-label="Forest banner" aria-pressed="false"></button>
+              <button class="appearance-option banner-option" type="button" data-banner="sakura" aria-label="Moonlit cherry blossom banner" title="Moonlit sakura" aria-pressed="false"></button>
+              <button class="appearance-option banner-option" type="button" data-banner="frontline" aria-label="Sakura frontline banner" title="Sakura frontline" aria-pressed="true"></button>
+              <button class="appearance-option banner-option" type="button" data-banner="dawn" aria-label="Sakura dawn arena banner" title="Sakura dawn arena" aria-pressed="false"></button>
+              <button class="appearance-option banner-option" type="button" data-banner="neon" aria-label="Neon sakura arena banner" title="Neon sakura arena" aria-pressed="false"></button>
             </div>
             <label class="appearance-upload">Upload your banner
               <input id="bannerUpload" type="file" accept="image/png,image/jpeg,image/webp">
@@ -424,10 +422,10 @@
           <div class="appearance-group">
             <h3>Avatar</h3>
             <div class="appearance-options" id="avatarOptions" role="group" aria-label="Choose avatar">
-              <button class="appearance-option avatar-option" type="button" data-avatar="initial" aria-pressed="true">S</button>
-              <button class="appearance-option avatar-option" type="button" data-avatar="shield" aria-pressed="false">⬡</button>
-              <button class="appearance-option avatar-option" type="button" data-avatar="target" aria-pressed="false">◎</button>
-              <button class="appearance-option avatar-option" type="button" data-avatar="bolt" aria-pressed="false">ϟ</button>
+              <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="chibi-male-1" aria-label="Chibi male avatar one" title="Chibi male one" aria-pressed="false"><img src="public/avatars/chibi-male-1.png" alt=""></button>
+              <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="chibi-female-1" aria-label="Chibi female avatar one" title="Chibi female one" aria-pressed="false"><img src="public/avatars/chibi-female-1.png" alt=""></button>
+              <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="chibi-male-2" aria-label="Chibi male avatar two" title="Chibi male two" aria-pressed="false"><img src="public/avatars/chibi-male-2.png" alt=""></button>
+              <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="chibi-female-2" aria-label="Chibi female avatar two" title="Chibi female two" aria-pressed="true"><img src="public/avatars/chibi-female-2.png" alt=""></button>
             </div>
             <label class="appearance-upload">Upload profile photo
               <input id="avatarUpload" type="file" accept="image/png,image/jpeg,image/webp">

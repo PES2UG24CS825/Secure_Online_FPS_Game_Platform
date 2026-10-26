@@ -133,9 +133,7 @@ FEATURE_RANGES = {
     "kdr": (0.0, 10.0),
 }
 BAN_RISK_THRESHOLD = float(os.getenv("BAN_RISK_THRESHOLD", "85"))
-MATCH_ABANDON_HONOUR_PENALTY = 20
-MATCH_ABANDON_RESTRICTION_THRESHOLD = 80
-MATCH_ABANDON_COOLDOWN_MINUTES = 30
+MATCH_ABANDON_HONOUR_PENALTY = 10
 MATCH_COMPLETE_HONOUR_REWARD = 5
 MAX_HONOUR_SCORE = 100
 
@@ -538,16 +536,8 @@ def start_game():
             {"$set": {"honour_score": 100}},
         )
         account["honour_score"] = 100
-    play_restricted_until = account.get("play_restricted_until")
-    if play_restricted_until:
-        if play_restricted_until.tzinfo is None:
-            play_restricted_until = play_restricted_until.replace(tzinfo=timezone.utc)
-        if play_restricted_until > utc_now():
-            return jsonify({
-                "message": "Game access is paused for 30 minutes because your Honour score is below 80.",
-                "honour_score": account.get("honour_score", 100),
-                "restricted_until": play_restricted_until.isoformat(),
-            }), 403
+    # Honour affects the player's score only; clear old cooldowns created by the earlier rule.
+    if account.get("play_restricted_until"):
         users.update_one(
             {"_id": user_id},
             {"$unset": {"play_restricted_until": ""}},
@@ -1540,19 +1530,11 @@ def end_game():
     if player.get("honour_score", 0) < 0:
         users.update_one({"_id": user_id}, {"$set": {"honour_score": 0}})
 
-    restriction_until = None
-    if honour_score < MATCH_ABANDON_RESTRICTION_THRESHOLD:
-        restriction_until = now + timedelta(minutes=MATCH_ABANDON_COOLDOWN_MINUTES)
-        users.update_one(
-            {"_id": user_id},
-            {"$set": {"play_restricted_until": restriction_until}},
-        )
-
     security_events.insert_one({
         "type": "match_abandoned",
         "user_id": user_id,
         "session_id": session_id,
-        "severity": "medium" if restriction_until else "low",
+        "severity": "low",
         "honour_before": honour_before,
         "honour_change": honour_score - honour_before,
         "honour_score": honour_score,
@@ -1560,8 +1542,7 @@ def end_game():
         "review_status": "pending",
         "description": (
             f"{player.get('name') or player.get('email') or 'A player'} left an unfinished match. "
-            f"Honour score is now {honour_score}/100."
-            + (" Game access is paused for 30 minutes." if restriction_until else "")
+            f"Honour score is now {honour_score}/100. Game access remains available."
         ),
         "created_at": now,
     })
@@ -1574,7 +1555,7 @@ def end_game():
         payload={
             "player_name": player.get("name") or player.get("email") or "Player",
             "honour_score": honour_score,
-            "restricted_until": restriction_until.isoformat() if restriction_until else None,
+            "restricted_until": None,
         },
     )
 
@@ -1583,12 +1564,11 @@ def end_game():
         "status": "abandoned",
         "message": (
             "Unfinished match abandoned. No coins or XP were awarded. "
-            f"Honour score: {honour_score}/100."
-            + (" Game access is paused for 30 minutes because your Honour score is below 80." if restriction_until else "")
+            f"Honour score: {honour_score}/100. You can start another match."
         ),
         "session_id": session_id,
         "honour_score": honour_score,
-        "restricted_until": restriction_until.isoformat() if restriction_until else None,
+        "restricted_until": None,
         "reward": None,
     }), 200
 
@@ -2465,7 +2445,7 @@ def admin_overview():
             "honour_change": event.get("honour_change", -MATCH_ABANDON_HONOUR_PENALTY),
             "honour_before": event.get("honour_before"),
             "honour_after": score_after,
-            "access_status": "Paused for 30 minutes" if event.get("restricted_until") else "Available",
+            "access_status": "Available",
             "created_at": event["created_at"].isoformat() if event.get("created_at") else None,
         })
     for reward in reward_transactions.find({"type": "match_completed"}).sort("created_at", -1).limit(100):

@@ -141,7 +141,7 @@ async function loadLeaderboard() {
     }
     const renderPlayer = (player) => `
       <div class="leaderboard-row ${current?.id === player.id ? "current" : ""}">
-        <div class="leaderboard-rank">${player.rank <= 3 ? ["", "🥇", "🥈", "🥉"][player.rank] : `#${player.rank}`}</div>
+        <div class="leaderboard-rank rank-${Number(player.rank)}">#${Number(player.rank)}</div>
         <div class="leaderboard-player"><strong>${featureEscape(player.name)}</strong><small>${Number(player.accuracy).toFixed(1)}% accuracy · ${Number(player.matches)} matches</small></div>
         <div class="leaderboard-metric"><strong>${Number(player.kills)}</strong><small>kills · ${Number(player.kd).toFixed(2)} K/D</small></div>
         <div class="leaderboard-metric"><strong>${Number(player.matches)}</strong><small>matches</small></div>

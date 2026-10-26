@@ -294,12 +294,21 @@ function renderHonourReport(rows) {
     const isExpanded = expandedHonourPlayers.has(key);
     const changeLabel = `${totalChange > 0 ? "+" : ""}${totalChange}`;
     const changeTone = totalChange > 0 ? "good" : totalChange < 0 ? "warn" : "gray";
+    const parsedScore = latest.current_score == null ? null : Number(latest.current_score);
+    const score = Number.isFinite(parsedScore) ? Math.max(0, Math.min(100, parsedScore)) : null;
+    const scoreTone = score === null ? "bad" : score >= 80 ? "good" : score >= 60 ? "warn" : score >= 40 ? "medium" : "bad";
+    const scoreCell = score === null
+      ? "—"
+      : `<div class="honour-score-meter" data-level="${scoreTone}" role="meter" aria-label="${escapeHtml(latest.player_name || "Player")} Honour score" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${score}"><strong>${score}/100</strong><div class="honour-score-track"><span style="width:${score}%"></span></div><div class="honour-score-ticks" aria-hidden="true"><span>0</span><span>20</span><span>40</span><span>60</span><span>80</span><span>100</span></div></div>`;
+    const disclosureIcon = isExpanded
+      ? '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 12 5-5 5 5"/></svg>'
+      : '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg>';
     const summary = `<tr class="honour-player-summary">
-      <td><div class="honour-player-cell"><button class="honour-group-toggle" type="button" data-honour-toggle="${escapeHtml(key)}" aria-expanded="${isExpanded}" aria-label="${isExpanded ? "Collapse" : "Expand"} Honour history for ${escapeHtml(latest.player_name || "player")}">${isExpanded ? "−" : "+"}</button><strong>${escapeHtml(latest.player_name || "Unknown player")}</strong></div></td>
+      <td><div class="honour-player-cell"><button class="honour-group-toggle" type="button" data-honour-toggle="${escapeHtml(key)}" aria-expanded="${isExpanded}" aria-label="${isExpanded ? "Collapse" : "Expand"} Honour history for ${escapeHtml(latest.player_name || "player")}">${disclosureIcon}</button><strong>${escapeHtml(latest.player_name || "Unknown player")}</strong></div></td>
       <td>${playerRows.length} recorded update${playerRows.length === 1 ? "" : "s"}</td>
       <td>${escapeHtml(latest.session_id || "—")}</td>
       <td><span class="badge ${changeTone}">${escapeHtml(changeLabel)} Honour</span></td>
-      <td>${escapeHtml(String(latest.current_score ?? "—"))}/100</td>
+      <td>${scoreCell}</td>
       <td>${escapeHtml(latest.access_status || "Available")}</td>
       <td>${escapeHtml(displayDate(latest.created_at))}</td>
     </tr>`;
@@ -461,8 +470,7 @@ function connectAdminLiveEvents() {
     try {
       const update = JSON.parse(event.data || "{}");
       if (update.type === "match_abandoned") {
-        const lockMessage = update.restricted_until ? " Player access is paused for 30 minutes." : "";
-        window.showAppToast?.(`${update.player_name || "A player"} left an unfinished match. Honour: ${update.honour_score ?? "—"}/100.${lockMessage}`, "warning");
+        window.showAppToast?.(`${update.player_name || "A player"} left an unfinished match. Honour: ${update.honour_score ?? "—"}/100. Matchmaking remains available.`, "warning");
       }
     } catch (_) {}
     clearTimeout(adminRefreshDebounce);
@@ -508,7 +516,12 @@ async function loadAdmin(force = false) {
     document.getElementById("highCount").textContent = data.stats?.high_severity_events ?? events.filter((event) => ["high", "critical"].includes(event.severity)).length;
     renderHonourReport(data.honour_report);
     await loadPlayers();
-    document.getElementById("events").innerHTML = events.map((event) => `<div class="list-row"><div><strong>${escapeHtml(event.type || "Security event")}</strong><small>${escapeHtml(event.description || displayDate(event.created_at || event.timestamp))}</small></div><span class="badge ${["high", "critical"].includes(event.severity) ? "bad" : event.severity === "medium" ? "warn" : "good"}">${escapeHtml(event.severity || "low")}</span></div>`).join("") || '<div class="empty">No security events.</div>';
+    document.getElementById("events").innerHTML = events.map((event) => {
+      const eventType = String(event.type || "Security event").replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+      const severity = event.severity || "low";
+      const tone = ["high", "critical"].includes(severity) ? "bad" : severity === "medium" ? "warn" : "good";
+      return `<article class="admin-event-row"><div class="admin-event-copy"><strong>${escapeHtml(eventType)}</strong><small>${escapeHtml(event.description || "Recorded security activity")}</small></div><div class="admin-event-meta"><time>${escapeHtml(displayDate(event.created_at || event.timestamp))}</time><span class="badge ${tone}">${escapeHtml(severity)}</span></div></article>`;
+    }).join("") || '<div class="empty">No security events.</div>';
     const loginKeys = new Set();
     window.adminLoginRows = recentLogins.map((row) => {
       const player = adminOverviewPlayers.find((item) => item.id === row.player_id || item.id === row.user_id);
