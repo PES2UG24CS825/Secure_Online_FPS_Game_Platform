@@ -725,14 +725,15 @@ document.getElementById("loginPagination")?.addEventListener("click", (event) =>
 });
 document.getElementById("refreshLogins")?.addEventListener("click", () => loadAdmin(true));
 document.getElementById("seedDemoBtn")?.addEventListener("click", async (event) => {
-  event.currentTarget.disabled = true;
+  const button = event.currentTarget;
+  button.disabled = true;
   try {
     await api("/admin/gameplay/seed-demo", { method: "POST" });
     await loadAdmin();
   } catch (error) {
     window.showAppAlert(error.message || "Demo data could not be seeded.", { title: "Seed demo data failed", tone: "error" });
   } finally {
-    event.currentTarget.disabled = false;
+    if (button?.isConnected) button.disabled = false;
   }
 });
 document.getElementById("runHackerDemoBtn")?.addEventListener("click", async (event) => {
@@ -742,14 +743,15 @@ document.getElementById("runHackerDemoBtn")?.addEventListener("click", async (ev
     tone: "warning"
   });
   if (!confirmed) return;
-  event.currentTarget.disabled = true;
+  const button = event.currentTarget;
+  button.disabled = true;
   try {
     await api("/admin/gameplay/run-hacker-demo", { method: "POST" });
     window.showAppToast("Hacker demo started. Watch for live auto-ban alerts.", "success");
   } catch (error) {
     window.showAppAlert(error.message || "The hacker demo could not start.", { title: "Hacker demo failed", tone: "error" });
   } finally {
-    event.currentTarget.disabled = false;
+    if (button?.isConnected) button.disabled = false;
   }
 });
 document.getElementById("resetHackerDemoBtn")?.addEventListener("click", async (event) => {
@@ -759,7 +761,8 @@ document.getElementById("resetHackerDemoBtn")?.addEventListener("click", async (
     tone: "warning"
   });
   if (!confirmed) return;
-  event.currentTarget.disabled = true;
+  const button = event.currentTarget;
+  button.disabled = true;
   try {
     const result = await api("/admin/gameplay/reset-hacker-demo", { method: "POST" });
     window.showAppToast(`Reset ${result.reset_accounts || 0} demo hacker accounts.`, "success");
@@ -767,7 +770,7 @@ document.getElementById("resetHackerDemoBtn")?.addEventListener("click", async (
   } catch (error) {
     window.showAppAlert(error.message || "The hacker demo could not be reset.", { title: "Reset failed", tone: "error" });
   } finally {
-    event.currentTarget.disabled = false;
+    if (button?.isConnected) button.disabled = false;
   }
 });
 loadAdmin();
