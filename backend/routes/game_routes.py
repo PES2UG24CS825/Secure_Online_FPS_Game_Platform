@@ -490,9 +490,14 @@ def start_game():
         demo_runtime_enabled()
         and account.get("demo") is True
         and account.get("account_type") == "demo_test"
-        and account.get("username") == DEMO_ACCOUNT_USERNAME
-        and account.get("email") == DEMO_ACCOUNT_EMAIL
         and account.get("role") == "player"
+        and (
+            account.get("hacker_profile")
+            or (
+                account.get("username") == DEMO_ACCOUNT_USERNAME
+                and account.get("email") == DEMO_ACCOUNT_EMAIL
+            )
+        )
     )
 
     session_id = str(uuid.uuid4())
