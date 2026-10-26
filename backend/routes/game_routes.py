@@ -4,6 +4,7 @@ import secrets
 import uuid
 import math
 import json
+import re
 import queue
 import threading
 import time
@@ -18,6 +19,7 @@ from database.db import (
     security_events,
     login_history,
     users,
+    sessions_db,
     reward_transactions,
     support_tickets,
 )
@@ -36,7 +38,7 @@ _live_subscribers_lock = threading.Lock()
 _live_emit_times = {}
 
 
-def publish_live_update(user_id, session_id=None, event_type="game_update", force=False):
+def publish_live_update(user_id, session_id=None, event_type="game_update", force=False, payload=None):
     """Publish a small notification; dashboards fetch authoritative values from MongoDB."""
     now = time.monotonic()
     user_channel = str(user_id)
@@ -53,6 +55,7 @@ def publish_live_update(user_id, session_id=None, event_type="game_update", forc
         "type": event_type,
         "session_id": str(session_id) if session_id else None,
         "updated_at": utc_now().isoformat(),
+        **(payload or {}),
     })
     for subscriber in queues:
         try:
@@ -117,6 +120,7 @@ FEATURE_RANGES = {
     "aim_smoothness": (0.0, 1.0),
     "kdr": (0.0, 10.0),
 }
+BAN_RISK_THRESHOLD = float(os.getenv("BAN_RISK_THRESHOLD", "85"))
 
 # Alerts indicate suspicious sessions for review, not confirmed cheating.
 GAMEPLAY_ALERT_THRESHOLDS = {
@@ -141,6 +145,112 @@ def demo_int_setting(name, default, minimum=1):
         return max(minimum, int(os.getenv(name, str(default))))
     except (TypeError, ValueError):
         return default
+
+
+def top_risk_reasons(raw_features, result):
+    reasons = []
+    labels = {
+        "accuracy": "abnormally high accuracy",
+        "fire_rate": "abnormally high fire rate",
+        "movement_speed": "abnormally high movement speed",
+        "kdr": "abnormally high kill/death ratio",
+        "aim_smoothness": "inhuman aim consistency",
+    }
+    ranked = []
+    for feature, value in (raw_features or {}).items():
+        if isinstance(value, (int, float)) and math.isfinite(value):
+            score = value if feature != "aim_smoothness" else 1.0 - value
+            ranked.append((score, feature))
+    for _, feature in sorted(ranked, reverse=True):
+        if feature in labels:
+            reasons.append(labels[feature])
+    if result.get("random_forest") == "cheater":
+        reasons.append("random forest classified the session as cheating")
+    if result.get("isolation_forest") == "anomaly":
+        reasons.append("isolation forest classified the session as anomalous")
+    return reasons[:5] or ["risk threshold exceeded"]
+
+
+def auto_ban_hacker(user_id, session_id, account, result, raw_features):
+    risk_score = result.get("risk_score")
+    if (
+        account.get("account_type") != "demo_test"
+        or not account.get("hacker_profile")
+        or not isinstance(risk_score, (int, float))
+        or risk_score < BAN_RISK_THRESHOLD
+        or account.get("revoked") is True
+        or account.get("account_status") == "banned"
+    ):
+        return None
+
+    banned_at = utc_now()
+    reasons = top_risk_reasons(raw_features, result)
+    update = users.update_one(
+        {
+            "_id": user_id,
+            "account_type": "demo_test",
+            "hacker_profile": {"$exists": True, "$ne": ""},
+            "revoked": {"$ne": True},
+            "account_status": {"$ne": "banned"},
+        },
+        {
+            "$set": {
+                "revoked": True,
+                "account_status": "banned",
+                "banned_at": banned_at,
+                "ban_reason": reasons,
+                "banned_by": "system_auto",
+            },
+            "$unset": {
+                "demo_restricted_until": "",
+                "demo_restriction_reason": "",
+                "demo_restriction_session_id": "",
+            },
+        },
+    )
+    if not update.modified_count:
+        return None
+
+    sessions_db.update_many(
+        {"user_id": user_id, "is_active": True},
+        {"$set": {"is_active": False, "last_activity": banned_at}},
+    )
+    game_sessions.update_many(
+        {"user_id": user_id, "status": "active"},
+        {"$set": {
+            "status": "terminated_banned",
+            "ended_at": banned_at,
+            "enforcement_state": "banned",
+            "enforcement_action": "permanent_ban",
+        }},
+    )
+    security_events.insert_one({
+        "type": "auto_ban",
+        "user_id": user_id,
+        "session_id": session_id,
+        "risk_score": risk_score,
+        "reasons": reasons,
+        "created_at": banned_at,
+    })
+    publish_live_update(
+        user_id,
+        session_id,
+        "cheater_banned",
+        force=True,
+        payload={
+            "player_name": account.get("name", account.get("email", "Unknown player")),
+            "hacker_profile": account.get("hacker_profile"),
+            "risk_score": risk_score,
+            "top_reasons": reasons,
+            "banned_at": banned_at.isoformat(),
+        },
+    )
+    return {
+        "state": "banned",
+        "action": "permanent_ban",
+        "banned_at": banned_at,
+        "reasons": reasons,
+    }
 
 
 def demo_float_setting(name, default, minimum=0.1):
@@ -287,17 +397,9 @@ def is_admin():
     """
     Check whether currently logged-in user is admin.
     """
-    user_id = get_current_user_object_id()
-
-    if not user_id:
-        return False
-
-    return bool(
-        users.find_one({
-            "_id": user_id,
-            "role": "admin"
-        })
-    )
+    # Keep this check consistent with the admin overview, which already allows
+    # moderator and super_admin accounts to use the operations console.
+    return bool(current_admin())
 
 
 def current_admin():
@@ -838,17 +940,20 @@ def analyze_game_session(
         "session_id": session_id,
         "user_id": user_id
     }) or {}
+    account = users.find_one({"_id": user_id}) or {}
     is_demo = bool(
         demo_runtime_enabled()
         and game_session.get("demo_mode") is True
-        and users.find_one({
-            "_id": user_id,
-            "role": "player",
-            "demo": True,
-            "account_type": "demo_test",
-            "username": DEMO_ACCOUNT_USERNAME,
-            "email": DEMO_ACCOUNT_EMAIL
-        })
+        and account.get("role") == "player"
+        and account.get("demo") is True
+        and account.get("account_type") == "demo_test"
+        and (
+            account.get("hacker_profile")
+            or (
+                account.get("username") == DEMO_ACCOUNT_USERNAME
+                and account.get("email") == DEMO_ACCOUNT_EMAIL
+            )
+        )
     )
 
     if raw_features is None:
@@ -918,7 +1023,19 @@ def analyze_game_session(
     enforcement_state = "monitoring"
     enforcement_action = "none"
     restriction_until = None
-    if realtime and is_demo and severity == "high":
+    auto_ban = None
+    if realtime and result.get("risk_score", 0) >= BAN_RISK_THRESHOLD:
+        auto_ban = auto_ban_hacker(
+            user_id,
+            session_id,
+            account,
+            result,
+            raw_features,
+        )
+        if auto_ban:
+            enforcement_state = auto_ban["state"]
+            enforcement_action = auto_ban["action"]
+    if realtime and is_demo and severity == "high" and not auto_ban:
         restriction_seconds = demo_int_setting(
             "DEMO_CHEATER_RESTRICTION_SECONDS",
             900,
@@ -1030,6 +1147,7 @@ def analyze_game_session(
         "enforcement_state": enforcement_state,
         "enforcement_action": enforcement_action,
         "restricted_until": restriction_until,
+        "auto_ban": bool(auto_ban),
 
         "created_at": utc_now()
     }
@@ -2469,6 +2587,55 @@ def seed_admin_demo():
 # ADMIN PLAYER ACTION
 # =========================================================
 
+@game_bp.get("/admin/players")
+def list_admin_players():
+    if not current_admin():
+        return jsonify({"message": "Admin access required."}), 403
+
+    limit = max(1, min(request.args.get("limit", 20, type=int), 100))
+    offset = max(0, request.args.get("offset", 0, type=int))
+    search = request.args.get("search", "", type=str).strip()[:120]
+    # Keep development fixtures and records left by API tests out of the live
+    # player directory. The test suite creates these exact synthetic addresses.
+    query = {
+        "role": "player",
+        "demo": {"$ne": True},
+        "account_type": {"$ne": "demo_test"},
+        "email": {"$not": {"$regex": r"^player[0-9a-f]{8}@example\.com$", "$options": "i"}},
+    }
+    if search:
+        pattern = re.escape(search)
+        query["$or"] = [
+            {"name": {"$regex": pattern, "$options": "i"}},
+            {"email": {"$regex": pattern, "$options": "i"}},
+        ]
+
+    player_records = list(users.find(query, {"password_hash": 0, "mfa_secret": 0})
+                          .sort("created_at", -1).skip(offset).limit(limit))
+
+    return jsonify({
+        "players": [{
+            "id": str(player["_id"]),
+            "name": player.get("name", "Player"),
+            "email": player.get("email", ""),
+            "role": player.get("role", "player"),
+            "mfa_enabled": player.get("mfa_enabled", False),
+            "matches_played": player.get("matches_played", 0),
+            "risk_score": player.get("risk_score"),
+            "last_login_ip": player.get("last_login_ip", "No login recorded"),
+            "last_login": _admin_date(player.get("last_login")),
+            "created_at": _admin_date(player.get("created_at")),
+            "account_status": player.get("account_status") or ("suspended" if player.get("revoked") else "active"),
+            "demo": player.get("demo", False),
+        } for player in player_records],
+        "total": users.count_documents(query),
+    })
+
+def _admin_date(value):
+    if value is None:
+        return None
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
 @game_bp.post(
     "/admin/players/<player_id>/<action>"
 )
@@ -2481,6 +2648,7 @@ def admin_player_action(
         not is_admin()
         or action not in {
             "revoke",
+            "restore",
             "delete",
             "confirm-demo-alert",
             "clear-demo-restriction"
@@ -2491,6 +2659,12 @@ def admin_player_action(
             "message":
                 "Admin access required."
         }), 403
+
+    actor = current_admin()
+    if actor.get("role") == "moderator" and action in {
+        "revoke", "restore", "delete", "confirm-demo-alert", "clear-demo-restriction"
+    }:
+        return jsonify({"message": "Moderators can review alerts and support tickets but cannot change player accounts."}), 403
 
     try:
 
@@ -2582,28 +2756,42 @@ def admin_player_action(
 
     if action == "delete":
 
-        users.delete_one({
+        target = users.find_one({
             "_id": oid,
             "role": {
                 "$ne": "admin"
             }
         })
+        if not target:
+            return jsonify({"message": "Player account not found or cannot be deleted."}), 404
+        sessions_db.update_many(
+            {"user_id": oid, "is_active": True},
+            {"$set": {"is_active": False, "last_activity": utc_now()}},
+        )
+        users.delete_one({"_id": oid, "role": {"$ne": "admin"}})
 
     else:
 
-        users.update_one(
+        result = users.update_one(
             {
                 "_id": oid,
                 "role": {
                     "$ne": "admin"
                 }
             },
-            {
-                "$set": {
-                    "revoked": True
-                }
-            }
+            {"$set": {
+                "revoked": action == "revoke",
+                "account_status": "suspended" if action == "revoke" else "active",
+                "account_status_updated_at": utc_now(),
+            }, **({"$unset": {"active_auth_session_id": ""}} if action == "revoke" else {"$unset": {"ban_until": ""}})}
         )
+        if not result.matched_count:
+            return jsonify({"message": "Player account not found or cannot be changed."}), 404
+        if action == "revoke":
+            sessions_db.update_many(
+                {"user_id": oid, "is_active": True},
+                {"$set": {"is_active": False, "last_activity": utc_now()}},
+            )
 
     return jsonify({
         "message":
@@ -2625,7 +2813,6 @@ def review_gameplay_alert(session_id):
         "warn": "warned",
         "suspend": "suspended",
         "ban": "banned",
-        "escalate": "escalated",
     }
     if action not in allowed_actions:
         return jsonify({"message": "Unsupported review action."}), 400
@@ -2633,6 +2820,9 @@ def review_gameplay_alert(session_id):
         return jsonify({"message": "A review note is required."}), 400
     if reviewer.get("role") == "moderator" and action in {"suspend", "ban"}:
         return jsonify({"message": "Moderators cannot suspend or ban accounts."}), 403
+    ban_duration = str(payload.get("ban_duration", "")).strip().lower()
+    if action == "ban" and ban_duration not in {"24h", "7d", "permanent"}:
+        return jsonify({"message": "Choose a 24-hour, 7-day, or permanent ban."}), 400
 
     alert = security_events.find_one({
         "type": "gameplay_anomaly",
@@ -2644,24 +2834,40 @@ def review_gameplay_alert(session_id):
     reviewed_at = utc_now()
     reviewer_id = reviewer["_id"]
     status = allowed_actions[action]
-    security_events.update_one(
-        {"_id": alert["_id"]},
-        {"$set": {
-            "review_status": status,
-            "review_action": action,
-            "review_note": note,
-            "reviewed_at": reviewed_at,
-            "reviewed_by": reviewer_id,
-        }}
+    ban_until = None
+    review_fields = {
+        "review_status": status,
+        "review_action": action,
+        "review_note": note,
+        "reviewed_at": reviewed_at,
+        "reviewed_by": reviewer_id,
+    }
+    if action == "ban":
+        review_fields["ban_duration"] = ban_duration
+    security_events.update_many(
+        {"type": "gameplay_anomaly", "session_id": session_id},
+        {"$set": review_fields}
     )
     if action in {"suspend", "ban"}:
+        ban_until = (
+            reviewed_at + timedelta(hours=24) if action == "ban" and ban_duration == "24h"
+            else reviewed_at + timedelta(days=7) if action == "ban" and ban_duration == "7d"
+            else None
+        )
+        account_update = {
+            "revoked": True,
+            "account_status": "suspended" if action == "suspend" else "banned",
+            "account_status_updated_at": reviewed_at,
+        }
+        if action == "ban" and ban_until:
+            account_update["ban_until"] = ban_until
         users.update_one(
             {"_id": alert.get("user_id")},
-            {"$set": {
-                "revoked": action == "ban",
-                "account_status": "suspended" if action == "suspend" else "banned",
-                "account_status_updated_at": reviewed_at,
-            }}
+            {"$set": account_update, "$unset": {"active_auth_session_id": "", **({"ban_until": ""} if action == "suspend" or ban_duration == "permanent" else {})}}
+        )
+        sessions_db.update_many(
+            {"user_id": alert.get("user_id"), "is_active": True},
+            {"$set": {"is_active": False, "last_activity": reviewed_at}},
         )
 
     security_events.insert_one({
@@ -2672,6 +2878,8 @@ def review_gameplay_alert(session_id):
         "session_id": session_id,
         "user_id": alert.get("user_id"),
         "actor_user_id": reviewer_id,
+        "ban_duration": ban_duration if action == "ban" else None,
+        "ban_until": ban_until if action == "ban" else None,
         "created_at": reviewed_at,
     })
     return jsonify({"success": True, "review_status": status}), 200
