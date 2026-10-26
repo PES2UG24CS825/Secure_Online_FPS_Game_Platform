@@ -45,6 +45,7 @@ class FrontendServingTests(unittest.TestCase):
             self.assertEqual(response.mimetype, "application/wasm")
             self.assertEqual(response.headers.get("Content-Encoding"), "br")
             self.assertIn("Accept-Encoding", response.headers.get("Vary", ""))
+            response.close()
 
 
 if __name__ == "__main__":
