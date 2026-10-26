@@ -60,10 +60,16 @@ function updateRiskBreakdown(score) {
   return topFactor && topFactor[1] >= 30 ? `${topFactor[0]} (${topFactor[1]})` : "None";
 }
 
-const avatarGlyphs = { initial: "", shield: "⬡", target: "◎", bolt: "ϟ" };
+const avatarPortraits = {
+  "chibi-male-1": "public/avatars/chibi-male-1.png",
+  "chibi-female-1": "public/avatars/chibi-female-1.png",
+  "chibi-male-2": "public/avatars/chibi-male-2.png",
+  "chibi-female-2": "public/avatars/chibi-female-2.png"
+};
+const bannerScenes = new Set(["sakura", "frontline", "dawn", "neon"]);
 let playerDashboardLoading = false;
 let appearanceControlsBound = false;
-let currentAppearance = { avatar: "initial", banner: "midnight", avatar_image: null, banner_image: null };
+let currentAppearance = { avatar: "chibi-female-2", banner: "frontline", avatar_image: null, banner_image: null };
 let appearanceDirty = false;
 let renderPlayerAppearance = () => {};
 let playerLiveEvents = null;
@@ -227,14 +233,10 @@ async function loadPlayerDashboard() {
     const activeSessions = Array.isArray(securityData?.active_sessions) ? securityData.active_sessions : [];
     if (securityData) {
       const honourScore = Number(securityData.honour_score ?? 100);
-      const restrictionUntil = securityData.play_restricted_until;
       if (honourScore < 80) {
-        const noticeKey = `securefps_honour_warning:${user.email || "account"}:${honourScore}:${restrictionUntil || "none"}`;
+        const noticeKey = `securefps_honour_warning:${user.email || "account"}:${honourScore}`;
         if (localStorage.getItem(noticeKey) !== "shown") {
-          const activeRestriction = restrictionUntil && new Date(restrictionUntil).getTime() > Date.now();
-          const message = activeRestriction
-            ? `Honour is ${honourScore}/100. Match access is paused until ${playerDate(restrictionUntil)} because the score is below 80.`
-            : `Honour is ${honourScore}/100, below 80. Leaving another unfinished match will pause match access for 30 minutes.`;
+          const message = `Honour is ${honourScore}/100. You can keep playing; unfinished matches reduce Honour by 10.`;
           window.showAppToast?.(message, "warning");
           localStorage.setItem(noticeKey, "shown");
         }
@@ -274,9 +276,9 @@ async function loadPlayerDashboard() {
           <line class="chart-grid" x1="28" y1="20" x2="272" y2="20"></line>
           <line class="chart-grid" x1="28" y1="66" x2="272" y2="66"></line>
           <line class="chart-grid" x1="28" y1="112" x2="272" y2="112"></line>
-          <text class="chart-zone-label" x="4" y="23">HIGH</text>
-          <text class="chart-zone-label" x="4" y="69">MID</text>
-          <text class="chart-zone-label" x="4" y="115">LOW</text>
+          <text class="chart-zone-label" x="4" y="23">100</text>
+          <text class="chart-zone-label" x="4" y="69">50</text>
+          <text class="chart-zone-label" x="4" y="115">0</text>
           <polygon class="chart-area" points="${areaPath}"></polygon>
           <polyline points="${path}"></polyline>
           ${points.map((point) => `<circle class="${point === last ? "latest" : ""}" cx="${point.x}" cy="${point.y}" r="${point === last ? 4.5 : 3.5}" tabindex="0" data-match="${playerText(point.match.match_id || "Match")}" data-score="${point.score.toFixed(1)}"></circle>`).join("")}
@@ -407,7 +409,7 @@ async function loadPlayerDashboard() {
       const ipRows = history.map((entry) => `<tr><td>${playerText(entry.ip_address || "Unknown")}</td><td>${playerText(playerDate(entry.timestamp))}</td><td>${playerText(entry.authentication_method || "Password + MFA")}</td><td><span class="badge ${entry.success === false ? "bad" : "good"}">${entry.success === false ? "Failed" : "Success"}</span></td></tr>`).join("");
       const warnings = Array.isArray(securityData.security_warnings) ? securityData.security_warnings : [];
       securityStatus.innerHTML = `
-        <article class="security-card honour-score-card" data-honour-risk="${Number(securityData.honour_score ?? 100) >= 80 ? "low" : Number(securityData.honour_score ?? 100) >= 50 ? "medium" : "high"}"><div class="security-card-label">Honour score</div><div class="security-card-value honour-score-value">${Number(securityData.honour_score ?? 100)}/100</div><div class="security-card-meta">${securityData.play_restricted_until ? `Match access paused until ${playerText(playerDate(securityData.play_restricted_until))}` : "Leaving unfinished matches reduces Honour"}</div></article>
+        <article class="security-card honour-score-card" data-honour-risk="${Number(securityData.honour_score ?? 100) >= 80 ? "low" : Number(securityData.honour_score ?? 100) >= 50 ? "medium" : "high"}"><div class="security-card-label">Honour score</div><div class="security-card-value honour-score-value">${Number(securityData.honour_score ?? 100)}/100</div><div class="security-card-meta">Unfinished matches reduce Honour by 10; completed matches add 5.</div></article>
         <article class="security-card"><div class="security-card-label">MFA / 2FA</div><div class="security-card-value">${securityData.mfa_status === "enabled" ? "Enabled" : "Disabled"}</div><div class="security-card-meta">Authenticator protection</div></article>
         <article class="security-card"><div class="security-card-label">Active sessions</div><div class="security-card-value">${activeSessions.length}</div><div class="security-card-meta">Devices currently signed in</div></article>
         <article class="security-card"><div class="security-card-label">Last login</div><div class="security-card-value security-card-value-small">${playerText(playerDate(securityData.last_login))}</div><div class="security-card-meta">Most recent successful sign in</div></article>
@@ -428,29 +430,52 @@ async function loadPlayerDashboard() {
     }
 
     if (!appearanceDirty) {
+      const savedAvatar = profileData?.profile_customization?.avatar;
+      const savedBanner = profileData?.profile_customization?.banner;
       currentAppearance = {
-        avatar: profileData?.profile_customization?.avatar || "initial",
-        banner: profileData?.profile_customization?.banner || "midnight",
+        avatar: avatarPortraits[savedAvatar] ? savedAvatar : "chibi-female-2",
+        banner: bannerScenes.has(savedBanner)
+          ? savedBanner
+          : savedBanner === "custom" && profileData?.profile_customization?.banner_image ? "custom" : "frontline",
         avatar_image: profileData?.profile_customization?.avatar_image || null,
         banner_image: profileData?.profile_customization?.banner_image || null
       };
     }
     const profileBanner = document.getElementById("profileBanner");
     const profileAvatar = document.getElementById("profileAvatar");
+    const profileBannerMascot = document.getElementById("profileBannerMascot");
+    const overviewMascot = document.getElementById("playerMascotSticker");
+    const supportMascot = document.getElementById("supportMascotSticker");
+    const gameHubMascot = document.getElementById("gameHubMascotSticker");
+    const leaderboardMascot = document.getElementById("leaderboardMascotSticker");
+    const rewardsMascot = document.getElementById("rewardsMascotSticker");
+    const securityMascot = document.getElementById("securityMascotSticker");
+    const matchesMascot = document.getElementById("matchesMascotSticker");
     const profileDisplayName = document.getElementById("profileDisplayName");
     const profileDisplayEmail = document.getElementById("profileDisplayEmail");
     renderPlayerAppearance = () => {
       if (profileBanner) profileBanner.dataset.banner = currentAppearance.banner;
+      document.body.dataset.playerBanner = bannerScenes.has(currentAppearance.banner) ? currentAppearance.banner : "frontline";
       if (profileBanner) profileBanner.style.backgroundImage = currentAppearance.banner_image
         ? `linear-gradient(0deg, rgba(5, 13, 24, .08), rgba(5, 13, 24, .08)), url("${currentAppearance.banner_image}")`
         : "";
-      const glyph = currentAppearance.avatar_image ? "" : currentAppearance.avatar === "initial" ? name.charAt(0).toUpperCase() : avatarGlyphs[currentAppearance.avatar];
-      if (profileAvatar) profileAvatar.textContent = currentAppearance.avatar_image ? "" : glyph || name.charAt(0).toUpperCase();
-      if (avatar) avatar.textContent = currentAppearance.avatar_image ? "" : glyph || name.charAt(0).toUpperCase();
+      const selectedPortrait = avatarPortraits[currentAppearance.avatar] || "";
+      const avatarImage = currentAppearance.avatar_image || selectedPortrait;
+      const mascotImage = selectedPortrait || avatarPortraits["chibi-female-2"];
+      if (profileAvatar) profileAvatar.textContent = avatarImage ? "" : name.charAt(0).toUpperCase();
+      if (avatar) avatar.textContent = avatarImage ? "" : name.charAt(0).toUpperCase();
+      if (profileBannerMascot) profileBannerMascot.src = mascotImage;
+      if (overviewMascot) overviewMascot.src = mascotImage;
+      if (supportMascot) supportMascot.src = mascotImage;
+      if (gameHubMascot) gameHubMascot.src = mascotImage;
+      if (leaderboardMascot) leaderboardMascot.src = mascotImage;
+      if (rewardsMascot) rewardsMascot.src = mascotImage;
+      if (securityMascot) securityMascot.src = mascotImage;
+      if (matchesMascot) matchesMascot.src = mascotImage;
       for (const avatarElement of [profileAvatar, avatar]) {
         if (!avatarElement) continue;
-        avatarElement.style.backgroundImage = currentAppearance.avatar_image ? `url("${currentAppearance.avatar_image}")` : "";
-        avatarElement.classList.toggle("has-profile-image", Boolean(currentAppearance.avatar_image));
+        avatarElement.style.backgroundImage = avatarImage ? `url("${avatarImage}")` : "";
+        avatarElement.classList.toggle("has-profile-image", Boolean(avatarImage));
       }
       document.querySelectorAll("#bannerOptions [data-banner]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.banner === currentAppearance.banner)));
       document.querySelectorAll("#avatarOptions [data-avatar]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.avatar === currentAppearance.avatar)));

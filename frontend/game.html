@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>FPS Microgame | Secure FPS Platform</title>
-    <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg">
+    <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg?v=2">
+    <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/ui-polish.css">
 
     <style>
@@ -21,52 +22,60 @@
         }
 
         .header {
-            height: 70px;
+            position: relative;
+            z-index: 5;
+            height: 64px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 25px;
-            background: #E9E7F5;
+            padding: 0 clamp(16px, 3vw, 32px);
+            background: rgba(249, 248, 253, .94);
+            backdrop-filter: blur(12px);
             border-bottom: 1px solid #C3BFE0;
         }
 
         .header h2 {
             margin: 0;
+            font-size: 17px;
+            letter-spacing: -.02em;
         }
 
         .game-brand { display:flex; align-items:center; gap:12px; }
-        .game-brand img { width:38px; height:38px; object-fit:contain; }
+        .game-brand img { width:190px; max-width:42vw; height:auto; object-fit:contain; }
 
         .back-button {
-            padding: 10px 18px;
-            border: none;
-            border-radius: 8px;
+            min-height: 40px;
+            padding: 0 15px;
+            border: 1px solid #C3BFE0;
+            border-radius: 9px;
             cursor: pointer;
-            background: linear-gradient(135deg, #6D28D9, #4C1D95);
-            color: #F3F0FF;
-            font-weight: bold;
-            transition: transform .18s ease, filter .18s ease;
+            background: #F4F1FC;
+            color: #4C1D95;
+            font: inherit;
+            font-size: 12px;
+            font-weight: 700;
+            transition: transform .18s ease, background .18s ease, border-color .18s ease;
         }
 
-        .back-button:hover { filter: brightness(1.08); transform: translateY(-1px); }
+        .back-button:hover { background: #EAE3F8; border-color: #A99BD5; transform: translateY(-1px); }
         .back-button:disabled { opacity: .6; cursor: wait; transform: none; }
 
         .leave-warning {
             position: fixed;
             z-index: 2100;
-            top: 82px;
+            top: 76px;
             left: 50%;
             transform: translateX(-50%);
             width: min(560px, calc(100vw - 32px));
             box-sizing: border-box;
-            padding: 14px 18px;
+            padding: 12px 16px;
             border: 1px solid #E8CFAA;
             border-left: 5px solid #B45309;
-            border-radius: 12px;
+            border-radius: 11px;
             background: #F6EBD8;
             color: #713F12;
-            box-shadow: 0 12px 30px rgba(27, 23, 48, .2);
-            font-size: 14px;
+            box-shadow: 0 8px 22px rgba(27, 23, 48, .12);
+            font-size: 12px;
             font-weight: 700;
             line-height: 1.5;
         }
@@ -75,17 +84,20 @@
 
         .game-wrapper {
             width: 100%;
-            height: calc(100vh - 70px);
-            padding: 15px;
+            height: calc(100dvh - 64px);
+            min-height: 320px;
+            padding: 12px clamp(12px, 2vw, 24px) 18px;
         }
 
         .game-container {
             width: 100%;
             height: 100%;
+            position: relative;
             background: #D6D3EA;
-            border-radius: 10px;
+            border-radius: 14px;
             overflow: hidden;
             border: 1px solid #C3BFE0;
+            box-shadow: 0 12px 32px rgba(35, 25, 67, .10);
         }
 
         iframe {
@@ -102,18 +114,37 @@
             color: #53507A;
             text-align: center;
         }
+
+        dialog.app-alert-dialog { width: min(520px, calc(100vw - 32px)); border-radius: 16px; }
+        dialog.app-alert-dialog .app-alert-content { padding: 24px; }
+        dialog.app-alert-dialog .app-alert-title { display:flex; align-items:center; gap:10px; font-size:18px; }
+        dialog.app-alert-dialog[data-tone="warning"] .app-alert-title::before { content:"!"; display:grid; place-items:center; width:32px; height:32px; flex:0 0 32px; border-radius:10px; background:#F6EBD8; color:#92400E; font-size:17px; }
+        dialog.app-alert-dialog .app-alert-message { margin-top:12px; font-size:13px; line-height:1.6; }
+        dialog.app-alert-dialog .app-alert-actions { display:grid; grid-template-columns:repeat(2,minmax(112px,140px)); justify-content:end; gap:9px; }
+        dialog.app-alert-dialog .app-alert-actions button { width:100%; min-width:0; min-height:42px; white-space:nowrap; }
+        dialog.app-alert-dialog .app-alert-actions button.ghost-btn { border:1px solid #C3BFE0; background:#F7F5FC; color:#4C1D95; }
+        dialog.app-alert-dialog .app-alert-actions button.ghost-btn:hover { background:#EAE3F8; }
+        dialog.app-alert-dialog .app-alert-actions button.primary-btn { border:1px solid #4C1D95; background:#4C1D95; color:#fff; }
+        dialog.app-alert-dialog .app-alert-actions button.primary-btn:hover { background:#3E197B; }
+
+        @media (max-width: 600px) {
+            .header { height:58px; }
+            .game-wrapper { height:calc(100dvh - 58px); padding:8px; }
+            .leave-warning { top:66px; padding:10px 12px; font-size:11px; }
+            dialog.app-alert-dialog .app-alert-content { padding:20px; }
+        }
     </style>
 </head>
 
 <body>
 
     <div class="leave-warning" id="leaveWarning" role="alert" aria-live="assertive" hidden>
-        Leaving an unfinished match gives no coins or XP and lowers Honour by 20. If Honour drops below 80, matchmaking is paused for 30 minutes.
+        Leaving an unfinished match gives no coins or XP and lowers Honour by 10. You can still start another match afterward.
     </div>
 
     <div class="header">
         <div class="game-brand">
-            <img src="public/securefps-mark.svg" alt="SecureFPS logo">
+            <img src="public/securefps-logo-crop.png?v=1" alt="SecureFPS Gaming Security">
             <h2>FPS Microgame</h2>
         </div>
 
@@ -149,15 +180,10 @@
             if (ending || confirmingLeave) return;
             confirmingLeave = true;
             leaveWarning.hidden = false;
-            let confirmed;
-            if (typeof window.showAppConfirm === "function") {
-                confirmed = await window.showAppConfirm(
-                    "If this match is unfinished, leaving gives no coins or XP and reduces your Honour score by 20. If Honour falls below 80, you cannot start another match for 30 minutes. Continue leaving?",
-                    { title: "Leave match?", confirmText: "Leave match", tone: "warning" }
-                );
-            } else {
-                confirmed = window.confirm("If this match is unfinished, you will receive no match rewards and lose 20 Honour. Continue leaving?");
-            }
+            const confirmed = await window.showAppConfirm(
+                "If this match is unfinished, leaving gives no coins or XP and reduces your Honour score by 10. You can start another match afterward. Continue leaving?",
+                { title: "Leave match?", confirmText: "Leave match", tone: "warning" }
+            );
             confirmingLeave = false;
             if (!confirmed) {
                 leaveWarning.hidden = true;

@@ -164,6 +164,23 @@ function renderGameplayAlerts(data) {
     seenSessions.add(key);
     return true;
   });
+  if (hackerDemoAwaitingBan) {
+    uniqueAlerts
+      .filter((alert) => alert.permanent_ban === true && alert.demo === true)
+      .forEach((alert) => {
+        const key = alert.session_id || `${alert.player_id || alert.player_name}:${alert.created_at || "unknown"}`;
+        if (hackerDemoNotifiedBans.has(key)) return;
+        hackerDemoNotifiedBans.add(key);
+        const profile = alert.hacker_profile || "hacker";
+        const player = alert.player_name || `Hacker ${profile}`;
+        const risk = displayRiskScore(alert.risk_score);
+        const reason = alert.detection_reason || hackerReason(profile);
+        window.showAppToast(
+          `Cheater auto-banned\n${player} (risk ${risk})\n${profile} · ${reason}`,
+          "critical"
+        );
+      });
+  }
   const pendingAlerts = uniqueAlerts.filter((alert) => alert.review_status === "pending");
   const incompleteAnalyses = analyses.filter((analysis) => analysis.status !== "success" && analysis.session_id);
   window.adminIncompleteSessions = [...new Set(incompleteAnalyses.map((analysis) => analysis.session_id))];
@@ -258,6 +275,63 @@ function renderBannedAccounts(data) {
   }).join("") || '<div class="empty">No banned or suspended accounts.</div>';
 }
 
+const expandedHonourPlayers = new Set();
+let honourReportCache = [];
+
+function renderHonourReport(rows) {
+  const body = document.getElementById("honourReportRows");
+  if (!body) return;
+  honourReportCache = Array.isArray(rows) ? rows : [];
+  const groups = new Map();
+  honourReportCache.forEach((row) => {
+    const key = String(row.player_id || row.player_name || "unknown-player");
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  });
+  body.innerHTML = [...groups.entries()].map(([key, playerRows]) => {
+    const latest = playerRows[0];
+    const totalChange = playerRows.reduce((total, row) => total + Number(row.honour_change || 0), 0);
+    const isExpanded = expandedHonourPlayers.has(key);
+    const changeLabel = `${totalChange > 0 ? "+" : ""}${totalChange}`;
+    const changeTone = totalChange > 0 ? "good" : totalChange < 0 ? "warn" : "gray";
+    const parsedScore = latest.current_score == null ? null : Number(latest.current_score);
+    const score = Number.isFinite(parsedScore) ? Math.max(0, Math.min(100, parsedScore)) : null;
+    const scoreTone = score === null ? "bad" : score >= 80 ? "good" : score >= 60 ? "warn" : score >= 40 ? "medium" : "bad";
+    const scoreCell = score === null
+      ? "—"
+      : `<div class="honour-score-meter" data-level="${scoreTone}" role="meter" aria-label="${escapeHtml(latest.player_name || "Player")} Honour score" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${score}"><strong>${score}/100</strong><div class="honour-score-track"><span style="width:${score}%"></span></div><div class="honour-score-ticks" aria-hidden="true"><span>0</span><span>20</span><span>40</span><span>60</span><span>80</span><span>100</span></div></div>`;
+    const disclosureIcon = isExpanded
+      ? '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 12 5-5 5 5"/></svg>'
+      : '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg>';
+    const summary = `<tr class="honour-player-summary">
+      <td><div class="honour-player-cell"><button class="honour-group-toggle" type="button" data-honour-toggle="${escapeHtml(key)}" aria-expanded="${isExpanded}" aria-label="${isExpanded ? "Collapse" : "Expand"} Honour history for ${escapeHtml(latest.player_name || "player")}">${disclosureIcon}</button><strong>${escapeHtml(latest.player_name || "Unknown player")}</strong></div></td>
+      <td>${playerRows.length} recorded update${playerRows.length === 1 ? "" : "s"}</td>
+      <td>${escapeHtml(latest.session_id || "—")}</td>
+      <td><span class="badge ${changeTone}">${escapeHtml(changeLabel)} Honour</span></td>
+      <td>${scoreCell}</td>
+      <td>${escapeHtml(latest.access_status || "Available")}</td>
+      <td>${escapeHtml(displayDate(latest.created_at))}</td>
+    </tr>`;
+    if (!isExpanded) return summary;
+    const details = playerRows.map((row) => {
+      const change = Number(row.honour_change || 0);
+      const rowChange = `${change > 0 ? "+" : ""}${change}`;
+      const rowTone = change > 0 ? "good" : change < 0 ? "warn" : "gray";
+      const before = row.honour_before == null ? "—" : row.honour_before;
+      const after = row.honour_after == null ? "—" : row.honour_after;
+      return `<tr class="honour-player-detail">
+        <td></td><td>${escapeHtml(row.result || "Honour update")}</td>
+        <td>${escapeHtml(row.session_id || "—")}</td>
+        <td><span class="badge ${rowTone}">${escapeHtml(rowChange)} Honour</span></td>
+        <td>${escapeHtml(String(before))} → ${escapeHtml(String(after))}</td>
+        <td>${escapeHtml(row.access_status || "Available")}</td>
+        <td>${escapeHtml(displayDate(row.created_at))}</td>
+      </tr>`;
+    }).join("");
+    return summary + details;
+  }).join("") || '<tr><td colspan="7">No Honour changes recorded yet.</td></tr>';
+}
+
 function renderDemoComparison(data) {
   const banner = document.getElementById("demoComparisonBanner");
   const comparison = document.getElementById("demoSessionComparison");
@@ -333,7 +407,6 @@ function renderHackerAccounts(data) {
     hackerDemoAwaitingBan = false;
     clearInterval(hackerDemoPollTimer);
     clearTimeout(hackerDemoCompletionTimer);
-    window.showAppToast("Hacker detection complete: all four demo hacker accounts were banned.", "error");
   }
   const normalPlayers = (Array.isArray(data.players) ? data.players : [])
     .filter((player) => player.account_type === "demo_normal");
@@ -374,6 +447,7 @@ let adminRefreshDebounce = null;
 let hackerDemoPollTimer = null;
 let hackerDemoCompletionTimer = null;
 let hackerDemoAwaitingBan = false;
+const hackerDemoNotifiedBans = new Set();
 
 function connectAdminLiveEvents() {
   if (adminLiveEvents || !window.EventSource) return;
@@ -396,8 +470,7 @@ function connectAdminLiveEvents() {
     try {
       const update = JSON.parse(event.data || "{}");
       if (update.type === "match_abandoned") {
-        const lockMessage = update.restricted_until ? " Player access is paused for 30 minutes." : "";
-        window.showAppToast?.(`${update.player_name || "A player"} left an unfinished match. Honour: ${update.honour_score ?? "—"}/100.${lockMessage}`, "warning");
+        window.showAppToast?.(`${update.player_name || "A player"} left an unfinished match. Honour: ${update.honour_score ?? "—"}/100. Matchmaking remains available.`, "warning");
       }
     } catch (_) {}
     clearTimeout(adminRefreshDebounce);
@@ -441,8 +514,14 @@ async function loadAdmin(force = false) {
     document.getElementById("matchCount").textContent = data.summary?.matches_analyzed ?? data.stats?.matches_analyzed ?? matches.length;
     document.getElementById("eventCount").textContent = data.stats?.security_events ?? events.length;
     document.getElementById("highCount").textContent = data.stats?.high_severity_events ?? events.filter((event) => ["high", "critical"].includes(event.severity)).length;
+    renderHonourReport(data.honour_report);
     await loadPlayers();
-    document.getElementById("events").innerHTML = events.map((event) => `<div class="list-row"><div><strong>${escapeHtml(event.type || "Security event")}</strong><small>${escapeHtml(event.description || displayDate(event.created_at || event.timestamp))}</small></div><span class="badge ${["high", "critical"].includes(event.severity) ? "bad" : event.severity === "medium" ? "warn" : "good"}">${escapeHtml(event.severity || "low")}</span></div>`).join("") || '<div class="empty">No security events.</div>';
+    document.getElementById("events").innerHTML = events.map((event) => {
+      const eventType = String(event.type || "Security event").replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+      const severity = event.severity || "low";
+      const tone = ["high", "critical"].includes(severity) ? "bad" : severity === "medium" ? "warn" : "good";
+      return `<article class="admin-event-row"><div class="admin-event-copy"><strong>${escapeHtml(eventType)}</strong><small>${escapeHtml(event.description || "Recorded security activity")}</small></div><div class="admin-event-meta"><time>${escapeHtml(displayDate(event.created_at || event.timestamp))}</time><span class="badge ${tone}">${escapeHtml(severity)}</span></div></article>`;
+    }).join("") || '<div class="empty">No security events.</div>';
     const loginKeys = new Set();
     window.adminLoginRows = recentLogins.map((row) => {
       const player = adminOverviewPlayers.find((item) => item.id === row.player_id || item.id === row.user_id);
@@ -843,6 +922,15 @@ document.getElementById("loginPagination")?.addEventListener("click", (event) =>
   renderLoginAudit(window.adminLoginRows || []);
 });
 document.getElementById("refreshLogins")?.addEventListener("click", () => loadAdmin(true));
+document.getElementById("refreshHonourReport")?.addEventListener("click", () => loadAdmin(true));
+document.getElementById("honourReportRows")?.addEventListener("click", (event) => {
+  const toggle = event.target.closest("button[data-honour-toggle]");
+  if (!toggle) return;
+  const playerId = toggle.dataset.honourToggle;
+  if (expandedHonourPlayers.has(playerId)) expandedHonourPlayers.delete(playerId);
+  else expandedHonourPlayers.add(playerId);
+  renderHonourReport(honourReportCache);
+});
 document.getElementById("runHackerDemoBtn")?.addEventListener("click", async (event) => {
   const button = event.currentTarget;
   const confirmed = await window.showAppConfirm("Prepare the two normal players and four hacker simulations? The normal players stay active. You will get a separate alert when all four hackers are detected and banned.", {
@@ -869,6 +957,7 @@ document.getElementById("runHackerDemoBtn")?.addEventListener("click", async (ev
     await api("/admin/gameplay/seed-demo", { method: "POST" });
     demoStep = "starting the four hacker simulations";
     button.textContent = "Starting hacker simulations…";
+    hackerDemoNotifiedBans.clear();
     hackerDemoAwaitingBan = true;
     await api("/admin/gameplay/run-hacker-demo", { method: "POST" });
     window.showAppToast("Demo started: the four hacker simulations are running. Waiting for detection and bans…", "info");

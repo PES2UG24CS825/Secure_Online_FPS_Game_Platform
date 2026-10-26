@@ -27,8 +27,9 @@ loginForm.addEventListener("submit", async (event) => {
       });
     } catch (error) {
       if (error.status !== 409 || !error.data?.can_takeover) throw error;
-      const confirmed = window.confirm(
-        "This account is active in another browser. Sign in here and end that session?"
+      const confirmed = await window.showAppConfirm(
+        "This account is active in another browser. Sign in here and end that session?",
+        { title: "Replace active session?", confirmText: "Sign in here", tone: "warning" }
       );
       if (!confirmed) throw error;
       data = await api("/auth/login", {

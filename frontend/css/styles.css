@@ -9,13 +9,16 @@
 body{margin:0;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text)}
 a{color:inherit;text-decoration:none}
 button,input{font:inherit}
-.auth-page{min-height:100vh;display:grid;place-items:center;background:radial-gradient(ellipse at 12% 15%,rgba(109,40,217,.12) 0,transparent 36%),radial-gradient(ellipse at 90% 88%,rgba(76,29,149,.09) 0,transparent 34%),var(--bg)}
+.auth-page{min-height:100vh;display:grid;place-items:center;background:linear-gradient(rgba(222,220,238,.88),rgba(222,220,238,.88)),url("../public/backgrounds/sakura-frontline.jpg") center/cover fixed,var(--bg)}
+.mfa-page{min-height:100vh;background:url("../public/mfa-background-hq.jpg") center center/cover fixed,var(--bg)}
 .auth-shell{width:min(1050px,92vw);display:grid;grid-template-columns:1fr 440px;gap:70px;align-items:center}
 .auth-shell.single{width:min(440px,92vw);grid-template-columns:minmax(0,440px);justify-content:center}
 .auth-shell.single .auth-card{min-width:0;width:100%}
 .auth-brand h1{font-size:54px;line-height:1.03;margin:0 0 14px}
 .auth-brand>p:not(.eyebrow){color:var(--muted);max-width:560px;font-size:17px;line-height:1.7}
 .brand-mark{display:block;width:46px;height:46px;flex:0 0 46px;object-fit:contain;filter:drop-shadow(0 5px 8px rgba(76,29,149,.18))}
+.brand-lockup{display:block;width:200px;max-width:100%;height:auto;object-fit:contain}
+.auth-logo-lockup .brand-lockup{width:245px}
 .auth-logo-lockup{display:flex;align-items:center;gap:14px;margin-bottom:24px}
 .auth-brand .brand-mark{width:56px;height:56px;flex-basis:56px;margin:0}
 .brand-wordmark{color:var(--text);font-size:24px;font-weight:800;letter-spacing:.055em;line-height:1}
@@ -25,6 +28,7 @@ button,input{font:inherit}
 .security-points{display:grid;gap:12px;margin-top:28px;color:var(--muted);font-size:13px}
 .auth-card{background:rgba(233,231,245,.94);border:1px solid var(--line);border-radius:24px;padding:34px;box-shadow:var(--surface-shadow);backdrop-filter:blur(16px)}
 .card-head h2{font-size:30px;margin:7px 0}.card-head p:last-child{color:var(--muted);font-size:13px}
+.welcome-back-row{display:flex;align-items:center;justify-content:flex-start;gap:10px;min-height:38px}.welcome-sticker{display:inline-flex;align-items:center;gap:3px;color:var(--accent2);font-size:10px;font-weight:750}.welcome-sticker-greeting{padding:4px 7px;border:1px solid rgba(109,40,217,.18);border-radius:999px;background:rgba(207,198,242,.72)}.welcome-sticker img{width:40px;height:42px;object-fit:contain;filter:drop-shadow(0 4px 6px rgba(76,29,149,.16))}
 .form{display:grid;gap:16px;margin-top:24px}
 .form label{font-size:12px;color:var(--muted);font-weight:600}
 .form input{display:block;width:100%;margin-top:8px;background:var(--input);border:1px solid var(--line);color:var(--text);border-radius:11px;padding:13px 14px;outline:none}
@@ -108,3 +112,23 @@ dialog.app-alert-dialog::backdrop{background:rgba(27,23,48,.42);backdrop-filter:
 .support-proof-dialog>div{position:relative;text-align:center}
 .support-proof-dialog img{max-width:100%;max-height:80vh;object-fit:contain;border-radius:8px}
 .support-proof-dialog button{position:absolute;top:5px;right:5px;width:36px;height:36px;border:0;border-radius:50%;background:var(--brand-tint);color:var(--accent2);font-size:23px;cursor:pointer}
+.login-page{display:block;padding:28px 0}
+.login-layout{width:min(1120px,94vw);margin:0 auto}
+.login-logo-header{margin:0 0 20px}
+.login-logo-header .brand-lockup{width:300px}
+.login-page .auth-shell{width:100%;grid-template-columns:minmax(0,1.12fr) minmax(380px,440px);gap:48px;align-items:stretch;margin:0}
+.login-page .auth-card{height:100%;display:flex;flex-direction:column;justify-content:center}
+.login-page .auth-brand{min-width:0;display:block}
+.login-page .auth-battlefield-art{position:relative;height:clamp(205px,24vw,275px);margin:0 0 22px;overflow:hidden;border:1px solid rgba(255,255,255,.48);border-radius:20px;background:linear-gradient(90deg,rgba(17,13,39,.35),rgba(17,13,39,.02) 72%),url("../public/login-battlefield.jpg") center 42%/cover;box-shadow:0 18px 38px rgba(35,22,69,.2)}
+.login-page .auth-brand h1{font-size:clamp(38px,4.2vw,50px)}
+.login-page .auth-brand>p:not(.eyebrow){margin:0;max-width:500px;font-size:15px;line-height:1.55}
+.login-page .security-points{grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:18px;font-size:10px;line-height:1.4}
+.login-squad{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:16px;padding:9px 12px;border:1px solid rgba(109,40,217,.15);border-radius:14px;background:rgba(249,248,253,.72);backdrop-filter:blur(8px)}
+.login-squad-copy strong,.login-squad-copy small{display:block}
+.login-squad-copy strong{color:#4C1D95;font-size:9px;letter-spacing:.15em}
+.login-squad-copy small{margin-top:4px;color:#53507A;font-size:10px}
+.login-squad-stickers{display:flex;align-items:center;padding-left:8px}
+.login-squad-stickers img{width:44px;height:48px;margin-left:-7px;object-fit:contain;border:1px solid rgba(109,40,217,.24);border-radius:12px;background:#EAE5F8;filter:drop-shadow(0 4px 5px rgba(35,25,67,.12))}
+.login-squad-stickers img:nth-child(even){transform:translateY(-3px) rotate(3deg)}
+@media(max-width:850px){.login-page .auth-shell{width:100%;grid-template-columns:minmax(0,1fr);gap:18px;padding:0}.login-logo-header{margin-bottom:14px}.login-page .auth-battlefield-art{height:clamp(180px,36vw,240px);margin-bottom:18px}.login-page .auth-brand h1{font-size:38px}.login-page .auth-brand>p:not(.eyebrow){font-size:14px}.login-page .security-points{margin-top:12px}}
+@media(max-width:600px){.login-page .auth-shell{padding:0}.login-page .auth-battlefield-art{height:180px}.login-page .auth-brand h1{font-size:32px}.login-page .security-points{grid-template-columns:1fr;gap:5px}.login-squad{margin-top:10px;padding:7px 9px}.login-squad-stickers img{width:38px;height:42px}}
