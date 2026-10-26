@@ -44,6 +44,31 @@ The development admin defaults are `admin1@gmail.com` / `Admin@12345` with MFA
 secret `JBSWY3DPEHPK3PXP`. These are development credentials; change them before
 sharing the demo.
 
+## Honour score and fair play
+
+Honour is a per-player score from 0 to 100. Accounts without a saved score start
+at 100. It changes only when a match is completed or abandoned:
+
+- Completing an active match adds up to 5 Honour, capped at 100. A player
+  already at 100 may receive less than 5 or no additional Honour.
+- Leaving an active match before it is completed removes 10 Honour, floored at
+  0. That unfinished match awards no coins or XP.
+- Honour by itself does not block matchmaking, including when the score is low.
+  Other account restrictions, such as a ban or suspension, still apply.
+- Closing an already completed or abandoned match does not apply the score
+  change or match rewards a second time.
+
+A completed match awards 20 coins and 50 XP in addition to its Honour change.
+The separate daily sign-in reward is 25 coins and 25 XP; an unfinished match
+does not remove or replace it.
+
+Players can see their score and score color in **Account Security**. The player
+page shows a warning when the score is below 80. Abandoning a match records a
+`match_abandoned` security event and sends an update to the admin live stream.
+Admins can review completed and abandoned match changes, grouped by player, in
+**Security & access → Honour score report**. These records are stored in MongoDB
+with the player account and the match reward or security event.
+
 ## Optional: four hacker demo accounts
 
 This development-only demo seeds four test accounts and can run simulated
@@ -72,6 +97,11 @@ simulations run. For accounts only, you can also seed them from PowerShell:
 cd backend
 .\.venv\Scripts\python.exe scripts\seed_demo_players.py
 ```
+
+The standalone seeding script reads `DEMO_PLAYER_PASSWORD` and
+`DEMO_PLAYER_MFA_SECRET` directly; set both in `backend/.env` before using that
+command. The admin **Run full demo** action can use the hacker demo credentials
+as a fallback when dedicated normal-player credentials are blank.
 
 Do not commit `backend/.env`.
 
