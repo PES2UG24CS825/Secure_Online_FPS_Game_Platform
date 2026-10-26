@@ -1,34 +1,38 @@
-import os
-from flask import Flask
-from flask_cors import CORS
-from routes.admin_routes import admin_bp
-from routes.auth_routes import auth_bp
-from routes.game_routes import game_bp
-from seed_admin import ensure_admin_account
+"""Compatibility launcher for the canonical backend application.
 
-app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-only-change-this-secret")
-app.config.update(
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=False,
+The backend must be started from ``backend`` so its packages and environment
+file resolve consistently. This wrapper keeps ``python app.py`` working from
+the repository root without maintaining a second Flask application.
+"""
+
+import sys
+import importlib.util
+from pathlib import Path
+
+
+BACKEND_DIR = Path(__file__).resolve().parent / "backend"
+sys.path.insert(0, str(BACKEND_DIR))
+
+_backend_spec = importlib.util.spec_from_file_location(
+    "securefps_backend_app",
+    BACKEND_DIR / "app.py",
 )
+if _backend_spec is None or _backend_spec.loader is None:
+    raise ImportError("Could not load the canonical backend application.")
+_backend_module = importlib.util.module_from_spec(_backend_spec)
+_backend_spec.loader.exec_module(_backend_module)
 
-CORS(
-    app,
-    resources={r"/api/*": {"origins": [os.getenv("FRONTEND_ORIGIN", "http://127.0.0.1:5500")] }},
-    supports_credentials=True,
-)
+app = _backend_module.app
+ensure_default_admin = _backend_module.ensure_default_admin
+network_server_settings = _backend_module.network_server_settings
 
-ensure_admin_account()
-
-app.register_blueprint(auth_bp)
-app.register_blueprint(game_bp)
-app.register_blueprint(admin_bp)
-
-@app.get("/api/health")
-def health():
-    return {"status": "ok"}
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    ensure_default_admin()
+    flask_host, flask_port, debug_enabled = network_server_settings()
+    app.run(
+        host=flask_host,
+        port=flask_port,
+        debug=debug_enabled,
+        threaded=True,
+    )

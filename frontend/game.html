@@ -51,6 +51,28 @@
         .back-button:hover { filter: brightness(1.08); transform: translateY(-1px); }
         .back-button:disabled { opacity: .6; cursor: wait; transform: none; }
 
+        .leave-warning {
+            position: fixed;
+            z-index: 2100;
+            top: 82px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(560px, calc(100vw - 32px));
+            box-sizing: border-box;
+            padding: 14px 18px;
+            border: 1px solid #E8CFAA;
+            border-left: 5px solid #B45309;
+            border-radius: 12px;
+            background: #F6EBD8;
+            color: #713F12;
+            box-shadow: 0 12px 30px rgba(27, 23, 48, .2);
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1.5;
+        }
+
+        .leave-warning[hidden] { display: none; }
+
         .game-wrapper {
             width: 100%;
             height: calc(100vh - 70px);
@@ -85,6 +107,10 @@
 
 <body>
 
+    <div class="leave-warning" id="leaveWarning" role="alert" aria-live="assertive" hidden>
+        Leaving an unfinished match gives no coins or XP and lowers Honour by 20. If Honour drops below 80, matchmaking is paused for 30 minutes.
+    </div>
+
     <div class="header">
         <div class="game-brand">
             <img src="public/securefps-mark.svg" alt="SecureFPS logo">
@@ -113,12 +139,30 @@
         const gameFrame = document.getElementById("gameFrame");
         const gameStatus = document.getElementById("gameStatus");
         const backButton = document.getElementById("backToDashboard");
+        const leaveWarning = document.getElementById("leaveWarning");
         let gameSessionId = null;
         let ending = false;
+        let confirmingLeave = false;
         let ended = false;
 
         async function finishGame() {
-            if (ending) return;
+            if (ending || confirmingLeave) return;
+            confirmingLeave = true;
+            leaveWarning.hidden = false;
+            let confirmed;
+            if (typeof window.showAppConfirm === "function") {
+                confirmed = await window.showAppConfirm(
+                    "If this match is unfinished, leaving gives no coins or XP and reduces your Honour score by 20. If Honour falls below 80, you cannot start another match for 30 minutes. Continue leaving?",
+                    { title: "Leave match?", confirmText: "Leave match", tone: "warning" }
+                );
+            } else {
+                confirmed = window.confirm("If this match is unfinished, you will receive no match rewards and lose 20 Honour. Continue leaving?");
+            }
+            confirmingLeave = false;
+            if (!confirmed) {
+                leaveWarning.hidden = true;
+                return;
+            }
             ending = true;
             backButton.disabled = true;
             backButton.textContent = "Saving match…";
@@ -131,13 +175,17 @@
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ session_id: gameSessionId })
                     });
+                    const data = await response.json().catch(() => ({}));
                     if (!response.ok) {
-                        const data = await response.json().catch(() => ({}));
                         throw new Error(data.message || "Match results could not be saved.");
+                    }
+                    if (data.status === "abandoned") {
+                        sessionStorage.setItem("securefps_abandon_notice", data.message || "Unfinished match abandoned. No coins or XP were awarded.");
+                    } else if (data.status === "completed") {
+                        sessionStorage.setItem("securefps_game_completed", "1");
                     }
                 }
                 ended = true;
-                sessionStorage.setItem("securefps_game_completed", "1");
                 window.location.href = "player.html#matches";
             } catch (error) {
                 gameStatus.style.display = "grid";
@@ -149,6 +197,12 @@
         }
 
         backButton.addEventListener("click", finishGame);
+
+        window.addEventListener("beforeunload", (event) => {
+            if (!gameSessionId || ended || ending) return;
+            event.preventDefault();
+            event.returnValue = "Leaving now will abandon this match and forfeit rewards.";
+        });
 
         window.addEventListener("pagehide", () => {
             if (!gameSessionId || ended || ending) return;

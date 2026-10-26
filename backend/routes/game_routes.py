@@ -133,6 +133,11 @@ FEATURE_RANGES = {
     "kdr": (0.0, 10.0),
 }
 BAN_RISK_THRESHOLD = float(os.getenv("BAN_RISK_THRESHOLD", "85"))
+MATCH_ABANDON_HONOUR_PENALTY = 20
+MATCH_ABANDON_RESTRICTION_THRESHOLD = 80
+MATCH_ABANDON_COOLDOWN_MINUTES = 30
+MATCH_COMPLETE_HONOUR_REWARD = 5
+MAX_HONOUR_SCORE = 100
 
 # Alerts indicate suspicious sessions for review, not confirmed cheating.
 GAMEPLAY_ALERT_THRESHOLDS = {
@@ -201,7 +206,7 @@ def hacker_enforcement_score(model_score, raw_features):
         + (1 - (raw_features.get("aim_smoothness") or 0)) * 100
     )
     return round(
-        85 + min(14.9, max(0.1, round(model_score * 0.1 + evidence_score, 2))),
+        90 + min(9.9, max(0.1, round(model_score * 0.1 + evidence_score, 2))),
         2,
     )
 
@@ -250,6 +255,13 @@ def auto_ban_hacker(user_id, session_id, account, result, raw_features):
                 "banned_at": banned_at,
                 "ban_reason": reasons,
                 "banned_by": "system_auto",
+                "risk_score": risk_score,
+                "risk_score_session_id": session_id,
+                "risk_score_updated_at": banned_at,
+                "random_forest": result.get("random_forest"),
+                "isolation_forest": result.get("isolation_forest"),
+                "random_forest_probability": result.get("random_forest_probability"),
+                "isolation_forest_anomaly_score": result.get("isolation_forest_anomaly_score"),
             },
             "$unset": {
                 "demo_restricted_until": "",
@@ -519,6 +531,27 @@ def start_game():
         return jsonify({"message": "This account has been suspended."}), 403
     if account.get("revoked") is True or account.get("account_status") == "banned":
         return jsonify({"message": "This account is permanently banned."}), 403
+
+    if account.get("honour_score") is None:
+        users.update_one(
+            {"_id": user_id, "honour_score": {"$exists": False}},
+            {"$set": {"honour_score": 100}},
+        )
+        account["honour_score"] = 100
+    play_restricted_until = account.get("play_restricted_until")
+    if play_restricted_until:
+        if play_restricted_until.tzinfo is None:
+            play_restricted_until = play_restricted_until.replace(tzinfo=timezone.utc)
+        if play_restricted_until > utc_now():
+            return jsonify({
+                "message": "Game access is paused for 30 minutes because your Honour score is below 80.",
+                "honour_score": account.get("honour_score", 100),
+                "restricted_until": play_restricted_until.isoformat(),
+            }), 403
+        users.update_one(
+            {"_id": user_id},
+            {"$unset": {"play_restricted_until": ""}},
+        )
 
     restricted_until = account.get("demo_restricted_until")
     if restricted_until:
@@ -952,13 +985,37 @@ def receive_game_event():
         )
 
         if completion.modified_count:
+            users.update_one(
+                {"_id": user_id, "honour_score": {"$exists": False}},
+                {"$set": {"honour_score": 100}},
+            )
+            honour_before = users.find_one({"_id": user_id}, {"honour_score": 1}) or {}
+            honour_before = max(0, min(MAX_HONOUR_SCORE, int(honour_before.get("honour_score", 100))))
+            users.update_one(
+                {"_id": user_id},
+                [{"$set": {
+                    "honour_score": {
+                        "$min": [
+                            MAX_HONOUR_SCORE,
+                            {"$add": [{"$ifNull": ["$honour_score", 100]}, MATCH_COMPLETE_HONOUR_REWARD]},
+                        ]
+                    }
+                }}],
+            )
+            honour_after = users.find_one({"_id": user_id}, {"honour_score": 1}) or {}
+            honour_awarded = max(0, int(honour_after.get("honour_score", honour_before)) - honour_before)
+            game_sessions.update_one(
+                {"session_id": session_id, "user_id": user_id},
+                {"$set": {"honour_awarded": honour_awarded}},
+            )
             users.update_one({"_id": user_id}, {"$inc": {"rewards.coins": 20, "rewards.xp": 50}})
             reward_transactions.insert_one({
                 "user_id": user_id,
                 "type": "match_completed",
-                "description": "Completed an FPS Microgame match",
+                "description": f"Completed an FPS Microgame match; +{honour_awarded} Honour",
                 "coins": 20,
                 "xp": 50,
+                "honour": honour_awarded,
                 "session_id": session_id,
                 "created_at": utc_now(),
             })
@@ -1104,7 +1161,7 @@ def analyze_game_session(
                 and result.get("random_forest") == "cheater"
                 and result.get("isolation_forest") == "anomaly"
                 and isinstance(result.get("risk_score"), (int, float))
-                and result["risk_score"] < 85
+                and result["risk_score"] <= 90
             ):
                 model_score = result["risk_score"]
                 result["model_risk_score"] = model_score
@@ -1431,25 +1488,17 @@ def end_game():
             "message": "Game session not found."
         }), 404
 
-    # -----------------------------------------------------
-    # DON'T ANALYZE AN ALREADY COMPLETED SESSION AGAIN
-    # -----------------------------------------------------
-
-    already_completed = (
-        game_session.get("status")
-        == "completed"
-    )
-
-    if already_completed:
-
+    # A match is complete only when the gameplay client has already submitted
+    # game_completed. Calling this endpoint while active means the player left.
+    if game_session.get("status") != "active":
         return jsonify({
             "success": True,
-            "message": "Game session already completed."
+            "status": game_session.get("status"),
+            "message": "Match already closed; no additional rewards were issued.",
         }), 200
 
-    # Claim completion atomically so this endpoint cannot compete with
-    # game_completed to trigger the same session analysis.
-    completion = game_sessions.update_one(
+    now = utc_now()
+    abandonment = game_sessions.update_one(
         {
             "session_id": session_id,
             "user_id": user_id,
@@ -1457,42 +1506,83 @@ def end_game():
         },
         {
             "$set": {
-                "ended_at": utc_now(),
-                "status": "completed"
+                "ended_at": now,
+                "status": "abandoned",
+                "abandoned_at": now,
+                "abandon_reason": "player_left_before_match_completion",
             }
         }
     )
 
-    if not completion.modified_count:
+    if not abandonment.modified_count:
+        latest = game_sessions.find_one({"session_id": session_id, "user_id": user_id}) or {}
         return jsonify({
             "success": True,
-            "message": "Game session already completed."
+            "status": latest.get("status"),
+            "message": "Match already closed; no additional rewards were issued.",
         }), 200
 
-    match_reward = {"coins": 20, "xp": 50}
-    users.update_one({"_id": user_id}, {"$inc": {"rewards.coins": match_reward["coins"], "rewards.xp": match_reward["xp"]}})
-    reward_transactions.insert_one({
+    users.update_one(
+        {"_id": user_id, "honour_score": {"$exists": False}},
+        {"$set": {"honour_score": 100}},
+    )
+    users.update_one(
+        {"_id": user_id},
+        {"$inc": {"honour_score": -MATCH_ABANDON_HONOUR_PENALTY}},
+    )
+    player = users.find_one({"_id": user_id}, {"name": 1, "email": 1, "honour_score": 1}) or {}
+    honour_score = max(0, int(player.get("honour_score", 100 - MATCH_ABANDON_HONOUR_PENALTY)))
+    if player.get("honour_score", 0) < 0:
+        users.update_one({"_id": user_id}, {"$set": {"honour_score": 0}})
+
+    restriction_until = None
+    if honour_score < MATCH_ABANDON_RESTRICTION_THRESHOLD:
+        restriction_until = now + timedelta(minutes=MATCH_ABANDON_COOLDOWN_MINUTES)
+        users.update_one(
+            {"_id": user_id},
+            {"$set": {"play_restricted_until": restriction_until}},
+        )
+
+    security_events.insert_one({
+        "type": "match_abandoned",
         "user_id": user_id,
-        "type": "match_completed",
-        "description": "Completed an FPS Microgame match",
-        "coins": match_reward["coins"],
-        "xp": match_reward["xp"],
         "session_id": session_id,
-        "created_at": utc_now(),
+        "severity": "medium" if restriction_until else "low",
+        "honour_score": honour_score,
+        "restricted_until": restriction_until,
+        "review_status": "pending",
+        "description": (
+            f"{player.get('name') or player.get('email') or 'A player'} left an unfinished match. "
+            f"Honour score is now {honour_score}/100."
+            + (" Game access is paused for 30 minutes." if restriction_until else "")
+        ),
+        "created_at": now,
     })
 
-    analysis = analyze_game_session(
+    publish_live_update(
         user_id,
-        session_id
+        session_id,
+        "match_abandoned",
+        force=True,
+        payload={
+            "player_name": player.get("name") or player.get("email") or "Player",
+            "honour_score": honour_score,
+            "restricted_until": restriction_until.isoformat() if restriction_until else None,
+        },
     )
-
-    publish_live_update(user_id, session_id, "match_completed", force=True)
 
     return jsonify({
         "success": True,
+        "status": "abandoned",
+        "message": (
+            "Unfinished match abandoned. No coins or XP were awarded. "
+            f"Honour score: {honour_score}/100."
+            + (" Game access is paused for 30 minutes because your Honour score is below 80." if restriction_until else "")
+        ),
         "session_id": session_id,
-        "analysis": analysis,
-        "reward": match_reward,
+        "honour_score": honour_score,
+        "restricted_until": restriction_until.isoformat() if restriction_until else None,
+        "reward": None,
     }), 200
 
 
@@ -2501,11 +2591,28 @@ def admin_overview():
             "name": hacker.get("name", hacker.get("email", "Hacker")),
             "email": hacker.get("email"),
             "hacker_profile": hacker.get("hacker_profile"),
-            "account_status": hacker.get("account_status", "active"),
+            "account_status": hacker.get("account_status") or ("banned" if hacker.get("revoked") else "active"),
             "revoked": hacker.get("revoked", False),
             "matches": game_sessions.count_documents({"user_id": hacker["_id"]}),
             "latest_session_status": latest_hacker_session.get("status") if latest_hacker_session else None,
         })
+
+    banned_accounts = list(users.find({
+        "role": {"$ne": "admin"},
+        "$or": [
+            {"account_status": "banned"},
+            {"banned_by": "system_auto"},
+            {"revoked": True},
+        ],
+    }, {
+        "name": 1,
+        "email": 1,
+        "account_status": 1,
+        "revoked": 1,
+        "banned_at": 1,
+        "ban_reason": 1,
+        "hacker_profile": 1,
+    }).sort("banned_at", -1).limit(100))
 
     return jsonify({
 
@@ -2735,6 +2842,15 @@ def admin_overview():
 
         "demo_account": demo_account_status,
         "hacker_accounts": hacker_accounts,
+        "banned_accounts": [{
+            "id": str(account["_id"]),
+            "name": account.get("name", "Player"),
+            "email": account.get("email", ""),
+            "status": account.get("account_status") or ("banned" if account.get("revoked") else "active"),
+            "hacker_profile": account.get("hacker_profile"),
+            "banned_at": account.get("banned_at").isoformat() if hasattr(account.get("banned_at"), "isoformat") else None,
+            "reason": account.get("ban_reason", []),
+        } for account in banned_accounts],
         "login_count": login_count_today,
         "recent_logins": [
             {
@@ -2787,53 +2903,131 @@ def seed_admin_demo():
     if os.getenv("APP_ENV", "").strip().lower() not in {"development", "dev", "local"}:
         return jsonify({"message": "Demo data is available only in development mode."}), 403
 
-    fixture = users.find_one({"email": "admin-fixture@example.test"})
-    if not fixture:
-        fixture = {
-            "name": "Development Fixture",
-            "email": "admin-fixture@example.test",
-            "role": "player",
-            "demo": True,
-            "account_type": "demo_test",
-            "created_at": utc_now(),
-        }
-        fixture["_id"] = users.insert_one(fixture).inserted_id
-
     created_sessions = []
-    for label, accuracy, speed in (("normal", 0.55, 2.5), ("cheater", 0.98, 0.5)):
-        session_id = f"admin-demo-{label}-{uuid.uuid4()}"
+    # Remove records from the old placeholder fixture. New demo comparisons use
+    # the actual seeded normal accounts and the real hacker simulation accounts.
+    legacy_fixture = users.find_one({
+        "email": "admin-fixture@example.test",
+        "role": "player",
+        "demo": True,
+        "account_type": "demo_test",
+    })
+    if legacy_fixture:
+        for collection in (game_telemetry, game_events, game_sessions, security_events, sessions_db, login_history):
+            collection.delete_many({"user_id": legacy_fixture["_id"]})
+        users.delete_one({"_id": legacy_fixture["_id"]})
+
+    # Add one completed normal match per account on every full demo run. These
+    # cumulative sessions are tied to the actual players, not a placeholder.
+    normal_players = list(users.find({
+        "role": "player",
+        "demo": True,
+        "account_type": "demo_normal",
+    }, {"_id": 1, "email": 1}))
+    for player in normal_players:
+        session_id = f"normal-demo-{uuid.uuid4()}"
         started_at = utc_now()
         game_sessions.insert_one({
             "session_id": session_id,
-            "user_id": fixture["_id"],
+            "user_id": player["_id"],
             "status": "completed",
-            "demo_mode": label == "cheater",
+            "demo": True,
+            "demo_mode": False,
+            "demo_label": "normal-player-development-fixture",
             "started_at": started_at,
             "ended_at": started_at + timedelta(seconds=4),
         })
         telemetry = [
             {"event_type": "game_started", "telemetry": {}, "created_at": started_at},
-            {"event_type": "player_behavior", "telemetry": {"speed": speed}, "created_at": started_at + timedelta(seconds=1)},
-            {"event_type": "aim_behavior", "telemetry": {"rotation_change": (1 / max(accuracy, 0.01)) - 1}, "created_at": started_at + timedelta(seconds=1.2)},
+            {"event_type": "player_behavior", "telemetry": {"speed": 2.5}, "created_at": started_at + timedelta(seconds=1)},
+            {"event_type": "aim_behavior", "telemetry": {"rotation_change": 0.5}, "created_at": started_at + timedelta(seconds=1.2)},
         ]
         for index in range(10):
             shot_time = started_at + timedelta(seconds=1.5 + index * 0.1)
             telemetry.append({"event_type": "weapon_fire", "telemetry": {}, "created_at": shot_time})
-            if index < round(10 * accuracy):
+            if index < 3:
                 telemetry.append({"event_type": "enemy_hit", "telemetry": {}, "created_at": shot_time + timedelta(milliseconds=5)})
         telemetry.append({"event_type": "game_completed", "telemetry": {}, "created_at": started_at + timedelta(seconds=3)})
         game_telemetry.insert_many([
-            {"user_id": fixture["_id"], "session_id": session_id, "demo": label == "cheater", **event}
+            {"user_id": player["_id"], "session_id": session_id, "demo": True, **event}
             for event in telemetry
         ])
-        result = analyze_game_session(fixture["_id"], session_id)
+        result = analyze_game_session(player["_id"], session_id)
         game_events.update_one(
             {"session_id": session_id, "analysis_type": "game_session"},
-            {"$set": {"demo": label == "cheater", "demo_label": f"{label}-development-fixture"}},
+            {"$set": {"demo": False, "demo_label": "normal-player-development-fixture"}},
             upsert=True,
         )
-        created_sessions.append({"session_id": session_id, "label": label, "analysis": result})
+        created_sessions.append({
+            "session_id": session_id,
+            "label": "normal-player",
+            "player": player.get("email"),
+            "analysis": result,
+        })
+
     return jsonify({"success": True, "sessions": created_sessions}), 201
+
+
+@game_bp.post("/admin/gameplay/seed-normal-demo-players")
+def seed_normal_demo_players_admin():
+    if not current_admin():
+        return jsonify({"message": "Admin access required."}), 403
+    if os.getenv("APP_ENV", "").strip().lower() not in {"development", "dev", "local"}:
+        return jsonify({"message": "Normal demo players are available only in development mode."}), 403
+
+    try:
+        from scripts.seed_demo_players import seed_normal_demo_players
+
+        # Keep the one-click development demo self-contained. Dedicated normal
+        # player credentials override these fallbacks when configured.
+        demo_player_password = (
+            os.getenv("DEMO_PLAYER_PASSWORD")
+            or os.getenv("HACKER_DEMO_PASSWORD", "")
+        )
+        demo_player_mfa_secret = (
+            os.getenv("DEMO_PLAYER_MFA_SECRET")
+            or os.getenv("HACKER_DEMO_MFA_SECRET", "")
+        ).strip()
+        result = seed_normal_demo_players(
+            users,
+            demo_player_password,
+            demo_player_mfa_secret,
+        )
+    except ValueError as error:
+        return jsonify({"message": str(error)}), 400
+
+    return jsonify({
+        "success": True,
+        "players": result["players"],
+        "created": len(result["created"]),
+        "updated": len(result["updated"]),
+    })
+
+
+@game_bp.post("/admin/gameplay/seed-hacker-demo-accounts")
+def seed_hacker_demo_accounts_admin():
+    if not current_admin():
+        return jsonify({"message": "Admin access required."}), 403
+    if not _hacker_demo_allowed():
+        return jsonify({"message": "Hacker demo accounts are available only in development mode."}), 403
+
+    try:
+        from scripts.seed_hackers import seed_hacker_accounts
+
+        result = seed_hacker_accounts(
+            users,
+            os.getenv("HACKER_DEMO_PASSWORD", ""),
+            os.getenv("HACKER_DEMO_MFA_SECRET", "").strip(),
+        )
+    except ValueError as error:
+        return jsonify({"message": str(error)}), 400
+
+    return jsonify({
+        "success": True,
+        "players": result["players"],
+        "created": len(result["created"]),
+        "updated": len(result["updated"]),
+    })
 
 
 def _hacker_demo_allowed():
@@ -2866,6 +3060,61 @@ def run_hacker_demo():
     return jsonify({"success": True, "profiles": list(PROFILES)}), 202
 
 
+@game_bp.get("/admin/gameplay/telemetry")
+def admin_hacker_telemetry():
+    if not current_admin():
+        return jsonify({"message": "Admin access required."}), 403
+
+    hackers = list(users.find({
+        "role": "player",
+        "demo": True,
+        "account_type": "demo_test",
+        "hacker_profile": {"$in": ["aimbot", "wallhack", "speedhack", "silent_aim"]},
+    }, {"_id": 1, "name": 1, "email": 1, "hacker_profile": 1}))
+    profile_by_id = {str(hacker["_id"]): hacker for hacker in hackers}
+    hacker_ids = [hacker["_id"] for hacker in hackers]
+    if not hacker_ids:
+        return jsonify({"account_count": 0, "event_count": 0, "accounts": [], "events": []})
+
+    limit = max(1, min(request.args.get("limit", 100, type=int), 250))
+    telemetry_filter = {"user_id": {"$in": hacker_ids}}
+    session_id = request.args.get("session_id", "", type=str).strip()
+    if session_id:
+        telemetry_filter["session_id"] = session_id[:100]
+
+    records = game_telemetry.find(
+        telemetry_filter,
+        {"_id": 1, "user_id": 1, "session_id": 1, "game": 1, "event_type": 1,
+         "telemetry": 1, "created_at": 1, "demo": 1},
+    ).sort("created_at", -1).limit(limit)
+    events = []
+    for record in records:
+        hacker = profile_by_id.get(str(record.get("user_id")), {})
+        created_at = record.get("created_at")
+        events.append({
+            "id": str(record["_id"]),
+            "session_id": record.get("session_id"),
+            "player_name": hacker.get("name", "Hacker"),
+            "email": hacker.get("email", ""),
+            "hacker_profile": hacker.get("hacker_profile", "unknown"),
+            "game": record.get("game", "FPS_Microgame"),
+            "event_type": record.get("event_type", "unknown"),
+            "telemetry": record.get("telemetry", {}),
+            "demo": record.get("demo", False),
+            "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else None,
+        })
+    return jsonify({
+        "account_count": len(hackers),
+        "event_count": game_telemetry.count_documents(telemetry_filter),
+        "accounts": [{
+            "email": hacker.get("email", ""),
+            "hacker_profile": hacker.get("hacker_profile", "unknown"),
+            "event_count": game_telemetry.count_documents({"user_id": hacker["_id"]}),
+        } for hacker in hackers],
+        "events": events,
+    })
+
+
 @game_bp.post("/admin/gameplay/reset-hacker-demo")
 def reset_hacker_demo():
     if not current_admin():
@@ -2895,6 +3144,13 @@ def reset_hacker_demo():
                 "demo_restriction_session_id": "",
                 "demo_restriction_status": "",
                 "active_auth_session_id": "",
+                "risk_score": "",
+                "risk_score_session_id": "",
+                "risk_score_updated_at": "",
+                "random_forest": "",
+                "isolation_forest": "",
+                "random_forest_probability": "",
+                "isolation_forest_anomaly_score": "",
             },
         },
     )
@@ -2915,27 +3171,28 @@ def list_admin_players():
     limit = max(1, min(request.args.get("limit", 20, type=int), 100))
     offset = max(0, request.args.get("offset", 0, type=int))
     search = request.args.get("search", "", type=str).strip()[:120]
-    # Keep records left by API tests out of the live player directory, but show
-    # the reserved hacker demo accounts so their matches and ban state are
-    # visible to reviewers.
+    # Keep records left by API tests out of the live player directory, show
+    # reserved hackers, and include older player records with no role field.
     query = {
-        "role": "player",
-        "$or": [
-            {
-                "email": {
-                    "$not": {
-                        "$regex": r"^player[0-9a-f]{8}@example\.com$",
-                        "$options": "i",
-                    }
+        "$and": [
+            {"role": {"$in": ["player", None]}},
+            {"$or": [
+                {
+                    "email": {
+                        "$not": {
+                            "$regex": r"^player[0-9a-f]{8}@example\.com$",
+                            "$options": "i",
+                        }
+                    },
+                    "account_type": {"$ne": "demo_test"},
                 },
-                "account_type": {"$ne": "demo_test"},
-            },
-            {
-                "account_type": "demo_test",
-                "hacker_profile": {
-                    "$in": ["aimbot", "wallhack", "speedhack", "silent_aim"]
+                {
+                    "account_type": "demo_test",
+                    "hacker_profile": {
+                        "$in": ["aimbot", "wallhack", "speedhack", "silent_aim"]
+                    },
                 },
-            },
+            ]},
         ],
     }
     if search:
@@ -2962,6 +3219,7 @@ def list_admin_players():
             "email": player.get("email", ""),
             "role": player.get("role", "player"),
             "mfa_enabled": player.get("mfa_enabled", False),
+            "account_type": player.get("account_type"),
             "matches_played": game_sessions.count_documents({"user_id": player["_id"]}),
             "risk_score": player.get("risk_score"),
             "last_login_ip": player.get("last_login_ip", "No login recorded"),
