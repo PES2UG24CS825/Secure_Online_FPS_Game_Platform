@@ -123,6 +123,33 @@ endpoints. A banned hacker cannot log in or submit more gameplay events. Their
 completed/terminated matches remain visible in the admin Game history and in the
 player Match history when the account is reset and logged in before the next run.
 
+### If a reviewer asks you to play one hacker account
+
+Use this exact sequence so the reviewer can see both the gameplay and the stored
+evidence:
+
+1. In the admin console, click **Reset demo hackers**.
+2. Log in using one seeded account, for example
+   `hacker_aimbot@example.test`, with `HACKER_DEMO_PASSWORD`.
+3. Enter the FPS Microgame and play for at least 10 seconds. The normal game
+   client sends each telemetry event to `/api/game-events`; the backend stores
+   it in `game_telemetry` under the current `session_id`.
+4. Open the admin **Game monitoring** page. Show:
+   - the hacker account card and its match count;
+   - **Game history** with the saved session;
+   - **Analyzed sessions** with the feature values and model results;
+   - **Gameplay security alerts** with the risk score and
+     **PERMANENTLY BANNED** badge.
+5. In MongoDB, the same evidence is stored in `game_sessions`,
+   `game_telemetry`, `game_events`, and `security_events`. The auto-ban record
+   has type `auto_ban`, the user ID, session ID, risk score, reasons, and ban
+   timestamp.
+
+For a guaranteed, repeatable cheating signal during a short presentation, use
+**Run hacker demo** instead of pretending that ordinary human mouse movement is
+an aimbot. It still uses the real login, MFA, game-start, telemetry, analysis,
+ban, and database-write paths; it is not a mock-only result.
+
 ### Troubleshooting
 
 - **Accounts are missing:** run the seed command from the `backend` directory and
