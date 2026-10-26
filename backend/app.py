@@ -22,23 +22,29 @@ app.config.update(
     SESSION_COOKIE_SECURE=False,  # Set True when deployed behind HTTPS
 )
 
-CORS(
-    app,
-    resources={
-        r"/api/*": {
-            "origins": [
-                os.getenv("FRONTEND_ORIGIN", "http://127.0.0.1:5500"),
-                "http://localhost:5500",
-                "http://127.0.0.1:5500",
-            ]
-        }
-    },
-    supports_credentials=True,
-)
+frontend_origin = os.getenv("FRONTEND_ORIGIN", "").strip()
+if frontend_origin:
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": [frontend_origin]}},
+        supports_credentials=True,
+    )
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(game_bp)
 app.register_blueprint(player_bp)
+
+
+def network_server_settings(environ=None):
+    env = environ if environ is not None else os.environ
+    truthy = {"1", "true", "yes", "on"}
+    lan_mode = env.get("LAN_MODE", "0").strip().lower() in truthy
+    default_host = "0.0.0.0" if lan_mode else "127.0.0.1"
+    host = env.get("FLASK_HOST", default_host).strip()
+    port = int(env.get("FLASK_PORT", "5000"))
+    debug_requested = env.get("FLASK_DEBUG", "1").strip().lower() in truthy
+    debug = debug_requested and host != "0.0.0.0"
+    return host, port, debug
 
 
 @app.get("/")
@@ -205,10 +211,10 @@ def health():
 if __name__ == "__main__":
     # Development defaults are documented credentials; override them in deployment.
     ensure_default_admin()
-    debug_enabled = os.getenv("FLASK_DEBUG", "1").strip().lower() in {"1", "true", "yes", "on"}
+    flask_host, flask_port, debug_enabled = network_server_settings()
     app.run(
-        host=os.getenv("FLASK_HOST", "127.0.0.1"),
-        port=int(os.getenv("FLASK_PORT", "5000")),
+        host=flask_host,
+        port=flask_port,
         debug=debug_enabled,
         threaded=True,
     )
