@@ -164,6 +164,24 @@ function renderGameplayAlerts(data) {
     seenSessions.add(key);
     return true;
   });
+  if (hackerDemoAwaitingBan) {
+    uniqueAlerts
+      .filter((alert) => alert.permanent_ban === true && alert.demo === true)
+      .forEach((alert) => {
+        const key = alert.session_id || `${alert.player_id || alert.player_name}:${alert.created_at || "unknown"}`;
+        if (hackerDemoNotifiedBans.has(key)) return;
+        hackerDemoNotifiedBans.add(key);
+        const profile = alert.hacker_profile || "hacker";
+        const player = alert.player_name || `Hacker ${profile}`;
+        const risk = displayRiskScore(alert.risk_score);
+        const modelRisk = alert.model_risk_score == null ? "N/A" : displayRiskScore(alert.model_risk_score);
+        const reason = alert.detection_reason || hackerReason(profile);
+        window.showAppToast(
+          `Cheater auto-banned\n${player} (risk ${risk} · model ${modelRisk})\n${profile} · ${reason}`,
+          "critical"
+        );
+      });
+  }
   const pendingAlerts = uniqueAlerts.filter((alert) => alert.review_status === "pending");
   const incompleteAnalyses = analyses.filter((analysis) => analysis.status !== "success" && analysis.session_id);
   window.adminIncompleteSessions = [...new Set(incompleteAnalyses.map((analysis) => analysis.session_id))];
@@ -333,7 +351,6 @@ function renderHackerAccounts(data) {
     hackerDemoAwaitingBan = false;
     clearInterval(hackerDemoPollTimer);
     clearTimeout(hackerDemoCompletionTimer);
-    window.showAppToast("Hacker detection complete: all four demo hacker accounts were banned.", "error");
   }
   const normalPlayers = (Array.isArray(data.players) ? data.players : [])
     .filter((player) => player.account_type === "demo_normal");
@@ -374,6 +391,7 @@ let adminRefreshDebounce = null;
 let hackerDemoPollTimer = null;
 let hackerDemoCompletionTimer = null;
 let hackerDemoAwaitingBan = false;
+const hackerDemoNotifiedBans = new Set();
 
 function connectAdminLiveEvents() {
   if (adminLiveEvents || !window.EventSource) return;
@@ -869,6 +887,7 @@ document.getElementById("runHackerDemoBtn")?.addEventListener("click", async (ev
     await api("/admin/gameplay/seed-demo", { method: "POST" });
     demoStep = "starting the four hacker simulations";
     button.textContent = "Starting hacker simulations…";
+    hackerDemoNotifiedBans.clear();
     hackerDemoAwaitingBan = true;
     await api("/admin/gameplay/run-hacker-demo", { method: "POST" });
     window.showAppToast("Demo started: the four hacker simulations are running. Waiting for detection and bans…", "info");

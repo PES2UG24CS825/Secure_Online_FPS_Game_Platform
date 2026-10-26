@@ -111,6 +111,15 @@ a:focus-visible {
   color: #991B1B;
 }
 
+.app-toast[data-tone="critical"] {
+  border-color: #B91C1C;
+  border-left-color: #7F1D1D;
+  background: #B91C1C;
+  color: #FFFFFF;
+  white-space: pre-line;
+  box-shadow: 0 12px 30px rgba(127, 29, 29, .28);
+}
+
 .app-toast[data-tone="warning"] {
   border-color: #E8CFAA;
   border-left-color: #B45309;

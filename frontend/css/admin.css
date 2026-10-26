@@ -232,7 +232,7 @@
     .admin-page .admin-pagination button { min-width:96px; min-height:40px; margin:0; }
     .admin-page .admin-section .section-title { align-items:flex-start; gap:16px; }
     .admin-page .admin-section .section-title > button { flex:0 0 auto; min-width:96px; min-height:40px; margin:0; }
-    .admin-page .app-toast-region { top:112px; left:auto; right:24px; transform:none; width:min(440px,calc(100vw - 32px)); }
+    .admin-page .app-toast-region { top:12px; left:50%; right:auto; transform:translateX(-50%); width:min(500px,calc(100vw - 32px)); z-index:12000; }
     .admin-page .banned-account-row { display:grid; grid-template-columns:minmax(210px, 0.8fr) minmax(0, 2fr) auto; align-items:center; gap:18px; min-width:0; padding:14px 0; }
     .admin-page .banned-account-identity { display:grid; gap:4px; min-width:0; }
     .admin-page .banned-account-identity strong,
@@ -250,7 +250,7 @@
       .admin-header-actions { width:100%; justify-content:flex-start; }
     }
     @media (max-width: 700px) {
-      .admin-page .app-toast-region { top:88px; left:auto; right:16px; transform:none; width:calc(100vw - 32px); }
+      .admin-page .app-toast-region { top:12px; left:50%; right:auto; transform:translateX(-50%); width:calc(100vw - 32px); }
       .admin-page .banned-account-row { grid-template-columns:minmax(0,1fr) auto; gap:8px 12px; }
       .admin-page .banned-account-reason { grid-column:1 / -1; }
       .admin-page .login-audit-table table { width:100%; min-width:0; table-layout:fixed; }
