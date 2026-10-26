@@ -13,11 +13,11 @@ public class SecureFPSClient : MonoBehaviour
     [Header("Flask Server")]
     [SerializeField]
     private string serverUrl =
-        "http://127.0.0.1:5000/api/game-events";
+        "/api/game-events";
 
     [SerializeField]
     private string endServerUrl =
-        "http://127.0.0.1:5000/api/game/end";
+        "/api/game/end";
 
     private string gameSessionId;
     private string gameToken;
@@ -64,12 +64,30 @@ public class SecureFPSClient : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
+        serverUrl = ResolveApiUrl(serverUrl);
+        endServerUrl = ResolveApiUrl(endServerUrl);
+
         ReadGameCredentials();
 
         Debug.Log("[SecureFPS] Client initialized.");
         Debug.Log("[SecureFPS] Session ID: " + gameSessionId);
         Debug.Log("[SecureFPS] Token received: " +
                   !string.IsNullOrEmpty(gameToken));
+    }
+
+    private static string ResolveApiUrl(string endpoint)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        Uri pageUri;
+        if (Uri.TryCreate(Application.absoluteURL, UriKind.Absolute, out pageUri))
+            return pageUri.GetLeftPart(UriPartial.Authority) + endpoint;
+#endif
+
+        Uri endpointUri;
+        if (Uri.TryCreate(endpoint, UriKind.Absolute, out endpointUri))
+            return endpointUri.AbsoluteUri;
+
+        return new Uri(new Uri("http://127.0.0.1:5000"), endpoint).AbsoluteUri;
     }
 
     private void OnDestroy()

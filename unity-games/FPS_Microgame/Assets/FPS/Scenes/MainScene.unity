@@ -1367,7 +1367,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 05ccc513796d57040b25237e0a2d86d5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  serverUrl: http://127.0.0.1:5000/api/game-events
+  serverUrl: /api/game-events
 --- !u!4 &2091206812 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 2141676431450117668, guid: cd17687759887a0438ee021e51abc9d9,
