@@ -132,6 +132,10 @@ def get_matches():
         return jsonify({"message": "Authentication required."}), 401
     
     user_oid = ObjectId(user_id)
+    player_account = users.find_one(
+        {"_id": user_oid},
+        {"hacker_profile": 1, "account_type": 1},
+    ) or {}
     total_matches = game_sessions.count_documents({"user_id": user_oid})
     player_matches = list(game_sessions.find({"user_id": user_oid}).sort("started_at", -1).limit(10))
     analyses = {}
@@ -182,6 +186,10 @@ def get_matches():
             "missing_features": analysis.get("missing_features", []),
             "analysis_error": analysis.get("error"),
             "alert_severity": analysis.get("alert_severity"),
+            "enforcement_action": analysis.get("enforcement_action") or game_session.get("enforcement_action"),
+            "enforcement_state": analysis.get("enforcement_state") or game_session.get("enforcement_state"),
+            "hacker_profile": player_account.get("hacker_profile"),
+            "demo_test": player_account.get("account_type") == "demo_test",
         })
     
     return jsonify({
@@ -470,6 +478,9 @@ def get_security_summary():
     logins = list(login_history.find(
         {"user_id": user_oid, "type": "login_success"}
     ).sort("created_at", -1).limit(50))
+    warnings = list(security_events.find(
+        {"user_id": user_oid, "type": "gameplay_alert_review", "action": "warn"}
+    ).sort("created_at", -1).limit(10))
     active_sessions = list(sessions_db.find(
         {"user_id": user_oid, "is_active": True}
     ).sort("last_activity", -1).limit(20))
@@ -482,7 +493,14 @@ def get_security_summary():
 
     return jsonify({
         "mfa_status": "enabled" if user.get("mfa_enabled") else "disabled",
-        "account_status": "suspended" if user.get("revoked") else "active",
+        "account_status": user.get("account_status") or ("suspended" if user.get("revoked") else "active"),
+        "security_warnings": [
+            {
+                "note": item.get("note", "A gameplay security warning was recorded."),
+                "created_at": item["created_at"].isoformat() if item.get("created_at") else None,
+            }
+            for item in warnings
+        ],
         "risk_score": risk_score,
         "last_login": recent_login["created_at"].isoformat() if recent_login and recent_login.get("created_at") else None,
         "active_sessions": [

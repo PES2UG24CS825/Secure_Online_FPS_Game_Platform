@@ -180,7 +180,7 @@ def auto_ban_hacker(user_id, session_id, account, result, raw_features):
     try:
         demo_threshold = float(os.getenv(
             "DEMO_HACKER_BAN_RISK_THRESHOLD",
-            str(BAN_RISK_THRESHOLD),
+            "60",
         ))
     except (TypeError, ValueError):
         demo_threshold = BAN_RISK_THRESHOLD
@@ -246,6 +246,13 @@ def auto_ban_hacker(user_id, session_id, account, result, raw_features):
         "session_id": session_id,
         "risk_score": risk_score,
         "reasons": reasons,
+        "random_forest": result.get("random_forest"),
+        "isolation_forest": result.get("isolation_forest"),
+        "random_forest_probability": result.get("random_forest_probability"),
+        "isolation_forest_anomaly_score": result.get("isolation_forest_anomaly_score"),
+        "result": result,
+        "features": normalize_features(raw_features or {}),
+        "raw_features": raw_features,
         "hacker_profile": account.get("hacker_profile"),
         "banned_at": banned_at,
         "created_at": banned_at,
@@ -1061,7 +1068,7 @@ def analyze_game_session(
     try:
         demo_ban_threshold = float(os.getenv(
             "DEMO_HACKER_BAN_RISK_THRESHOLD",
-            str(BAN_RISK_THRESHOLD),
+            "60",
         ))
     except (TypeError, ValueError):
         demo_ban_threshold = BAN_RISK_THRESHOLD
@@ -2379,6 +2386,29 @@ def admin_overview():
             "review_status": demo_alert.get("review_status", "not_required")
         }
 
+    hacker_accounts = []
+    for hacker in users.find({
+        "role": "player",
+        "demo": True,
+        "account_type": "demo_test",
+        "hacker_profile": {"$in": ["aimbot", "wallhack", "speedhack", "silent_aim"]},
+    }):
+        latest_hacker_session = game_sessions.find_one(
+            {"user_id": hacker["_id"]},
+            {"status": 1, "started_at": 1},
+            sort=[("started_at", -1)],
+        )
+        hacker_accounts.append({
+            "id": str(hacker["_id"]),
+            "name": hacker.get("name", hacker.get("email", "Hacker")),
+            "email": hacker.get("email"),
+            "hacker_profile": hacker.get("hacker_profile"),
+            "account_status": hacker.get("account_status", "active"),
+            "revoked": hacker.get("revoked", False),
+            "matches": game_sessions.count_documents({"user_id": hacker["_id"]}),
+            "latest_session_status": latest_hacker_session.get("status") if latest_hacker_session else None,
+        })
+
     return jsonify({
 
         "players": [
@@ -2555,6 +2585,7 @@ def admin_overview():
         ],
 
         "demo_account": demo_account_status,
+        "hacker_accounts": hacker_accounts,
         "login_count": login_count_today,
         "recent_logins": [
             {

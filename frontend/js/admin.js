@@ -152,6 +152,7 @@ function renderGameplayAlerts(data) {
         ${alert.hacker_profile ? `<span><strong>Profile:</strong> ${escapeHtml(alert.hacker_profile)}</span>` : ""}
         <span><strong>Random Forest:</strong> ${escapeHtml(alert.random_forest || "Unavailable")}</span>
         <span><strong>Isolation Forest:</strong> ${escapeHtml(alert.isolation_forest || "Unavailable")}</span>
+        ${permanentlyBanned && alert.top_reasons?.length ? `<span><strong>Top reasons:</strong> ${escapeHtml(alert.top_reasons.join("; "))}</span>` : ""}
         <span><strong>Severity:</strong> ${escapeHtml(severity)}</span>
         <span><strong>Alert time:</strong> ${escapeHtml(displayDate(alert.created_at))}</span>
         <span><strong>${permanentlyBanned ? "Ban time" : "Review status"}:</strong> ${escapeHtml(permanentlyBanned ? displayDate(alert.banned_at) : alert.review_status || "unknown")}</span>
@@ -240,6 +241,28 @@ function renderDemoAccount(data) {
     return;
   }
 
+  function renderHackerAccounts(data) {
+    const panel = document.getElementById("hackerAccountsPanel");
+    if (!panel) return;
+    const accounts = Array.isArray(data.hacker_accounts) ? data.hacker_accounts : [];
+    if (!accounts.length) {
+      panel.innerHTML = '<div class="demo-account-card"><strong>No hacker accounts seeded.</strong><p>Run <code>python scripts/seed_hackers.py</code> in development, then refresh.</p></div>';
+      return;
+    }
+    panel.innerHTML = `<div class="hacker-account-grid">${accounts.map((account) => {
+      const banned = account.account_status === "banned" || account.revoked;
+      return `<article class="demo-account-card hacker-account-card">
+        <div class="demo-account-heading"><strong>${escapeHtml(account.email || account.name)}</strong><span class="badge ${banned ? "bad" : "good"}">${banned ? "PERMANENTLY BANNED" : "READY"}</span></div>
+        <div class="demo-account-fields">
+          <span><strong>Profile:</strong> ${escapeHtml(account.hacker_profile || "unknown")}</span>
+          <span><strong>Matches:</strong> ${escapeHtml(String(account.matches || 0))}</span>
+          <span><strong>Latest match:</strong> ${escapeHtml(account.latest_session_status || "none")}</span>
+          <span><strong>Account status:</strong> ${escapeHtml(account.account_status || "active")}</span>
+        </div>
+      </article>`;
+    }).join("")}</div>`;
+  }
+
   const restricted = account.enforcement_state === "restricted";
   const detectionStatus = account.detection_status || "not_evaluated";
   const statusClass = detectionStatus === "success" ? (restricted ? "bad" : "good") : "gray";
@@ -287,7 +310,7 @@ function connectAdminLiveEvents() {
       toast.className = "admin-cheater-toast";
       toast.setAttribute("role", "status");
       toast.setAttribute("aria-live", "polite");
-      toast.textContent = `Cheater auto-banned: ${update.player_name || "Player"} (risk ${score})`;
+      toast.innerHTML = `<strong>Cheater auto-banned</strong><br>${escapeHtml(update.player_name || "Player")} (risk ${escapeHtml(score)})<br><small>${escapeHtml(update.hacker_profile || "demo")} · ${escapeHtml((update.top_reasons || []).slice(0, 2).join("; ") || "threshold exceeded")}</small>`;
       document.body.append(toast);
       window.setTimeout(() => toast.remove(), 5000);
     }
@@ -375,6 +398,7 @@ async function loadAdmin(force = false) {
     renderGameplayAlerts(data);
     renderDemoComparison(data);
     renderDemoAccount(data);
+    renderHackerAccounts(data);
     adminHasLoaded = true;
     if (liveStatus) {
       liveStatus.className = "status-pill live-connected";

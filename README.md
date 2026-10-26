@@ -75,3 +75,61 @@ MongoDB uses `MONGO_DB` when set, or `DB_NAME` from the example configuration. K
 - The MFA secret/QR is returned only during local account setup for this student prototype. In production, complete MFA enrollment through a controlled setup flow and do not expose the secret after setup.
 - Use HTTPS and set SESSION_COOKIE_SECURE=True in production.
 - Add CSRF protection, rate limiting, email verification, audit logging, and secure secret management before production deployment.
+
+## Development hacker demo
+
+This is a development-only presentation fixture. It is blocked when `APP_ENV=production`.
+
+1. In `backend/.env`, set:
+
+   ```env
+   APP_ENV=development
+   HACKER_DEMO_PASSWORD=HackerDemoPassword123!
+   HACKER_DEMO_MFA_SECRET=JBSWY3DPEHPK3PXP
+   DEMO_HACKER_BAN_RISK_THRESHOLD=60
+   ```
+
+   The password and MFA secret are local demo values; do not commit `backend/.env`.
+2. With MongoDB running, seed the four accounts:
+
+   ```powershell
+   cd backend
+   .\.venv\Scripts\python.exe scripts\seed_hackers.py
+   ```
+
+   The accounts are `hacker_aimbot@example.test`, `hacker_wallhack@example.test`,
+   `hacker_speed@example.test`, and `hacker_silent@example.test`. They all use the
+   configured password and TOTP secret. The seed command is safe to run repeatedly.
+3. Restart `python app.py` after changing `.env`, then sign in as an admin. Open
+   **Game monitoring** to confirm all four accounts and their match counts are listed.
+4. Click **Run hacker demo** and confirm. Four simulations start two seconds apart.
+   The admin Gameplay security alerts list updates without a page refresh, shows the
+   model outputs and reasons, and displays a red **PERMANENTLY BANNED** badge when a
+   demo account is automatically banned.
+5. To replay the presentation, click **Reset demo hackers**, confirm, and run the
+   seed command again if the accounts were removed manually. Reset only affects the
+   four `account_type=demo_test` hacker accounts.
+
+Each simulator can also be run directly:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe scripts\simulate_hacker.py aimbot --fast
+.\.venv\Scripts\python.exe scripts\simulate_hacker.py all --fast
+```
+
+The simulator uses the real login, MFA, game-start, telemetry, and game-complete
+endpoints. A banned hacker cannot log in or submit more gameplay events. Their
+completed/terminated matches remain visible in the admin Game history and in the
+player Match history when the account is reset and logged in before the next run.
+
+### Troubleshooting
+
+- **Accounts are missing:** run the seed command from the `backend` directory and
+  verify `APP_ENV=development`; then refresh the admin page.
+- **No automatic ban:** add `DEMO_HACKER_BAN_RISK_THRESHOLD=60` to the actual
+  `backend/.env` (not only `.env.example`) and restart Flask.
+- **No live alert:** keep the admin page open and signed in while the simulation
+  runs. The dashboard also refreshes every 15 seconds if SSE reconnects.
+- **401/403 after a run:** the account was probably permanently banned. Use
+  **Reset demo hackers**, then sign in again.
