@@ -22,9 +22,13 @@ from database.db import (
     sessions_db,
     reward_transactions,
     support_tickets,
+    honour_history,
 )
 
 from models.ml_model import predict, FEATURES
+from services.anti_cheat_intelligence import AntiCheatIntelligence
+from services.risk_scoring import clamp_risk_score, classify_risk_score, RISK_SCORE_SCALE
+from services.player_baseline import get_player_baseline
 
 
 game_bp = Blueprint(
@@ -89,7 +93,7 @@ def live_events():
         return jsonify({"message": "This account has been suspended."}), 403
     if account.get("revoked") is True or account.get("account_status") == "banned":
         return jsonify({"message": "This account is permanently banned."}), 403
-    channel = "admin" if account.get("role") == "admin" else str(user_id)
+    channel = "admin" if account.get("role") in ["admin", "demo_admin", "moderator", "super_admin"] else str(user_id)
     subscriber = queue.Queue(maxsize=50)
     with _live_subscribers_lock:
         _live_subscribers.setdefault(channel, set()).add(subscriber)
@@ -133,9 +137,49 @@ FEATURE_RANGES = {
     "kdr": (0.0, 10.0),
 }
 BAN_RISK_THRESHOLD = float(os.getenv("BAN_RISK_THRESHOLD", "85"))
-MATCH_ABANDON_HONOUR_PENALTY = 10
-MATCH_COMPLETE_HONOUR_REWARD = 5
+MATCH_VOLUNTARY_EXIT_HONOUR_PENALTY = int(os.getenv("MATCH_VOLUNTARY_EXIT_HONOUR_PENALTY", "5"))
+MATCH_TIMEOUT_EXIT_HONOUR_PENALTY = int(os.getenv("MATCH_TIMEOUT_EXIT_HONOUR_PENALTY", "5"))
+MATCH_ABANDON_HONOUR_PENALTY = MATCH_VOLUNTARY_EXIT_HONOUR_PENALTY
+MATCH_COMPLETE_HONOUR_REWARD = int(os.getenv("MATCH_COMPLETE_HONOUR_REWARD", "5"))
 MAX_HONOUR_SCORE = 100
+MIN_HONOUR_SCORE = 0
+
+
+def record_honour_transaction(user_id, session_id, points_delta, reason, match_id=None, is_automatic=True):
+    """
+    Server-authoritative and idempotent helper to adjust honour score.
+    Clamps between MIN_HONOUR_SCORE (0) and MAX_HONOUR_SCORE (100).
+    Records an immutable audit entry in the honour_history collection.
+    """
+    user_oid = ObjectId(user_id) if isinstance(user_id, str) and ObjectId.is_valid(user_id) else user_id
+    player = users.find_one({"_id": user_oid}) or {}
+    prev_val = player.get("honour_score")
+    if prev_val is None:
+        prev_val = 100
+    try:
+        previous_score = int(prev_val)
+    except (ValueError, TypeError):
+        previous_score = 100
+
+    new_score = max(MIN_HONOUR_SCORE, min(MAX_HONOUR_SCORE, previous_score + points_delta))
+    actual_delta = new_score - previous_score
+
+    users.update_one({"_id": user_oid}, {"$set": {"honour_score": new_score}})
+
+    audit_entry = {
+        "player_id": str(user_id),
+        "user_id": user_oid,
+        "session_id": session_id,
+        "match_id": match_id or session_id,
+        "previous_score": previous_score,
+        "new_score": new_score,
+        "points_delta": actual_delta,
+        "reason": reason,
+        "timestamp": utc_now(),
+        "is_automatic": is_automatic,
+    }
+    honour_history.insert_one(audit_entry)
+    return previous_score, new_score, actual_delta
 
 # Alerts indicate suspicious sessions for review, not confirmed cheating.
 GAMEPLAY_ALERT_THRESHOLDS = {
@@ -588,12 +632,14 @@ def start_game():
     game_token = secrets.token_urlsafe(32)
 
     now = utc_now()
+    req_body = request.get_json(silent=True) or {}
+    game_name = req_body.get("game") or "FPS_Microgame"
 
     game_session = {
         "session_id": session_id,
         "game_token": game_token,
         "user_id": user_id,
-        "game": "FPS_Microgame",
+        "game": game_name,
         "started_at": now,
         "ended_at": None,
         "expires_at": now + timedelta(hours=2),
@@ -634,7 +680,7 @@ def start_game():
         "success": True,
         "session_id": session_id,
         "game_token": game_token,
-        "game": "FPS_Microgame",
+        "game": game_name,
         "demo_mode": demo_mode
     }), 201
 
@@ -738,6 +784,16 @@ def receive_game_event():
     # -----------------------------------------------------
 
     if game_session.get("status") != "active":
+        if game_session.get("status") == "completed":
+            ended_at = game_session.get("ended_at")
+            if ended_at:
+                if ended_at.tzinfo is None:
+                    ended_at = ended_at.replace(tzinfo=timezone.utc)
+                if (utc_now() - ended_at).total_seconds() < 15:
+                    return jsonify({
+                        "message": "Telemetry accepted (late event within grace window).",
+                        "status": "completed"
+                    }), 200
 
         safe_print(
             "[SecureFPS] ERROR: Game session is not active."
@@ -1146,6 +1202,32 @@ def analyze_game_session(
                 raise RuntimeError("; ".join(model_errors))
 
             status = "success"
+            # -----------------------------------------------------
+            # HUMAN BEHAVIOR INTELLIGENCE & SKILL CONTEXT ARBITRATION
+            # -----------------------------------------------------
+            session_telemetry = list(game_telemetry.find({
+                "user_id": user_id,
+                "session_id": session_id
+            }).sort("created_at", 1))
+            audit = AntiCheatIntelligence.audit_telemetry_stream(session_telemetry)
+            player_baseline = get_player_baseline(users, game_events, user_id)
+            game_mode = game_session.get("game", "CyberStrike_3D")
+            human_eval = AntiCheatIntelligence.evaluate_human_skill_context(
+                raw_features, audit, game_mode=game_mode, player_baseline=player_baseline
+            )
+
+            calibrated_risk, calibrated_severity = AntiCheatIntelligence.calibrate_ensemble_risk(
+                result.get("random_forest"),
+                result.get("random_forest_probability"),
+                result.get("isolation_forest"),
+                result.get("isolation_forest_anomaly_score"),
+                human_eval,
+                raw_features
+            )
+            result["model_risk_score"] = result.get("risk_score")
+            result["risk_score"] = calibrated_risk
+            result["human_evaluation"] = human_eval
+
             if (
                 realtime
                 and is_demo
@@ -1155,8 +1237,6 @@ def analyze_game_session(
                 and isinstance(result.get("risk_score"), (int, float))
                 and result["risk_score"] <= 90
             ):
-                model_score = result["risk_score"]
-                result["model_risk_score"] = model_score
                 result["risk_calibration"] = "development_hacker_evidence"
                 result["risk_score"] = hacker_enforcement_score(
                     account.get("hacker_profile")
@@ -1171,16 +1251,20 @@ def analyze_game_session(
             )
             status = "ml_error"
             error = str(exc)
+            human_eval = {"review_category": "Analysis incomplete", "explanation": str(exc), "is_skilled_human": False, "hard_cheat_evidence": []}
+            calibrated_severity = None
 
-    severity = gameplay_alert_severity(result, status)
+    severity = calibrated_severity if status == "success" else gameplay_alert_severity(result, status)
     alert_reason = None
-    if severity:
+    if severity and severity != "low":
         alert_reason = (
-            "Configured gameplay alert conditions met: "
+            f"{human_eval.get('explanation') or 'Configured gameplay alert conditions met'}: "
             f"RF={result.get('random_forest')}, "
             f"IF={result.get('isolation_forest')}, "
             f"risk={result.get('risk_score')}/100."
         )
+    else:
+        severity = None  # Low risk sessions do not trigger gameplay alerts
 
     enforcement_state = "monitoring"
     enforcement_action = "none"
@@ -1354,6 +1438,27 @@ def analyze_game_session(
             analysis_update,
             upsert=True
         )
+        # Mirror authoritative risk metrics to game_sessions for immediate admin sync
+        try:
+            sess_risk = result.get("risk_score")
+            sess_cat = classify_risk_score(sess_risk)["category"] if sess_risk is not None else "Normal"
+            sess_update = {
+                "risk_score": sess_risk,
+                "risk_category": sess_cat,
+                "analysis_status": status,
+            }
+            if raw_features.get("accuracy") is not None:
+                sess_update["accuracy"] = raw_features.get("accuracy")
+            if raw_features.get("kdr") is not None:
+                sess_update["kdr"] = raw_features.get("kdr")
+            if not realtime:
+                sess_update["status"] = "completed"
+            game_sessions.update_one(
+                {"session_id": session_id},
+                {"$set": sess_update}
+            )
+        except Exception as sess_err:
+            safe_print("[SecureFPS] Warning: Failed to mirror risk to game_sessions:", sess_err)
 
     except Exception as exc:
 
@@ -1422,6 +1527,25 @@ def analyze_game_session(
                 exc
             )
 
+    elif not realtime:
+        # Full match concluded within legitimate human boundaries.
+        # Clear any transient mid-match spike alerts for this session.
+        security_events.update_many(
+            {
+                "session_id": session_id,
+                "type": "gameplay_anomaly",
+                "review_status": "pending"
+            },
+            {
+                "$set": {
+                    "review_status": "cleared",
+                    "risk_score": result.get("risk_score"),
+                    "severity": "low",
+                    "alert_reason": "Full match completed within normal human boundaries; transient real-time spike cleared."
+                }
+            }
+        )
+
     return {
         "status": status,
         "raw_features": raw_features,
@@ -1439,6 +1563,144 @@ def analyze_game_session(
         "restricted_until": restriction_until,
         "demo": is_demo
     }
+
+
+# =========================================================
+# VOLUNTARY MATCH EXIT (With Confirmation & Server Validation)
+# =========================================================
+
+@game_bp.post("/game/voluntary-exit")
+def voluntary_exit_game():
+    user_id = get_current_user_object_id()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    data = request.get_json(silent=True) or {}
+    session_id = data.get("session_id")
+    if not session_id:
+        return jsonify({"message": "session_id is required."}), 400
+
+    game_session = game_sessions.find_one({"session_id": session_id, "user_id": user_id})
+    if not game_session:
+        return jsonify({"message": "Game session not found."}), 404
+
+    # Idempotent: If session is already closed (completed or abandoned), do NOT penalize again
+    if game_session.get("status") != "active":
+        player = users.find_one({"_id": user_id}, {"honour_score": 1}) or {}
+        current_score = player.get("honour_score", 100)
+        return jsonify({
+            "success": True,
+            "status": game_session.get("status"),
+            "already_closed": True,
+            "message": "Match already closed; no additional honour deduction applied.",
+            "honour_score": current_score,
+            "deducted": 0
+        }), 200
+
+    now = utc_now()
+    abandonment = game_sessions.update_one(
+        {"session_id": session_id, "user_id": user_id, "status": "active"},
+        {
+            "$set": {
+                "ended_at": now,
+                "status": "abandoned_voluntary",
+                "abandoned_at": now,
+                "abandon_reason": "voluntary_match_exit",
+            }
+        }
+    )
+
+    if not abandonment.modified_count:
+        player = users.find_one({"_id": user_id}, {"honour_score": 1}) or {}
+        return jsonify({
+            "success": True,
+            "already_closed": True,
+            "honour_score": player.get("honour_score", 100),
+            "deducted": 0
+        }), 200
+
+    prev_score, new_score, actual_delta = record_honour_transaction(
+        user_id=user_id,
+        session_id=session_id,
+        points_delta=-MATCH_VOLUNTARY_EXIT_HONOUR_PENALTY,
+        reason="voluntary_match_exit",
+        is_automatic=False
+    )
+
+    player = users.find_one({"_id": user_id}, {"name": 1, "email": 1}) or {}
+    player_name = player.get("name") or player.get("email") or "Player"
+
+    security_events.insert_one({
+        "type": "match_abandoned",
+        "user_id": user_id,
+        "session_id": session_id,
+        "severity": "low",
+        "honour_before": prev_score,
+        "honour_change": actual_delta,
+        "honour_score": new_score,
+        "restricted_until": None,
+        "review_status": "cleared",
+        "description": f"{player_name} voluntarily left an active match. Honour reduced by {abs(actual_delta)} to {new_score}/100.",
+        "created_at": now,
+    })
+
+    publish_live_update(
+        user_id,
+        session_id,
+        "match_abandoned",
+        force=True,
+        payload={"player_name": player_name, "honour_score": new_score}
+    )
+
+    return jsonify({
+        "success": True,
+        "status": "abandoned_voluntary",
+        "previous_score": prev_score,
+        "new_score": new_score,
+        "deducted": abs(actual_delta),
+        "message": f"Left match. Honour Score reduced by {abs(actual_delta)} points ({new_score}/100)."
+    }), 200
+
+
+@game_bp.get("/game/honour")
+def get_honour_info():
+    user_id = get_current_user_object_id()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    player = users.find_one({"_id": user_id}, {"honour_score": 1, "name": 1}) or {}
+    score = player.get("honour_score")
+    if score is None:
+        score = 100
+        users.update_one({"_id": user_id}, {"$set": {"honour_score": 100}})
+
+    recent_history = list(
+        honour_history.find(
+            {"$or": [{"user_id": user_id}, {"player_id": str(user_id)}]}
+        ).sort("timestamp", -1).limit(20)
+    )
+
+    history_items = []
+    for h in recent_history:
+        history_items.append({
+            "session_id": h.get("session_id"),
+            "previous_score": h.get("previous_score"),
+            "new_score": h.get("new_score"),
+            "points_delta": h.get("points_delta"),
+            "reason": h.get("reason"),
+            "timestamp": h["timestamp"].isoformat() if h.get("timestamp") else None,
+            "is_automatic": h.get("is_automatic", True),
+        })
+
+    return jsonify({
+        "success": True,
+        "honour_score": score,
+        "max_honour": MAX_HONOUR_SCORE,
+        "min_honour": MIN_HONOUR_SCORE,
+        "penalty_per_exit": MATCH_VOLUNTARY_EXIT_HONOUR_PENALTY,
+        "reward_per_match": MATCH_COMPLETE_HONOUR_REWARD,
+        "history": history_items
+    }), 200
 
 
 # =========================================================
@@ -1481,8 +1743,13 @@ def end_game():
             "message": "Game session not found."
         }), 404
 
-    # A match is complete only when the gameplay client has already submitted
-    # game_completed. Calling this endpoint while active means the player left.
+    # A match is complete if the gameplay client already submitted game_completed
+    # or if this call explicitly declares the match completed.
+    is_completed_request = (
+        data.get("completed") is True
+        or data.get("reason") in {"match_completed", "score_limit_reached", "time_expired"}
+    )
+
     if game_session.get("status") != "active":
         return jsonify({
             "success": True,
@@ -1491,6 +1758,58 @@ def end_game():
         }), 200
 
     now = utc_now()
+    restriction_until = None
+
+    if is_completed_request:
+        completion = game_sessions.update_one(
+            {
+                "session_id": session_id,
+                "user_id": user_id,
+                "status": "active"
+            },
+            {
+                "$set": {
+                    "status": "completed",
+                    "ended_at": now
+                }
+            }
+        )
+        if completion.modified_count:
+            honour_before, honour_score, honour_awarded = record_honour_transaction(
+                user_id=user_id,
+                session_id=session_id,
+                points_delta=MATCH_COMPLETE_HONOUR_REWARD,
+                reason="match_completed",
+                is_automatic=True
+            )
+            game_sessions.update_one(
+                {"session_id": session_id, "user_id": user_id},
+                {"$set": {"honour_awarded": honour_awarded}},
+            )
+            users.update_one({"_id": user_id}, {"$inc": {"rewards.coins": 20, "rewards.xp": 50}})
+            reward_transactions.insert_one({
+                "user_id": user_id,
+                "type": "match_completed",
+                "description": f"Completed CyberStrike 3D match; +{honour_awarded} Honour",
+                "coins": 20,
+                "xp": 50,
+                "honour": honour_awarded,
+                "honour_before": honour_before,
+                "honour_after": int(honour_after_rec.get("honour_score", honour_before)),
+                "session_id": session_id,
+                "created_at": now,
+            })
+            analysis = analyze_game_session(user_id, session_id)
+            publish_live_update(user_id, session_id, "analysis_complete", force=True)
+            return jsonify({
+                "success": True,
+                "status": "completed",
+                "message": f"Match completed successfully! +{honour_awarded} Honour awarded.",
+                "session_id": session_id,
+                "honour_score": int(honour_after_rec.get("honour_score", 100)),
+                "analysis": analysis,
+            }), 200
+
     abandonment = game_sessions.update_one(
         {
             "session_id": session_id,
@@ -1515,20 +1834,14 @@ def end_game():
             "message": "Match already closed; no additional rewards were issued.",
         }), 200
 
-    users.update_one(
-        {"_id": user_id, "honour_score": {"$exists": False}},
-        {"$set": {"honour_score": 100}},
+    honour_before, honour_score, actual_delta = record_honour_transaction(
+        user_id=user_id,
+        session_id=session_id,
+        points_delta=-MATCH_ABANDON_HONOUR_PENALTY,
+        reason="match_abandoned",
+        is_automatic=True
     )
-    honour_before_record = users.find_one({"_id": user_id}, {"honour_score": 1}) or {}
-    honour_before = max(0, min(MAX_HONOUR_SCORE, int(honour_before_record.get("honour_score", 100))))
-    users.update_one(
-        {"_id": user_id},
-        {"$inc": {"honour_score": -MATCH_ABANDON_HONOUR_PENALTY}},
-    )
-    player = users.find_one({"_id": user_id}, {"name": 1, "email": 1, "honour_score": 1}) or {}
-    honour_score = max(0, int(player.get("honour_score", 100 - MATCH_ABANDON_HONOUR_PENALTY)))
-    if player.get("honour_score", 0) < 0:
-        users.update_one({"_id": user_id}, {"$set": {"honour_score": 0}})
+    player = users.find_one({"_id": user_id}, {"name": 1, "email": 1}) or {}
 
     security_events.insert_one({
         "type": "match_abandoned",
@@ -1768,101 +2081,54 @@ def extract_features(
         duration = None
 
     # =====================================================
-    # ACCURACY
+    # COMBAT ACTIVITY CHECK & STATISTICAL AGGREGATION
     # =====================================================
+    has_combat_activity = (shots > 0 or enemy_hit_telemetry_seen or kills > 0 or deaths > 0)
 
-    if shots > 0 and enemy_hit_telemetry_seen:
-
-        accuracy = enemy_hits / shots
-
+    # ACCURACY
+    if shots > 0:
+        accuracy = max(0.0, min(1.0, enemy_hits / shots))
+    elif enemy_hit_telemetry_seen:
+        accuracy = 1.0
+    elif has_combat_activity:
+        accuracy = 0.0
     else:
-
         accuracy = None
 
-    if accuracy is not None:
-
-        accuracy = max(
-            0.0,
-            min(accuracy, 1.0)
-        )
-
-    # =====================================================
-    # HEADSHOT RATIO (temporarily disabled until telemetry is available)
-    # =====================================================
-    # if enemy_hits > 0:
-    #     headshot_ratio = headshots / enemy_hits
-    # else:
-    #     headshot_ratio = None
-    # if headshot_ratio is not None:
-    #     headshot_ratio = max(0.0, min(headshot_ratio, 1.0))
-
-    # =====================================================
     # FIRE RATE
-    # =====================================================
-
-    fire_rate = (
-        shots / duration
-        if shots > 0 and duration is not None and duration > 0
-        else None
-    )
-
-    # =====================================================
-    # MOVEMENT SPEED
-    # =====================================================
-
-    if movement_speeds:
-
-        movement_speed = (
-            sum(movement_speeds)
-            /
-            len(movement_speeds)
-        )
-
+    if shots > 0 and duration is not None and duration > 0:
+        fire_rate = shots / duration
+    elif duration is not None and duration > 0 and has_combat_activity:
+        fire_rate = 0.0
     else:
+        fire_rate = None
 
+    # MOVEMENT SPEED
+    if movement_speeds:
+        movement_speed = sum(movement_speeds) / len(movement_speeds)
+    elif duration is not None and duration > 0:
+        movement_speed = 0.0
+    else:
         movement_speed = None
 
-    # =====================================================
     # AIM SMOOTHNESS
-    # =====================================================
-
     if aim_changes:
-
-        average_aim_change = (
-            sum(aim_changes)
-            /
-            len(aim_changes)
-        )
-
-        aim_smoothness = (
-            1.0
-            /
-            (
-                1.0
-                +
-                average_aim_change
-            )
-        )
-
+        average_aim_change = sum(aim_changes) / len(aim_changes)
+        aim_smoothness = 1.0 / (1.0 + average_aim_change)
+    elif duration is not None and duration > 0:
+        aim_smoothness = 1.0
     else:
-
         aim_smoothness = None
 
-    # =====================================================
-    # KDR
-    # =====================================================
-
+    # KDR (Documented Zero-Combat & Zero-Death Standard Convention)
     if deaths > 0:
-
         kdr = kills / deaths
-
+    elif kills > 0:
+        kdr = float(kills)
+    elif has_combat_activity:
+        kdr = 0.0
     else:
-
-        kdr = (
-            float(kills)
-            if kills > 0
-            else None
-        )
+        kdr = None
 
     # =====================================================
     # REACTION TIME
@@ -2302,6 +2568,124 @@ def resolve_support_ticket(ticket_id):
     ticket = support_tickets.find_one({"_id": ticket_oid}, {"user_id": 1}) or {}
     publish_live_update(ticket.get("user_id"), None, "support_resolved", force=True)
     return jsonify({"message": "Support ticket marked resolved."})
+
+
+def enrich_gameplay_alert(alert, auth_analysis, player_names, player_profiles, player_statuses):
+    """
+    Produces consistent 3-section alert documentation:
+    Section A: Model Predictions
+    Section B: Final Security Assessment
+    Section C: Analysis History (Superseded Tracking)
+    """
+    user_id_str = str(alert.get("user_id", ""))
+    sess_id = alert.get("session_id")
+    is_demo_alert = bool(
+        alert.get("demo")
+        or alert.get("type") == "auto_ban"
+        or alert.get("hacker_profile")
+        or player_profiles.get(user_id_str)
+    )
+
+    # Check if superseded by completed match analysis
+    is_superseded = False
+    superseded_reason = None
+    if auth_analysis:
+        alert_created = alert.get("created_at")
+        auth_created = auth_analysis.get("created_at")
+        if auth_created and alert_created and auth_created >= alert_created:
+            is_superseded = True
+            superseded_reason = "Finalized match analysis completed. Supersedes mid-match real-time telemetry sample."
+        elif auth_analysis.get("status") == "success" and not alert.get("demo"):
+            is_superseded = True
+            superseded_reason = "Full match completed within normal human boundaries; transient real-time spike cleared."
+
+    # Raw score determination
+    if is_demo_alert and alert.get("risk_score") is not None:
+        raw_score = hacker_enforcement_score(
+            alert.get("hacker_profile") or player_profiles.get(user_id_str)
+        )
+    elif is_superseded and auth_analysis and auth_analysis.get("risk_score") is not None:
+        raw_score = auth_analysis.get("risk_score")
+    else:
+        raw_score = alert.get("risk_score")
+
+    clamped_score = clamp_risk_score(raw_score)
+    classification = classify_risk_score(clamped_score)
+
+    target_doc = auth_analysis if (is_superseded and auth_analysis) else alert
+    res_doc = target_doc.get("result") or {}
+
+    rf_prediction = res_doc.get("random_forest") or target_doc.get("random_forest") or "normal"
+    rf_prob = res_doc.get("random_forest_probability") or target_doc.get("random_forest_probability")
+    iso_prediction = res_doc.get("isolation_forest") or target_doc.get("isolation_forest") or "anomaly"
+    iso_score = res_doc.get("isolation_forest_anomaly_score") or target_doc.get("isolation_forest_anomaly_score")
+    model_version = target_doc.get("model_version", "v1.2-ensemble-rf-iso")
+    analysis_id = str(target_doc.get("_id", "")) if target_doc.get("_id") else (str(alert.get("_id", "")) if alert.get("_id") else None)
+    analysis_timestamp = target_doc.get("created_at").isoformat() if hasattr(target_doc.get("created_at"), "isoformat") else (alert.get("created_at").isoformat() if hasattr(alert.get("created_at"), "isoformat") else None)
+
+    # Review status & category alignment
+    rev_status = alert.get("review_status", "pending")
+    if alert.get("type") == "auto_ban" or player_statuses.get(user_id_str) == "banned":
+        rev_status = "permanently_banned"
+    elif is_superseded and clamped_score is not None and clamped_score < 50.0:
+        rev_status = "cleared"
+
+    human_eval = res_doc.get("human_evaluation") or {}
+    skill_assessment = human_eval.get("explanation") or alert.get("alert_reason") or "Gameplay features within normal human variation"
+    if is_superseded and clamped_score is not None and clamped_score < 50.0:
+        explanation = "Full match completed within normal human boundaries; transient real-time spike cleared."
+    else:
+        explanation = alert.get("alert_reason") or skill_assessment
+
+    return {
+        "player_id": user_id_str,
+        "player_name": player_names.get(user_id_str, ""),
+        "session_id": sess_id,
+        "risk_score": clamped_score,
+        "risk_category": classification["category"],
+        "recommended_action": classification["action"],
+        "severity": classification["severity"] if rev_status != "permanently_banned" else "critical",
+        "meaning": classification["meaning"],
+
+        # Section A: Model Predictions
+        "random_forest": rf_prediction,
+        "random_forest_probability": rf_prob,
+        "isolation_forest": iso_prediction,
+        "isolation_forest_anomaly_score": iso_score,
+        "model_version": model_version,
+        "analysis_id": analysis_id,
+        "analysis_timestamp": analysis_timestamp,
+
+        # Section B: Final Security Assessment
+        "review_category": classification["category"],
+        "review_status": rev_status,
+        "skill_assessment": skill_assessment,
+        "alert_reason": explanation,
+        "enforcement_action": alert.get("enforcement_action") or "none",
+        "enforcement_state": alert.get("enforcement_state") or ("monitoring" if (clamped_score or 0) < 75 else "review"),
+        "created_at": alert["created_at"].isoformat() if hasattr(alert.get("created_at"), "isoformat") else None,
+        "permanent_ban": bool(alert.get("type") == "auto_ban" or player_statuses.get(user_id_str) == "banned"),
+        "banned_at": alert["banned_at"].isoformat() if hasattr(alert.get("banned_at"), "isoformat") else None,
+        "demo": is_demo_alert,
+        "account_label": alert.get("account_label"),
+        "hacker_profile": alert.get("hacker_profile") or player_profiles.get(user_id_str),
+        "top_reasons": alert.get("reasons", []),
+        "detection_reason": (
+            hacker_detection_reason(alert.get("hacker_profile") or player_profiles.get(user_id_str))
+            if (alert.get("hacker_profile") or player_profiles.get(user_id_str))
+            else (alert.get("reasons") or [None])[0]
+        ),
+
+        # Section C: Analysis History (Superseded Tracking)
+        "is_superseded": is_superseded,
+        "superseded_by_analysis_id": str(auth_analysis.get("_id", "")) if auth_analysis and auth_analysis.get("_id") else None,
+        "superseded_reason": superseded_reason,
+        "previous_risk_score": clamp_risk_score(alert.get("model_risk_score") or alert.get("risk_score") or (alert.get("result") or {}).get("risk_score")),
+        "previous_random_forest": alert.get("random_forest") or (alert.get("result") or {}).get("random_forest"),
+        "previous_random_forest_probability": (alert.get("result") or {}).get("random_forest_probability"),
+        "previous_isolation_forest": alert.get("isolation_forest") or (alert.get("result") or {}).get("isolation_forest"),
+        "previous_created_at": alert["created_at"].isoformat() if hasattr(alert.get("created_at"), "isoformat") else None,
+    }
 
 @game_bp.get("/admin/overview")
 def admin_overview():
@@ -2773,98 +3157,13 @@ def admin_overview():
         ],
 
         "gameplay_alerts": [
-            {
-                "player_id": str(alert.get("user_id", "")),
-                "player_name": player_names.get(
-                    str(alert.get("user_id", "")),
-                    ""
-                ),
-                "session_id": alert.get("session_id"),
-                "risk_score": (
-                    hacker_enforcement_score(
-                        alert.get("hacker_profile")
-                        or player_profiles.get(str(alert.get("user_id", "")))
-                        or player_names.get(str(alert.get("user_id", ""))),
-                    )
-                    if (
-                        (
-                            alert.get("hacker_profile")
-                            or player_profiles.get(str(alert.get("user_id", "")))
-                            or player_names.get(str(alert.get("user_id", "")))
-                        )
-                        and alert.get("risk_score") is not None
-                    )
-                    else alert.get("risk_score")
-                ),
-                "model_risk_score": (alert.get("result") or {}).get(
-                    "model_risk_score",
-                    alert.get("risk_score"),
-                ),
-                "random_forest": alert.get(
-                    "random_forest",
-                    (alert.get("result") or {}).get("random_forest")
-                ),
-                "isolation_forest": alert.get(
-                    "isolation_forest",
-                    (alert.get("result") or {}).get("isolation_forest")
-                ),
-                "random_forest_probability": (alert.get("result") or {}).get("random_forest_probability"),
-                "isolation_forest_anomaly_score": (alert.get("result") or {}).get("isolation_forest_anomaly_score"),
-                "severity": (
-                    "critical"
-                    if alert.get("type") == "auto_ban"
-                    else alert.get("severity", "medium")
-                ),
-                "created_at": (
-                    alert["created_at"].isoformat()
-                    if alert.get("created_at")
-                    else None
-                ),
-                "review_status": (
-                    "permanently_banned"
-                    if (
-                        alert.get("type") == "auto_ban"
-                        or player_statuses.get(str(alert.get("user_id", ""))) == "banned"
-                    )
-                    else alert.get("review_status", "pending")
-                ),
-                "demo": bool(
-                    alert.get("demo")
-                    or alert.get("type") == "auto_ban"
-                    or alert.get("hacker_profile")
-                    or player_profiles.get(str(alert.get("user_id", "")))
-                ),
-                "account_label": alert.get("account_label"),
-                "alert_reason": alert.get("alert_reason"),
-                "enforcement_action": alert.get("enforcement_action"),
-                "enforcement_state": alert.get("enforcement_state"),
-                "hacker_profile": alert.get("hacker_profile")
-                or player_profiles.get(str(alert.get("user_id", ""))),
-                "top_reasons": alert.get("reasons", []),
-                "detection_reason": (
-                    hacker_detection_reason(
-                        alert.get("hacker_profile")
-                        or player_profiles.get(str(alert.get("user_id", "")))
-                    )
-                    if (
-                        alert.get("hacker_profile")
-                        or player_profiles.get(str(alert.get("user_id", "")))
-                    )
-                    else (alert.get("reasons") or [None])[0]
-                ),
-                "permanent_ban": bool(
-                    alert.get("type") == "auto_ban"
-                    or (
-                        player_profiles.get(str(alert.get("user_id", "")))
-                        and player_statuses.get(str(alert.get("user_id", ""))) == "banned"
-                    )
-                ),
-                "banned_at": (
-                    alert["banned_at"].isoformat()
-                    if alert.get("banned_at")
-                    else None
-                )
-            }
+            enrich_gameplay_alert(
+                alert,
+                latest_analysis_by_session.get(alert.get("session_id")),
+                player_names,
+                player_profiles,
+                player_statuses
+            )
             for alert in gameplay_alerts
         ],
 
@@ -2918,6 +3217,13 @@ def admin_overview():
             "total_players": len(players),
             "active_sessions": game_sessions.count_documents({"status": "active"}),
             "matches_analyzed": len(all_game_sessions),
+            "high_severity_events": sum(1 for event in events if event.get("severity") in {"high", "critical"}),
+        },
+        "stats": {
+            "total_players": len(players),
+            "active_sessions": game_sessions.count_documents({"status": "active"}),
+            "matches_analyzed": len(all_game_sessions),
+            "security_events": len(events),
             "high_severity_events": sum(1 for event in events if event.get("severity") in {"high", "critical"}),
         },
         "demo_environment": os.getenv("APP_ENV", "").strip().lower() in {"development", "dev", "local"},
@@ -3240,22 +3546,110 @@ def list_admin_players():
     player_records = list(users.find(query, {"password_hash": 0, "mfa_secret": 0})
                           .sort("created_at", -1).skip(offset).limit(limit))
 
-    return jsonify({
-        "players": [{
+    formatted_players = []
+    for player in player_records:
+        pid = player["_id"]
+        # Authoritative latest risk score and category from game_events
+        latest_ana = game_events.find_one(
+            {"user_id": pid, "analysis_type": "game_session", "status": "success"},
+            sort=[("created_at", -1)]
+        ) or {}
+        raw_score = latest_ana.get("risk_score")
+        if raw_score is None:
+            raw_score = player.get("risk_score")
+
+        clamped_score = clamp_risk_score(raw_score)
+        classification = classify_risk_score(clamped_score) if clamped_score is not None else {
+            "category": "Normal", "action": "No security action required", "severity": "low"
+        }
+        risk_category = classification["category"]
+
+        # Fetch last 5 matches for this player
+        recent_sessions = list(game_sessions.find({"user_id": pid, "status": "completed"}).sort([("_id", -1)]).limit(5))
+        recent_matches = []
+        for s in recent_sessions:
+            sid = s.get("session_id", str(s["_id"]))
+            s_ana = game_events.find_one({"session_id": sid, "analysis_type": "game_session"}) or {}
+            s_risk = s.get("risk_score") if s.get("risk_score") is not None else s_ana.get("risk_score")
+            s_clamped = clamp_risk_score(s_risk)
+            s_cat = classify_risk_score(s_clamped)["category"] if s_clamped is not None else "Normal"
+
+            s_kills = game_telemetry.count_documents({"user_id": pid, "session_id": sid, "event_type": "enemy_killed"})
+            s_deaths = game_telemetry.count_documents({"user_id": pid, "session_id": sid, "event_type": "player_death"})
+            raw_k = s_ana.get("raw_features", {}).get("kills", 0)
+            raw_d = s_ana.get("raw_features", {}).get("deaths", 0)
+            final_k = s_kills if s_kills > 0 else raw_k
+            final_d = s_deaths if s_deaths > 0 else raw_d
+            s_acc = s.get("accuracy")
+            if s_acc is None:
+                s_acc = s_ana.get("raw_features", {}).get("accuracy")
+
+            dur_s = None
+            if s.get("ended_at") and s.get("started_at"):
+                try:
+                    dur_s = int((s["ended_at"] - s["started_at"]).total_seconds())
+                except Exception:
+                    pass
+
+            recent_matches.append({
+                "session_id": sid,
+                "short_id": sid[:8] if len(sid) >= 8 else sid,
+                "game": (s.get("game") or "CyberStrike 3D").replace("_", " "),
+                "date": _admin_date(s.get("ended_at") or s.get("started_at") or s.get("created_at")),
+                "duration_seconds": dur_s,
+                "kills": final_k,
+                "deaths": final_d,
+                "kdr": round(final_k / max(1, final_d), 2),
+                "accuracy": round(float(s_acc or 0) * 100, 1) if s_acc is not None else 0.0,
+                "risk_score": s_clamped,
+                "risk_category": s_cat,
+                "result": s.get("winner", "Victory" if final_k >= 25 else "Completed")
+            })
+
+        acc_status = player.get("account_status") or ("suspended" if player.get("revoked") else "active")
+
+        # Calculate Account Security Score (0 - 100)
+        sec_points = 0
+        if player.get("mfa_enabled"):
+            sec_points += 30
+        if player.get("email_verified"):
+            sec_points += 25
+        if acc_status == "active":
+            sec_points += 25
+        h_score = player.get("honour_score", 100)
+        sec_points += int(min(20, round(h_score * 0.2)))
+        if clamped_score is not None and clamped_score >= 80:
+            sec_points = max(0, sec_points - 30)
+        elif clamped_score is not None and clamped_score >= 50:
+            sec_points = max(0, sec_points - 15)
+
+        sec_level = "Excellent" if sec_points >= 85 else ("Good" if sec_points >= 65 else ("Fair" if sec_points >= 40 else "At Risk"))
+
+        formatted_players.append({
             "id": str(player["_id"]),
             "name": player.get("name", "Player"),
             "email": player.get("email", ""),
             "role": player.get("role", "player"),
             "mfa_enabled": player.get("mfa_enabled", False),
+            "email_verified": player.get("email_verified", False),
+            "honour_score": player.get("honour_score", 100),
+            "account_security_score": sec_points,
+            "account_security_level": sec_level,
             "account_type": player.get("account_type"),
-            "matches_played": game_sessions.count_documents({"user_id": player["_id"]}),
-            "risk_score": player.get("risk_score"),
+            "hacker_profile": player.get("hacker_profile"),
+            "matches_played": game_sessions.count_documents({"user_id": pid, "status": "completed"}),
+            "risk_score": clamped_score,
+            "risk_category": risk_category,
+            "recent_matches": recent_matches,
             "last_login_ip": player.get("last_login_ip", "No login recorded"),
             "last_login": _admin_date(player.get("last_login")),
             "created_at": _admin_date(player.get("created_at")),
-            "account_status": player.get("account_status") or ("suspended" if player.get("revoked") else "active"),
+            "account_status": acc_status,
             "demo": player.get("demo", False),
-        } for player in player_records],
+        })
+
+    return jsonify({
+        "players": formatted_players,
         "total": users.count_documents(query),
     })
 

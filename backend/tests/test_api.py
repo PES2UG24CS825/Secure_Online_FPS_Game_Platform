@@ -59,7 +59,7 @@ class SecureFPSAPITests(unittest.TestCase):
         self.assertIsNotNone(admin)
 
         client = self.client
-        resp = client.post("/api/auth/login", json={"email": "admin1@gmail.com", "password": "Admin@12345"})
+        resp = client.post("/api/auth/login", json={"email": "admin1@gmail.com", "password": "Admin@12345", "takeover": True})
         self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
         code = __import__("pyotp").TOTP(admin["mfa_secret"]).now()
         verify = client.post("/api/auth/verify-mfa", json={"code": code})
@@ -86,7 +86,7 @@ class SecureFPSAPITests(unittest.TestCase):
         admin = users.find_one({"email": "admin1@gmail.com"})
         self.assertIsNotNone(admin)
 
-        resp = self.client.post("/api/auth/login", json={"email": "admin1@gmail.com", "password": "Admin@12345"})
+        resp = self.client.post("/api/auth/login", json={"email": "admin1@gmail.com", "password": "Admin@12345", "takeover": True})
         self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
         code = __import__("pyotp").TOTP(admin["mfa_secret"]).now()
         verify = self.client.post("/api/auth/verify-mfa", json={"code": code})

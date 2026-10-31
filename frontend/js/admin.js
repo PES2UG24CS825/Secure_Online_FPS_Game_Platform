@@ -67,7 +67,8 @@ async function loadPlayers() {
   try {
     const data = await api(`/admin/players?${params.toString()}`);
     const players = Array.isArray(data.players) ? data.players : [];
-    body.innerHTML = players.map((player) => {
+    window.loadedAdminPlayers = players;
+    body.innerHTML = players.map((player, index) => {
       const isHacker = ["aimbot", "wallhack", "speedhack", "silent_aim"].includes(player.hacker_profile);
       const isNormalDemo = player.account_type === "demo_normal";
       const suspended = ["suspended", "banned"].includes(player.account_status);
@@ -84,8 +85,33 @@ async function loadPlayers() {
       const marker = isHacker
         ? `<small class="hacker-player-label">HACKER DEMO · ${escapeHtml(player.hacker_profile)}</small>`
         : isNormalDemo ? '<small>NORMAL DEMO PLAYER</small>' : (player.demo ? '<small>DEMO TEST ACCOUNT</small>' : "");
-      return `<tr class="${isHacker ? "hacker-player-row" : ""}"><td><strong>${escapeHtml(player.name || "Player")}</strong>${marker}<small>${escapeHtml(player.email || "")}</small></td><td>${escapeHtml(player.role || "player")}</td><td><span class="badge ${player.mfa_enabled ? "good" : "warn"}">${player.mfa_enabled ? "MFA enabled" : "Disabled"}</span>${status}</td><td>${escapeHtml(player.matches_played ?? 0)}</td><td>${escapeHtml(displayRiskScore(player.risk_score))}</td><td>${escapeHtml(player.last_login_ip || "No login recorded")}<small>${escapeHtml(displayDate(player.last_login))}</small></td><td>${escapeHtml(displayDate(player.created_at))}</td><td>${actions}</td></tr>`;
+
+      const secScore = player.account_security_score ?? 100;
+      const secLevel = player.account_security_level || (secScore >= 80 ? "Excellent" : "Protected");
+      const secBadgeClass = secScore >= 80 ? "good" : secScore >= 50 ? "warn" : "bad";
+      const secBadge = `<span class="account-sec-badge ${secBadgeClass}" title="Account Security: ${secScore}/100 | MFA: ${player.mfa_enabled ? 'Active' : 'Off'} | Email: ${player.email_verified ? 'Verified' : 'Pending'} | Honour: ${player.honour_score ?? 100}/100">🛡️ ${secScore}/100 · ${escapeHtml(secLevel)}</span>`;
+
+      const matchesCount = player.matches_played ?? 0;
+      const matchesCell = `<div class="player-matches-trigger" data-player-index="${index}" title="Hover to inspect last 5 match analyses">
+        <strong class="matches-count-label">${escapeHtml(matchesCount)}</strong>
+        <span class="hover-hint-pill">${matchesCount > 0 ? "Last 5 ▾" : "0"}</span>
+      </div>`;
+
+      const riskCat = player.risk_category || (player.risk_score != null && player.risk_score < 40 ? "Normal" : "Monitoring");
+      const riskPill = player.risk_score != null ? `<span class="badge ${riskCat === 'Normal' ? 'good' : riskCat === 'Monitoring' ? 'warn' : 'bad'}">${escapeHtml(riskCat)}</span>` : "";
+
+      return `<tr class="${isHacker ? "hacker-player-row" : ""}">
+        <td><strong>${escapeHtml(player.name || "Player")}</strong>${marker}<small>${escapeHtml(player.email || "")}</small></td>
+        <td>${escapeHtml(player.role || "player")}</td>
+        <td>${secBadge}${status ? `<br>${status}` : ""}</td>
+        <td>${matchesCell}</td>
+        <td>${escapeHtml(displayRiskScore(player.risk_score))} ${riskPill}</td>
+        <td>${escapeHtml(player.last_login_ip || "No login recorded")}<small>${escapeHtml(displayDate(player.last_login))}</small></td>
+        <td>${escapeHtml(displayDate(player.created_at))}</td>
+        <td>${actions}</td>
+      </tr>`;
     }).join("") || '<tr><td colspan="8" class="empty-state">No genuine player accounts found yet.</td></tr>';
+    setupPlayerMatchesHover();
     const total = Number(data.total ?? data.total_players ?? data.count ?? players.length);
     const pageCount = Math.max(1, Math.ceil(total / playersPageSize));
     playersPage = Math.min(playersPage, pageCount);
@@ -99,6 +125,98 @@ async function loadPlayers() {
     body.setAttribute("aria-busy", "false");
   }
 }
+
+function setupPlayerMatchesHover() {
+  const table = document.getElementById("players");
+  const popover = document.getElementById("playerMatchesHoverCard");
+  if (!table || !popover || table.dataset.hoverBound) return;
+  table.dataset.hoverBound = "true";
+
+  let hideTimer = null;
+
+  table.addEventListener("mouseover", (e) => {
+    const trigger = e.target.closest(".player-matches-trigger");
+    if (!trigger) return;
+    clearTimeout(hideTimer);
+
+    const index = parseInt(trigger.dataset.playerIndex, 10);
+    const player = window.loadedAdminPlayers?.[index];
+    if (!player) return;
+
+    const matches = Array.isArray(player.recent_matches) ? player.recent_matches : [];
+    let rowsHtml = "";
+    if (matches.length > 0) {
+      rowsHtml = matches.map((m) => {
+        const cat = (m.risk_category || "Normal").toLowerCase();
+        const catClass = cat === "normal" ? "normal" : cat === "monitoring" ? "monitoring" : "suspicious";
+        const riskDisplay = m.risk_score != null ? `${m.risk_score}/100` : "Clean";
+        const dur = m.duration_seconds ? `${m.duration_seconds}s` : "-";
+        return `<tr>
+          <td><strong>${escapeHtml(m.short_id || m.session_id?.slice(0, 8) || "Match")}</strong><br><small style="color:#94a3b8;">${escapeHtml(m.game || "CS 3D")}</small></td>
+          <td><strong>${escapeHtml(m.kdr != null ? m.kdr : (m.kills + "/" + m.deaths))}</strong><br><small style="color:#94a3b8;">${m.kills}k / ${m.deaths}d</small></td>
+          <td>${escapeHtml(m.accuracy != null ? m.accuracy + "%" : "-")}</td>
+          <td>${dur}</td>
+          <td>${escapeHtml(riskDisplay)}</td>
+          <td><span class="badge-pill ${catClass}">${escapeHtml(m.risk_category || "Normal")}</span></td>
+        </tr>`;
+      }).join("");
+    } else {
+      rowsHtml = `<tr><td colspan="6" style="text-align:center; padding:12px; color:#94a3b8;">No match telemetry records found for this player.</td></tr>`;
+    }
+
+    popover.innerHTML = `
+      <div class="hover-card-head">
+        <div>
+          <strong>🎮 Last 5 Match Analyses · ${escapeHtml(player.name || "Player")}</strong>
+          <small style="display:block; color:#a78bfa; font-size:10px;">Authoritative ML Ensemble Snapshot (Real-time)</small>
+        </div>
+        <span class="badge ${player.risk_category === 'Normal' ? 'good' : 'warn'}">${escapeHtml(player.risk_category || 'Normal')}</span>
+      </div>
+      <table class="hover-matches-table">
+        <thead>
+          <tr><th>Session</th><th>K/D</th><th>Acc</th><th>Dur</th><th>Risk</th><th>Verdict</th></tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+      <div class="hover-card-foot">
+        <span>🛡️ Security: <strong>${player.account_security_score ?? 100}/100</strong></span>
+        <span>🎖️ Honour: <strong>${player.honour_score ?? 100}/100</strong></span>
+        <span>🔑 MFA: <strong>${player.mfa_enabled ? 'Active' : 'Disabled'}</strong></span>
+      </div>
+    `;
+
+    const rect = trigger.getBoundingClientRect();
+    const popWidth = 460;
+    let left = rect.left;
+    if (left + popWidth > window.innerWidth - 20) {
+      left = Math.max(10, window.innerWidth - popWidth - 20);
+    }
+    let top = rect.bottom + 6;
+    if (rect.bottom + 260 > window.innerHeight) {
+      top = Math.max(10, rect.top - 240);
+    }
+
+    popover.style.left = `${left}px`;
+    popover.style.top = `${top}px`;
+    popover.hidden = false;
+    requestAnimationFrame(() => popover.classList.add("visible"));
+  });
+
+  table.addEventListener("mouseout", (e) => {
+    const trigger = e.target.closest(".player-matches-trigger");
+    if (!trigger) return;
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      popover.classList.remove("visible");
+      setTimeout(() => {
+        if (!popover.classList.contains("visible")) popover.hidden = true;
+      }, 160);
+    }, 150);
+  });
+}
+
 function renderLoginAudit(rows) {
   const body = document.getElementById("recentLogins");
   const search = (document.getElementById("loginSearch")?.value || "").toLowerCase();
@@ -181,7 +299,8 @@ function renderGameplayAlerts(data) {
         );
       });
   }
-  const pendingAlerts = uniqueAlerts.filter((alert) => alert.review_status === "pending");
+  // Cleared and superseded alerts are NOT counted as pending
+  const pendingAlerts = uniqueAlerts.filter((alert) => alert.review_status === "pending" && !alert.is_superseded);
   const incompleteAnalyses = analyses.filter((analysis) => analysis.status !== "success" && analysis.session_id);
   window.adminIncompleteSessions = [...new Set(incompleteAnalyses.map((analysis) => analysis.session_id))];
   const retryAllButton = document.getElementById("retryAnalysesBtn");
@@ -190,19 +309,22 @@ function renderGameplayAlerts(data) {
     : "There are no incomplete analyses right now";
 
   if (pendingAlerts.length) {
-    const hasHigh = pendingAlerts.some((alert) => alert.severity === "high");
+    const hasHigh = pendingAlerts.some((alert) => alert.severity === "high" || alert.severity === "critical");
     banner.className = `gameplay-alert-banner ${hasHigh ? "high" : "medium"}`;
     banner.innerHTML = `<strong>GAMEPLAY ANOMALY DETECTED</strong><span>A potentially suspicious gameplay session requires admin review. ${pendingAlerts.length} pending alert${pendingAlerts.length === 1 ? "" : "s"}.</span>`;
   } else if (uniqueAlerts.length) {
     banner.className = "gameplay-alert-banner reviewed";
-    banner.textContent = "No pending gameplay alerts. Reviewed alerts remain listed below.";
+    banner.textContent = "No pending gameplay alerts. All reviewed and superseded alerts remain documented below.";
   } else {
     banner.className = "gameplay-alert-banner clear";
     banner.textContent = "No suspicious gameplay alerts at this time.";
   }
 
+  const missingDetail = incompleteAnalyses[0]?.missing_features?.length === 5
+    ? "no gameplay telemetry recorded in session (abandoned/empty session)"
+    : (incompleteAnalyses[0]?.missing_features?.length ? `missing ${incompleteAnalyses[0].missing_features.join(", ")}` : "the model did not return a result");
   incompleteNotice.innerHTML = incompleteAnalyses.length
-    ? `<div class="gameplay-incomplete-notice"><span>Analysis incomplete — ${escapeHtml(incompleteAnalyses[0].error || (incompleteAnalyses[0].missing_features?.length ? `missing ${incompleteAnalyses[0].missing_features.join(", ")}` : "the model did not return a result"))}. ${incompleteAnalyses.length} session${incompleteAnalyses.length === 1 ? "" : "s"} ${incompleteAnalyses.length === 1 ? "needs" : "need"} attention. Use Retry analyses above.</span></div>`
+    ? `<div class="gameplay-incomplete-notice"><span>Analysis incomplete — ${escapeHtml(incompleteAnalyses[0].error || missingDetail)}. ${incompleteAnalyses.length} session${incompleteAnalyses.length === 1 ? "" : "s"} ${incompleteAnalyses.length === 1 ? "needs" : "need"} attention. Use Retry analyses above.</span></div>`
     : "";
 
   alertList.innerHTML = uniqueAlerts.map((alert) => {
@@ -217,26 +339,66 @@ function renderGameplayAlerts(data) {
       "hacker silent aim": "silent_aim"
     }[(alert.player_name || "").toLowerCase()]);
     const permanentlyBanned = alert.permanent_ban === true || hackerAlert;
-    const severity = permanentlyBanned ? "critical" : (["high", "medium"].includes(alert.severity) ? alert.severity : "unknown");
+    const severity = permanentlyBanned ? "critical" : (["critical", "high", "medium", "low"].includes(alert.severity) ? alert.severity : "unknown");
     const player = alert.player_name || alert.player_id || "N/A";
+    const categorySlug = String(alert.risk_category || "Normal").toLowerCase().replace(/\s+/g, "-");
+
+    const rfProbStr = alert.random_forest_probability != null ? `(${(alert.random_forest_probability * 100).toFixed(1)}% prob)` : "";
+    const isoScoreStr = alert.isolation_forest_anomaly_score != null ? `(score: ${Number(alert.isolation_forest_anomaly_score).toFixed(3)})` : "";
+
     return `<article class="gameplay-alert-card ${severity}">
-      <h3>${permanentlyBanned ? "CHEATER AUTO-BANNED" : alert.demo ? "REAL-TIME CHEATING ALERT" : "Potentially suspicious gameplay session requires admin review"}</h3>
-      ${hackerAlert || alert.demo ? `<p>${escapeHtml(player)} — ${escapeHtml(alert.detection_reason || (resolvedProfile ? hackerReason(resolvedProfile) : "suspicious gameplay detected."))}</p>` : ""}
-      <div class="gameplay-alert-fields">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+        <h3 style="margin:0;">${permanentlyBanned ? "CHEATER AUTO-BANNED" : alert.is_superseded ? "REAL-TIME ALERT (SUPERSEDED)" : alert.demo ? "REAL-TIME CHEATING ALERT" : "POTENTIALLY SUSPICIOUS GAMEPLAY SESSION"}</h3>
+        <span class="risk-band-badge ${categorySlug}">${escapeHtml(alert.risk_category || "Normal")} (${displayRiskScore(alert.risk_score)}/100)</span>
+      </div>
+
+      <div class="gameplay-alert-fields" style="margin-bottom:8px;">
         <span><strong>Player:</strong> ${escapeHtml(player)}</span>
         <span><strong>Session:</strong> ${escapeHtml(alert.session_id || "N/A")}</span>
-        <span><strong>Risk Score:</strong> ${escapeHtml(displayRiskScore(alert.risk_score))}</span>
         ${permanentlyBanned ? `<span class="permanent-ban-badge">PERMANENTLY BANNED</span>` : ""}
         ${resolvedProfile ? `<span><strong>Profile:</strong> ${escapeHtml(resolvedProfile)}</span>` : ""}
-        ${(alert.detection_reason || resolvedProfile) ? `<span><strong>Why detected:</strong> ${escapeHtml(alert.detection_reason || hackerReason(resolvedProfile))}</span>` : ""}
-        <span><strong>Random Forest:</strong> ${escapeHtml(alert.random_forest || "Unavailable")}</span>
-        <span><strong>Isolation Forest:</strong> ${escapeHtml(alert.isolation_forest || "Unavailable")}</span>
-        ${permanentlyBanned && alert.top_reasons?.length ? `<span><strong>Top reasons:</strong> ${escapeHtml(alert.top_reasons.join("; "))}</span>` : ""}
+        <span><strong>Review Status:</strong> <span class="badge ${alert.review_status === "cleared" ? "good" : alert.review_status === "pending" ? "warn" : "gray"}">${escapeHtml(alert.review_status || "unknown")}</span></span>
         <span><strong>Severity:</strong> ${escapeHtml(severity)}</span>
-        <span><strong>Alert time:</strong> ${escapeHtml(displayDate(alert.created_at))}</span>
-        <span><strong>${permanentlyBanned ? "Ban time" : "Review status"}:</strong> ${escapeHtml(permanentlyBanned ? displayDate(alert.banned_at) : alert.review_status || "unknown")}</span>
       </div>
-      ${!hackerAlert && alert.review_status === "pending" && alert.session_id ? `<div class="gameplay-review-actions">
+
+      <!-- SECTION A: MODEL PREDICTIONS -->
+      <div class="alert-section model-predictions">
+        <h4>A. Machine Learning Model Predictions</h4>
+        <div class="alert-section-grid">
+          <span><strong>Random Forest:</strong> ${escapeHtml(alert.random_forest || "normal")} ${rfProbStr}</span>
+          <span><strong>Isolation Forest:</strong> ${escapeHtml(alert.isolation_forest || "anomaly")} ${isoScoreStr}</span>
+          <span><strong>Model Version:</strong> ${escapeHtml(alert.model_version || "v1.2-ensemble-rf-iso")}</span>
+          <span><strong>Feature Snapshot ID:</strong> ${escapeHtml(alert.analysis_id || "N/A")}</span>
+          <span><strong>Analysis Timestamp:</strong> ${escapeHtml(displayDate(alert.analysis_timestamp || alert.created_at))}</span>
+        </div>
+      </div>
+
+      <!-- SECTION B: FINAL SECURITY ASSESSMENT -->
+      <div class="alert-section security-assessment">
+        <h4>B. Final Security Assessment</h4>
+        <div class="alert-section-grid">
+          <span><strong>Operational Risk Score:</strong> ${displayRiskScore(alert.risk_score)} / 100</span>
+          <span><strong>Risk Category:</strong> <span class="risk-band-badge ${categorySlug}">${escapeHtml(alert.risk_category || "Normal")}</span></span>
+          <span><strong>Human Behaviour Assessment:</strong> ${escapeHtml(alert.skill_assessment || "Gameplay features within normal human variation")}</span>
+          <span><strong>Recommended Action:</strong> ${escapeHtml(alert.recommended_action || "Retain telemetry and observe")}</span>
+          <span style="grid-column: 1 / -1;"><strong>Decision Explanation:</strong> ${escapeHtml(alert.alert_reason || "Full match completed within normal human boundaries; transient real-time spike cleared.")}</span>
+        </div>
+      </div>
+
+      <!-- SECTION C: ANALYSIS HISTORY (if superseded or previous score tracked) -->
+      ${alert.is_superseded || alert.previous_risk_score !== undefined ? `
+      <div class="alert-section analysis-history">
+        <h4>C. Analysis History &amp; Superseded Predictions</h4>
+        <div class="alert-section-grid">
+          <span><strong>Status Note:</strong> <span class="badge warn">SUPERSEDED BY FINAL ANALYSIS</span></span>
+          <span><strong>Mid-Match Snapshot RF:</strong> ${escapeHtml(alert.previous_random_forest || "cheater")} ${alert.previous_random_forest_probability != null ? `(${(alert.previous_random_forest_probability * 100).toFixed(1)}% prob)` : ""}</span>
+          <span><strong>Mid-Match Snapshot Risk:</strong> ${displayRiskScore(alert.previous_risk_score || alert.risk_score)}</span>
+          <span><strong>Authoritative Final Risk:</strong> ${displayRiskScore(alert.risk_score)} (${escapeHtml(alert.risk_category || "Normal")})</span>
+          <span style="grid-column: 1 / -1;"><strong>Reason for Clearing:</strong> ${escapeHtml(alert.superseded_reason || "Full match telemetry completed within legitimate human limits.")}</span>
+        </div>
+      </div>` : ""}
+
+      ${!hackerAlert && alert.review_status === "pending" && !alert.is_superseded && alert.session_id ? `<div class="gameplay-review-actions">
         ${["approve", "warn", ...(window.adminRole === "moderator" ? [] : ["suspend", "ban"])].map((action) => {
           const descriptions = {
             approve: "Mark reviewed without changing the player account.",
@@ -476,6 +638,7 @@ function connectAdminLiveEvents() {
     clearTimeout(adminRefreshDebounce);
     adminRefreshDebounce = setTimeout(() => {
       loadAdmin(true);
+      loadPlayers();
       if (document.querySelector('[data-admin-view="support"].active')) loadSupportInbox();
     }, 250);
   });
@@ -1018,5 +1181,6 @@ loadAdmin();
 // Keep a slower fallback refresh in case the event stream is interrupted.
 adminRefreshTimer = setInterval(() => {
   loadAdmin();
+  loadPlayers();
   if (document.querySelector('[data-admin-view="support"].active')) loadSupportInbox();
-}, 15000);
+}, 5000);

@@ -44,6 +44,7 @@ security_events = db["security_events"]
 detections = security_events
 support_tickets = db["support_tickets"]
 reward_transactions = db["reward_transactions"]
+honour_history = db["honour_history"]
 
 
 def test_connection():

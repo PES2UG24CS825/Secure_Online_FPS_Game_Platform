@@ -1,3 +1,4 @@
+from services.risk_scoring import clamp_risk_score, classify_risk_score
 import base64
 import binascii
 from datetime import datetime, timezone, timedelta
@@ -17,6 +18,18 @@ from database.db import (
     reward_transactions,
 )
 
+ACHIEVEMENTS = [
+    {"id": "first_blood", "name": "First Blood", "desc": "Score your first enemy elimination", "reward_xp": 50, "reward_coins": 20},
+    {"id": "sharpshooter", "name": "Sharpshooter", "desc": "Achieve 50%+ weapon accuracy in a match", "reward_xp": 100, "reward_coins": 50},
+    {"id": "headshot_specialist", "name": "Headshot Specialist", "desc": "Land 5 headshot eliminations in a single match", "reward_xp": 150, "reward_coins": 75},
+    {"id": "match_winner", "name": "Match Winner", "desc": "Emerge victorious in a competitive combat match", "reward_xp": 100, "reward_coins": 50},
+    {"id": "tactical_survivor", "name": "Tactical Survivor", "desc": "Complete a full match with zero operator deaths", "reward_xp": 200, "reward_coins": 100},
+    {"id": "training_specialist", "name": "Training Specialist", "desc": "Score 10+ targets in the Target Practice course", "reward_xp": 75, "reward_coins": 30},
+    {"id": "multiplayer_champion", "name": "Multiplayer Champion", "desc": "Win a synchronized 3D multiplayer match", "reward_xp": 250, "reward_coins": 150},
+    {"id": "consistent_player", "name": "Consistent Player", "desc": "Maintain a 3-day daily login streak", "reward_xp": 150, "reward_coins": 60},
+    {"id": "honourable_operator", "name": "Honourable Operator", "desc": "Maintain a perfect 100 Honour Score across 3+ matches", "reward_xp": 200, "reward_coins": 100},
+]
+
 REWARD_STORE = {
     "guardian_badge": {"name": "Guardian badge", "description": "A shield badge for your player profile.", "price": 100, "icon": "⬡"},
     "marksman_badge": {"name": "Marksman badge", "description": "A reticle badge for your player profile.", "price": 180, "icon": "◎"},
@@ -32,18 +45,22 @@ def get_user_role():
     user_id = current_user()
     if not user_id:
         return None
-    user = users.find_one({"_id": ObjectId(user_id)})
-    # Accounts created before roles were persisted are player accounts.
-    return user.get("role", "player") if user else None
+    try:
+        user = users.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        user = None
+    if user:
+        return user.get("role") or session.get("user_role") or "player"
+    return session.get("user_role") or "player"
 
 @player_bp.before_request
 def check_player_access():
-    # Browsers send OPTIONS preflights before cross-origin JSON requests.
-    # Let Flask-CORS answer those without requiring a player session; the
-    # actual GET/POST/PUT requests still go through the role check below.
     if request.method == "OPTIONS":
         return None
-    if get_user_role() != "player":
+    if not current_user():
+        return jsonify({"message": "Authentication required."}), 401
+    role = get_user_role()
+    if role not in ("player", "demo_player"):
         return jsonify({"message": "Player access required."}), 403
 
 @player_bp.get("/profile")
@@ -125,12 +142,103 @@ def update_profile_customization():
         return jsonify({"message": "Player account not found."}), 404
     return jsonify({"message": "Profile appearance saved.", "profile_customization": customization})
 
+@player_bp.get("/stats")
+def get_player_stats():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+    user_oid = ObjectId(user_id)
+    player = users.find_one({"_id": user_oid}) or {}
+
+    completed_sessions = list(game_sessions.find({"user_id": user_oid, "status": "completed"}))
+    completed_legacy = list(matches.find({"user_id": user_oid}))
+
+    session_ids = [s.get("session_id") for s in completed_sessions if s.get("session_id")]
+    kills_telemetry = game_telemetry.count_documents({"user_id": user_oid, "session_id": {"$in": session_ids}, "event_type": "enemy_killed"}) if session_ids else 0
+    deaths_telemetry = game_telemetry.count_documents({"user_id": user_oid, "session_id": {"$in": session_ids}, "event_type": "player_death"}) if session_ids else 0
+
+    legacy_kills = sum(m.get("kills", 0) for m in completed_legacy)
+    legacy_deaths = sum(m.get("deaths", 0) for m in completed_legacy)
+
+    total_kills = kills_telemetry + legacy_kills
+    total_deaths = deaths_telemetry + legacy_deaths
+    kdr = round(total_kills / max(total_deaths, 1), 2)
+
+    total_matches = len(completed_sessions) + len(completed_legacy)
+    wins = sum(1 for s in completed_sessions if s.get("winner") in {"Operator", "player", player.get("name")}) + sum(1 for m in completed_legacy if m.get("result") in {"victory", "win"})
+    losses = max(0, total_matches - wins)
+
+    total_seconds = 0
+    for s in completed_sessions:
+        st = s.get("started_at")
+        en = s.get("ended_at")
+        if st and en:
+            try:
+                diff = int((en - st).total_seconds())
+                total_seconds += max(0, diff)
+            except Exception:
+                pass
+
+    rewards = player.get("rewards") or {}
+    coins = int(rewards.get("coins", 0))
+    xp = int(rewards.get("xp", 0))
+    level = 1 + int(xp // 100)
+    xp_progress = int(xp % 100)
+
+    latest_analysis = game_events.find_one(
+        {"user_id": user_oid, "analysis_type": "game_session", "status": "success"},
+        sort=[("created_at", -1)]
+    ) or {}
+    risk_score = latest_analysis.get("risk_score")
+    risk_category = latest_analysis.get("risk_category") or (classify_risk_score(risk_score)["category"] if risk_score is not None else "Normal")
+
+    return jsonify({
+        "total_matches": total_matches,
+        "wins": wins,
+        "losses": losses,
+        "kills": total_kills,
+        "deaths": total_deaths,
+        "kdr": kdr,
+        "total_playtime_seconds": total_seconds,
+        "honour_score": player.get("honour_score", 100),
+        "coins": coins,
+        "xp": xp,
+        "level": level,
+        "xp_progress": xp_progress,
+        "latest_risk_score": risk_score,
+        "latest_risk_category": risk_category
+    })
+
+
+@player_bp.post("/sessions/revoke-others")
+def revoke_other_sessions():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+    user_oid = ObjectId(user_id)
+    current_record_id = session.get("auth_session_record_id")
+
+    query = {"user_id": user_oid, "is_active": True}
+    if current_record_id:
+        try:
+            query["_id"] = {"$ne": ObjectId(current_record_id)}
+        except Exception:
+            pass
+
+    res = sessions_db.update_many(query, {"$set": {"is_active": False, "revoked_at": datetime.now(timezone.utc)}})
+    return jsonify({
+        "success": True,
+        "message": f"Successfully revoked {res.modified_count} other active session(s).",
+        "revoked_count": res.modified_count
+    }), 200
+
+
 @player_bp.get("/matches")
 def get_matches():
     user_id = current_user()
     if not user_id:
         return jsonify({"message": "Authentication required."}), 401
-    
+
     user_oid = ObjectId(user_id)
     player_account = users.find_one(
         {"_id": user_oid},
@@ -170,12 +278,20 @@ def get_matches():
             duration = max(0, int((ended_at - started_at).total_seconds()))
         kills = event_count(session_id, "enemy_killed")
         deaths = event_count(session_id, "player_death")
+        auth_created = analysis.get("created_at")
+        raw_score = analysis.get("risk_score", result.get("risk_score"))
+        clamped_score = clamp_risk_score(raw_score)
+        classification = classify_risk_score(clamped_score)
+
         result_matches.append({
             "id": session_id,
+            "session_id": session_id,
             "match_id": session_id[:8] if session_id else str(game_session.get("_id", ""))[-8:],
+            "analysis_id": str(analysis.get("_id", "")),
+            "model_version": analysis.get("model_version", "v1.2-ensemble-rf-iso"),
             "date": started_at.isoformat() if started_at else None,
             "duration": duration,
-            "game": game_session.get("game", "FPS Microgame"),
+            "game": (game_session.get("game") or "CyberStrike 3D").replace("_", " "),
             "status": game_session.get("status", "unknown"),
             "kills": kills,
             "deaths": deaths,
@@ -183,17 +299,26 @@ def get_matches():
             "honour_awarded": game_session.get("honour_awarded"),
             "accuracy": round(float(raw.get("accuracy", 0) or 0) * 100, 1),
             "headshot_ratio": raw.get("headshot_ratio"),
-            "risk_score": analysis.get("risk_score", result.get("risk_score")),
+            "risk_score": clamped_score,
+            "risk_category": classification["category"],
+            "risk_meaning": classification["meaning"],
+            "risk_action": classification["action"],
+            "random_forest": result.get("random_forest") or analysis.get("random_forest", "normal"),
+            "random_forest_probability": result.get("random_forest_probability"),
+            "isolation_forest": result.get("isolation_forest") or analysis.get("isolation_forest", "anomaly"),
+            "isolation_forest_anomaly_score": result.get("isolation_forest_anomaly_score"),
+            "detection_result": analysis.get("enforcement_action") or "none",
             "analysis_status": analysis.get("status", "pending"),
+            "analysis_timestamp": auth_created.isoformat() if auth_created else None,
             "missing_features": analysis.get("missing_features", []),
             "analysis_error": analysis.get("error"),
-            "alert_severity": analysis.get("alert_severity"),
-            "enforcement_action": analysis.get("enforcement_action") or game_session.get("enforcement_action"),
-            "enforcement_state": analysis.get("enforcement_state") or game_session.get("enforcement_state"),
+            "alert_severity": classification["severity"],
+            "enforcement_action": analysis.get("enforcement_action") or game_session.get("enforcement_action") or "none",
+            "enforcement_state": analysis.get("enforcement_state") or game_session.get("enforcement_state") or "monitoring",
             "hacker_profile": player_account.get("hacker_profile"),
             "demo_test": player_account.get("account_type") == "demo_test",
         })
-    
+
     return jsonify({
         "matches": result_matches,
         "total_matches": total_matches,
@@ -275,6 +400,8 @@ def get_rewards():
     user_oid = ObjectId(user_id)
     user = users.find_one({"_id": user_oid}, {"rewards": 1}) or {}
     rewards = user.get("rewards") or {}
+    total_matches = game_sessions.count_documents({"user_id": user_oid, "status": "completed"}) + matches.count_documents({"user_id": user_oid})
+    total_kills = game_telemetry.count_documents({"user_id": user_oid, "event_type": "enemy_killed"})
     transactions = list(reward_transactions.find({"user_id": user_oid}).sort("created_at", -1).limit(10))
     return jsonify({
         "coins": int(rewards.get("coins", 0)),
@@ -284,6 +411,21 @@ def get_rewards():
         "last_daily_login": rewards.get("last_daily_login"),
         "owned_items": rewards.get("owned_items", []),
         "equipped_item": rewards.get("equipped_item"),
+        "achievements": [
+            {
+                "id": a["id"],
+                "name": a["name"],
+                "desc": a["desc"],
+                "reward_xp": a["reward_xp"],
+                "reward_coins": a["reward_coins"],
+                "unlocked": a["id"] in (rewards.get("unlocked_achievements") or [
+                    "first_blood" if total_kills > 0 else None,
+                    "consistent_player" if int(rewards.get("daily_streak", 0)) >= 3 else None,
+                    "honourable_operator" if int(user.get("honour_score", 100)) == 100 and total_matches >= 3 else None,
+                ])
+            }
+            for a in ACHIEVEMENTS
+        ],
         "store": [{"id": item_id, **item} for item_id, item in REWARD_STORE.items()],
         "transactions": [{
             "type": item.get("type", "reward"),
@@ -445,10 +587,10 @@ def get_detections():
     user_id = current_user()
     if not user_id:
         return jsonify({"message": "Authentication required."}), 401
-    
+
     user_oid = ObjectId(user_id)
     detections = list(security_events.find({"user_id": user_oid}).sort("created_at", -1).limit(50))
-    
+
     return jsonify({
         "detections": [
             {
@@ -536,10 +678,10 @@ def get_security_events():
     user_id = current_user()
     if not user_id:
         return jsonify({"message": "Authentication required."}), 401
-    
+
     user_oid = ObjectId(user_id)
     events = list(login_history.find({"user_id": user_oid}).sort("created_at", -1).limit(20))
-    
+
     return jsonify({
         "events": [
             {
@@ -584,10 +726,10 @@ def get_active_sessions():
     user_id = current_user()
     if not user_id:
         return jsonify({"message": "Authentication required."}), 401
-    
+
     user_oid = ObjectId(user_id)
     active_sessions = list(sessions_db.find({"user_id": user_oid, "is_active": True}))
-    
+
     return jsonify({
         "sessions": [
             {
@@ -606,21 +748,21 @@ def revoke_session(session_id):
     user_id = current_user()
     if not user_id:
         return jsonify({"message": "Authentication required."}), 401
-    
+
     try:
         sid = ObjectId(session_id)
     except Exception:
         return jsonify({"message": "Invalid session id."}), 400
-    
+
     user_oid = ObjectId(user_id)
     result = sessions_db.update_one(
         {"_id": sid, "user_id": user_oid},
         {"$set": {"is_active": False}}
     )
-    
+
     if result.matched_count == 0:
         return jsonify({"message": "Session not found."}), 404
-    
+
     return jsonify({"message": "Session revoked."})
 
 @player_bp.get("/account-status")
@@ -628,17 +770,17 @@ def get_account_status():
     user_id = current_user()
     if not user_id:
         return jsonify({"message": "Authentication required."}), 401
-    
+
     user = users.find_one({"_id": ObjectId(user_id)})
     if not user:
         return jsonify({"message": "User not found."}), 404
-    
+
     user_oid = ObjectId(user_id)
     recent_login = login_history.find_one(
         {"user_id": user_oid, "type": "login_success"},
         sort=[("created_at", -1)]
     )
-    
+
     return jsonify({
         "mfa_enabled": user.get("mfa_enabled", False),
         "account_status": "active",
