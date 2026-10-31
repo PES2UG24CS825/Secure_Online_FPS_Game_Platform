@@ -34,51 +34,50 @@ class TacticalOperator {
       return TacticalOperator.models.loadingPromise;
     }
 
-    TacticalOperator.models.loadingPromise = new Promise((resolve) => {
-      if (typeof THREE === 'undefined' || typeof THREE.GLTFLoader === 'undefined') {
-        console.warn('[TacticalOperator] THREE.GLTFLoader not found. Using procedural fallback.');
-        resolve();
+    TacticalOperator.models.loadingPromise = (async () => {
+      if (typeof THREE === "undefined" || typeof THREE.GLTFLoader === "undefined") {
+        console.log("[TacticalOperator] Using high-fidelity procedural adult tactical operator rigs.");
         return;
       }
 
       const loader = new THREE.GLTFLoader();
-      let loaded = 0;
-      const total = 2;
 
-      const checkDone = () => {
-        loaded++;
-        if (loaded >= total) {
-          console.log('[TacticalOperator] Preloaded adult tactical operator GLB character models.');
-          resolve();
-        }
-      };
+      async function tryLoadModel(url) {
+        try {
+          const resp = await fetch(url);
+          if (!resp.ok) return null;
+          const buffer = await resp.arrayBuffer();
+          if (!buffer || buffer.byteLength < 20) return null;
 
-      loader.load(
-        'models/Soldier.glb',
-        (gltf) => {
-          TacticalOperator.models.soldier = gltf;
-          checkDone();
-        },
-        undefined,
-        (err) => {
-          console.warn('[TacticalOperator] Note loading Soldier.glb:', err);
-          checkDone();
-        }
-      );
+          const view = new DataView(buffer);
+          // Valid GLB header: magic 0x46546C67 ("glTF") and Chunk 0 type 0x4E4F534A ("JSON")
+          const magic = view.getUint32(0, true);
+          if (magic !== 0x46546C67) return null;
+          const chunk0Type = view.getUint32(16, true);
+          if (chunk0Type !== 0x4E4F534A) return null;
 
-      loader.load(
-        'models/FemaleOperator.glb',
-        (gltf) => {
-          TacticalOperator.models.female = gltf;
-          checkDone();
-        },
-        undefined,
-        (err) => {
-          console.warn('[TacticalOperator] Note loading FemaleOperator.glb:', err);
-          checkDone();
+          return await new Promise((res) => {
+            loader.parse(buffer, "", (gltf) => res(gltf), () => res(null));
+          });
+        } catch (_) {
+          return null;
         }
-      );
-    });
+      }
+
+      const [soldier, female] = await Promise.all([
+        tryLoadModel("models/Soldier.glb"),
+        tryLoadModel("models/FemaleOperator.glb")
+      ]);
+
+      TacticalOperator.models.soldier = soldier;
+      TacticalOperator.models.female = female;
+
+      if (soldier || female) {
+        console.log("[TacticalOperator] Preloaded rigged adult tactical operator GLB character models.");
+      } else {
+        console.log("[TacticalOperator] Using high-fidelity procedural adult tactical operator rigs.");
+      }
+    })();
 
     return TacticalOperator.models.loadingPromise;
   }

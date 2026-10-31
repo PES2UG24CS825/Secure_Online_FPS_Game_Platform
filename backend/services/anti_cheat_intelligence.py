@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any, Tuple
 
 # Physical constants for CyberStrike 3D
-MAX_HUMAN_SPRINT_SPEED = 8.5       # m/s (tactical sprint with carbine/pistol)
-MAX_PERMISSIBLE_SPEED = 12.0       # m/s (includes jump pad / explosive physics impulses)
+MAX_HUMAN_SPRINT_SPEED = 12.0      # m/s (tactical sprint in Controller.js is 11.5 m/s)
+MAX_PERMISSIBLE_SPEED = 20.0       # m/s (includes sprinting + bunny hopping / momentum impulses)
 MAX_CARBINE_FIRE_RATE = 11.5       # rounds per second (cyclic rate + tolerance)
 MAX_SNIPER_FIRE_RATE = 1.8         # rounds per second
 MIN_HUMAN_REACTION_MS = 100.0      # ms (fastest elite esports reaction)
@@ -83,8 +83,11 @@ class AntiCheatIntelligence:
                     headshots += 1
             elif etype == "enemy_killed":
                 kills += 1
-            elif etype == "player_death":
+            elif etype in ("player_death", "player_respawn"):
                 deaths += 1
+                # Respawn teleports player across the map — reset kinematics baseline
+                last_pos = None
+                last_pos_time = None
             elif etype == "player_behavior":
                 spd = tdata.get("speed")
                 pos = tdata.get("position")
@@ -110,14 +113,16 @@ class AntiCheatIntelligence:
                         dy = pos.get("y", 0) - last_pos.get("y", 0)
                         dz = pos.get("z", 0) - last_pos.get("z", 0)
                         disp = math.sqrt(dx*dx + dy*dy + dz*dz)
-                        calculated_speed = disp / dt
-                        if calculated_speed > MAX_PERMISSIBLE_SPEED:
-                            speed_violations.append({
-                                "calculated_speed": round(calculated_speed, 2),
-                                "displacement": round(disp, 2),
-                                "dt": round(dt, 3),
-                                "timestamp": ts
-                            })
+                        # Displacements > 25m in sample interval are respawns or teleport resets
+                        if disp <= 25.0:
+                            calculated_speed = disp / dt
+                            if calculated_speed > MAX_PERMISSIBLE_SPEED:
+                                speed_violations.append({
+                                    "calculated_speed": round(calculated_speed, 2),
+                                    "displacement": round(disp, 2),
+                                    "dt": round(dt, 3),
+                                    "timestamp": ts
+                                })
                 if pos and isinstance(pos, dict) and ts:
                     last_pos = pos
                     last_pos_time = ts

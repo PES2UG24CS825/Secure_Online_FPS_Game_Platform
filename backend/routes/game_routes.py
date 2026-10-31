@@ -13,6 +13,7 @@ from flask import Blueprint, Response, jsonify, request, session, stream_with_co
 from bson import ObjectId
 
 from database.db import (
+    db,
     game_events,
     game_telemetry,
     game_sessions,
@@ -3824,6 +3825,8 @@ def admin_player_action(
 @game_bp.post("/admin/gameplay/alerts/<session_id>/review")
 def review_gameplay_alert(session_id):
     reviewer = current_admin()
+    model_analyses = db["model_analyses"]
+    detection_results = db["detection_results"]
     if not reviewer:
         return jsonify({"message": "Admin access required."}), 403
 
@@ -3832,6 +3835,8 @@ def review_gameplay_alert(session_id):
     note = str(payload.get("note", "")).strip()
     allowed_actions = {
         "approve": "reviewed",
+        "normal": "reviewed",
+        "clear": "cleared",
         "warn": "warned",
         "suspend": "suspended",
         "ban": "banned",
@@ -3839,7 +3844,10 @@ def review_gameplay_alert(session_id):
     if action not in allowed_actions:
         return jsonify({"message": "Unsupported review action."}), 400
     if not note:
-        return jsonify({"message": "A review note is required."}), 400
+        if action in {"approve", "normal", "clear"}:
+            note = "Verified and confirmed as legitimate normal gameplay."
+        else:
+            return jsonify({"message": "A review note is required."}), 400
     if reviewer.get("role") == "moderator" and action in {"suspend", "ban"}:
         return jsonify({"message": "Moderators cannot suspend or ban accounts."}), 403
     ban_duration = str(payload.get("ban_duration", "")).strip().lower()
@@ -3847,11 +3855,16 @@ def review_gameplay_alert(session_id):
         return jsonify({"message": "Choose a 24-hour, 7-day, or permanent ban."}), 400
 
     alert = security_events.find_one({
-        "type": "gameplay_anomaly",
+        "type": {"$in": ["gameplay_anomaly", "auto_ban"]},
         "session_id": session_id,
     })
-    if not alert:
-        return jsonify({"message": "Gameplay alert not found."}), 404
+    player_id = None
+    if alert:
+        player_id = alert.get("user_id") or alert.get("player_id")
+    else:
+        sess = game_sessions.find_one({"session_id": session_id}) or model_analyses.find_one({"session_id": session_id})
+        if sess:
+            player_id = sess.get("user_id") or sess.get("player_id")
 
     reviewed_at = utc_now()
     reviewer_id = reviewer["_id"]
@@ -3864,10 +3877,38 @@ def review_gameplay_alert(session_id):
         "reviewed_at": reviewed_at,
         "reviewed_by": reviewer_id,
     }
+    if action in {"approve", "normal", "clear"}:
+        review_fields["risk_score"] = 15.0
+        review_fields["risk_category"] = "Normal"
+        review_fields["operational_risk"] = 15.0
+        review_fields["enforcement_state"] = "monitoring"
+        review_fields["skill_assessment"] = "Verified as legitimate normal human gameplay"
+        review_fields["detection_reason"] = "Verified legitimate normal gameplay"
+        
+        # Update model_analyses and detection_results so player dashboard immediately shows Normal
+        game_events.update_many(
+            {"session_id": session_id},
+            {"$set": {"risk_score": 15.0, "risk_category": "Normal", "review_status": "reviewed", "detection_result": "none"}}
+        )
+        model_analyses.update_many(
+            {"session_id": session_id},
+            {"$set": {"risk_score": 15.0, "risk_category": "Normal", "review_status": "reviewed", "detection_result": "none"}}
+        )
+        detection_results.update_many(
+            {"session_id": session_id},
+            {"$set": {"risk_score": 15.0, "detection_result": "none", "review_status": "reviewed"}}
+        )
+        if player_id:
+            users.update_one(
+                {"_id": player_id},
+                {"$set": {"account_status": "active", "revoked": False}, "$unset": {"banned_at": "", "ban_reason": "", "ban_until": ""}}
+            )
+
     if action == "ban":
         review_fields["ban_duration"] = ban_duration
+
     security_events.update_many(
-        {"type": "gameplay_anomaly", "session_id": session_id},
+        {"type": {"$in": ["gameplay_anomaly", "auto_ban"]}, "session_id": session_id},
         {"$set": review_fields}
     )
     if action in {"suspend", "ban"}:
@@ -3883,28 +3924,29 @@ def review_gameplay_alert(session_id):
         }
         if action == "ban" and ban_until:
             account_update["ban_until"] = ban_until
-        users.update_one(
-            {"_id": alert.get("user_id")},
-            {"$set": account_update, "$unset": {"active_auth_session_id": "", **({"ban_until": ""} if action == "suspend" or ban_duration == "permanent" else {})}}
-        )
-        sessions_db.update_many(
-            {"user_id": alert.get("user_id"), "is_active": True},
-            {"$set": {"is_active": False, "last_activity": reviewed_at}},
-        )
+        if player_id:
+            users.update_one(
+                {"_id": player_id},
+                {"$set": account_update, "$unset": {"active_auth_session_id": "", **({"ban_until": ""} if action == "suspend" or ban_duration == "permanent" else {})}}
+            )
+            sessions_db.update_many(
+                {"user_id": player_id, "is_active": True},
+                {"$set": {"is_active": False, "last_activity": reviewed_at}},
+            )
 
     security_events.insert_one({
         "type": "gameplay_alert_review",
         "action": action,
         "note": note,
-        "alert_id": alert["_id"],
+        "alert_id": alert["_id"] if alert else None,
         "session_id": session_id,
-        "user_id": alert.get("user_id"),
+        "user_id": player_id,
         "actor_user_id": reviewer_id,
         "ban_duration": ban_duration if action == "ban" else None,
         "ban_until": ban_until if action == "ban" else None,
         "created_at": reviewed_at,
     })
-    return jsonify({"success": True, "review_status": status}), 200
+    return jsonify({"success": True, "review_status": status, "message": f"Alert review marked as {status}."}), 200
 
 
 @game_bp.post("/admin/gameplay/analyses/<session_id>/retry")

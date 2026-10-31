@@ -537,3 +537,33 @@
 .hover-card-foot strong {
   color: #a78bfa;
 }
+
+
+/* Admin Review Action Buttons */
+.admin-page .gameplay-review-actions .play-btn.success-btn {
+  background: #059669 !important;
+  border: 1px solid #047857 !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+.admin-page .gameplay-review-actions .play-btn.success-btn:hover {
+  background: #10b981 !important;
+}
+.admin-page .gameplay-review-actions .play-btn.warning-btn {
+  background: #d97706 !important;
+  border: 1px solid #b45309 !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+.admin-page .gameplay-review-actions .play-btn.warning-btn:hover {
+  background: #f59e0b !important;
+}
+.admin-page .gameplay-review-actions .play-btn.danger-btn {
+  background: #dc2626 !important;
+  border: 1px solid #b91c1c !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+.admin-page .gameplay-review-actions .play-btn.danger-btn:hover {
+  background: #ef4444 !important;
+}

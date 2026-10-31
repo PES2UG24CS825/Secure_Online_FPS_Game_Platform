@@ -24,12 +24,19 @@ app.config.update(
 )
 
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "").strip()
-if frontend_origin:
-    CORS(
-        app,
-        resources={r"/api/*": {"origins": [frontend_origin]}},
-        supports_credentials=True,
-    )
+cors_origins = [frontend_origin] if frontend_origin else [
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
+    "http://127.0.0.1:3000",
+    "http://localhost:3000",
+    "http://127.0.0.1:5000",
+    "http://localhost:5000",
+]
+CORS(
+    app,
+    resources={r"/api/*": {"origins": cors_origins}},
+    supports_credentials=True,
+)
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(game_bp)
