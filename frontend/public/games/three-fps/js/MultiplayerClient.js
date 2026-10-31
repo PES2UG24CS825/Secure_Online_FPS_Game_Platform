@@ -28,6 +28,7 @@ class RemotePlayer {
   initMesh() {
     if (!this.scene) return;
     const group = new THREE.Group();
+    group.userData.remotePlayer = this;
 
     const armorColor = this.team === 'blue' ? 0x0284c7 : 0xdc2626;
     const armorMat = new THREE.MeshStandardMaterial({
@@ -103,6 +104,7 @@ class RemotePlayer {
         const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
         const sprite = new THREE.Sprite(spriteMat);
         sprite.position.set(0, 2.2, 0);
+        sprite.raycast = () => {};
         sprite.scale.set(1.6, 0.4, 1.0);
         group.add(sprite);
         this.nameTag = sprite;
@@ -110,6 +112,14 @@ class RemotePlayer {
     } catch (e) {
       console.warn('[RemotePlayer] Nametag creation omitted:', e);
     }
+
+    // Attach remotePlayer reference to all meshes in group
+    group.traverse((child) => {
+      if (child.isMesh) {
+        child.userData.remotePlayer = this;
+      }
+    });
+    if (this.headMesh) this.headMesh.userData.isHead = true;
 
     group.position.copy(this.position);
     this.scene.add(group);
@@ -192,6 +202,10 @@ class MultiplayerClient {
     if (savedUrl && (savedUrl.includes(':4000') || savedUrl.includes('4000'))) {
       savedUrl = savedUrl.replace(':4000', ':4001');
       localStorage.setItem('securefps_server_url', savedUrl);
+    }
+    // If savedUrl is pointing to localhost / 127.0.0.1 but the current page is on a remote host (e.g. 10.1.4.95), ignore stale localhost savedUrl
+    if (savedUrl && (savedUrl.includes('localhost') || savedUrl.includes('127.0.0.1')) && host !== 'localhost' && host !== '127.0.0.1') {
+      savedUrl = null;
     }
     const primaryUrl = customUrl || savedUrl || `${protocol}//${host}:4001`;
 
@@ -350,7 +364,10 @@ class MultiplayerClient {
           remote.position.set(data.x, data.y || 0, data.z);
           remote.targetPosition.set(data.x, data.y || 0, data.z);
           remote.health = 100;
-          if (remote.mesh) remote.mesh.position.set(data.x, data.y || 0, data.z);
+          if (remote.mesh) {
+            remote.mesh.position.set(data.x, data.y || 0, data.z);
+            remote.mesh.visible = true;
+          }
         }
       }
     });
@@ -385,6 +402,11 @@ class MultiplayerClient {
     // --- Damage / Hit Arbitrated Events ---
     this.socket.on('player:hurt', (data) => {
       if (window.SecureFPSGame?.gameMode) {
+        if (!window.SecureFPSGame.gameMode.matchActive) {
+          window.SecureFPSGame.gameMode.matchActive = true;
+          window.SecureFPSGame.gameMode.isDead = false;
+        }
+        window.SecureFPSGame.gameMode.hasSpawnProtection = false;
         const attackerPos = data.attackerPos ? new THREE.Vector3(data.attackerPos.x, data.attackerPos.y, data.attackerPos.z) : null;
         window.SecureFPSGame.gameMode.damagePlayer(data.damage, data.attackerName, window.SecureFPSGame.controller, attackerPos);
       }
@@ -417,6 +439,12 @@ class MultiplayerClient {
     this.socket.on('player:killed', (data) => {
       const isLocalKiller = (data.killerId === this.localPlayerId);
       const isLocalVictim = (data.victimId === this.localPlayerId);
+
+      const victimRemote = this.remotePlayers.get(data.victimId);
+      if (victimRemote) {
+        victimRemote.health = 0;
+        if (victimRemote.mesh) victimRemote.mesh.visible = false;
+      }
 
       if (isLocalKiller) {
         if (window.SecureFPSGame?.hud?.showElimination) {

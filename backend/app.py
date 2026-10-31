@@ -1,5 +1,6 @@
 import os
 import mimetypes
+import re
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -24,7 +25,8 @@ app.config.update(
 )
 
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "").strip()
-cors_origins = [frontend_origin] if frontend_origin else [
+cors_origins = [
+    re.compile(r"^https?://(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$"),
     "http://127.0.0.1:5500",
     "http://localhost:5500",
     "http://127.0.0.1:3000",
@@ -32,6 +34,9 @@ cors_origins = [frontend_origin] if frontend_origin else [
     "http://127.0.0.1:5000",
     "http://localhost:5000",
 ]
+if frontend_origin:
+    cors_origins.append(frontend_origin)
+
 CORS(
     app,
     resources={r"/api/*": {"origins": cors_origins}},
@@ -49,7 +54,8 @@ def network_server_settings(environ=None):
     truthy = {"1", "true", "yes", "on"}
     port = int(env.get("FLASK_PORT", "5000"))
     debug_requested = env.get("FLASK_DEBUG", "1").strip().lower() in truthy
-    return "127.0.0.1", port, debug_requested
+    host = env.get("FLASK_HOST", "0.0.0.0").strip() or "0.0.0.0"
+    return host, port, debug_requested
 
 
 @app.get("/")

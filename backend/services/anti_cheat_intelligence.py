@@ -133,11 +133,19 @@ class AntiCheatIntelligence:
                     try:
                         rot_f = float(rot)
                         if math.isfinite(rot_f):
-                            aim_rotations.append(abs(rot_f))
+                            # Unity FPS_Microgame sends Vector3.Angle in degrees (0 to 180).
+                            # If game is FPS_Microgame or rot_f is in degrees (> 2*pi), convert to radians
+                            # so aim_smoothness and aim_snap_violations are evaluated consistently in radians.
+                            if ev.get("game") == "FPS_Microgame" or rot_f > math.pi * 2:
+                                rot_rad = math.radians(rot_f)
+                            else:
+                                rot_rad = rot_f
+                            aim_rotations.append(abs(rot_rad))
                             # Instant snap check: rotation change > 3.0 rad (~172 deg) in single sample
-                            if abs(rot_f) > 3.2:
+                            if abs(rot_rad) > 3.0:
                                 aim_snap_violations.append({
                                     "rotation_delta": round(rot_f, 4),
+                                    "rotation_rad": round(rot_rad, 4),
                                     "timestamp": ts
                                 })
                     except (TypeError, ValueError):
@@ -221,7 +229,7 @@ class AntiCheatIntelligence:
         if has_aim_snap_hack:
             hard_cheat_evidence.append(f"Repeated instant angle snapping detected ({len(violations['aim_snap_violations'])} instances)")
 
-        is_bot_mode = game_mode.lower() in ("solo", "play_with_bots", "training", "bots")
+        is_bot_mode = game_mode.lower() in ("solo", "play_with_bots", "training", "bots", "fps_microgame")
 
         # Skill assessment
         is_skilled_human = False

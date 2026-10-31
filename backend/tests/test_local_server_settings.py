@@ -4,19 +4,19 @@ from app import network_server_settings
 
 
 class LocalServerSettingsTests(unittest.TestCase):
-    def test_server_binds_to_localhost_by_default(self):
-        self.assertEqual(network_server_settings({}), ("127.0.0.1", 5000, True))
+    def test_server_binds_to_all_interfaces_by_default(self):
+        self.assertEqual(network_server_settings({}), ("0.0.0.0", 5000, True))
 
-    def test_network_host_overrides_cannot_expose_the_server(self):
+    def test_network_host_can_be_configured(self):
         self.assertEqual(
-            network_server_settings({"LAN_MODE": "1", "FLASK_HOST": "0.0.0.0"}),
+            network_server_settings({"FLASK_HOST": "127.0.0.1"}),
             ("127.0.0.1", 5000, True),
         )
 
     def test_local_port_and_debug_can_be_configured(self):
         self.assertEqual(
             network_server_settings({"FLASK_PORT": "5100", "FLASK_DEBUG": "0"}),
-            ("127.0.0.1", 5100, False),
+            ("0.0.0.0", 5100, False),
         )
 
 
