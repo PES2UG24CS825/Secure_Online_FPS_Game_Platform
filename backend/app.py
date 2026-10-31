@@ -10,12 +10,13 @@ from database.db import sessions_db, test_connection, users
 from routes.auth_routes import auth_bp
 from routes.game_routes import game_bp
 from routes.player_routes import player_bp
+from routes.admin_routes import admin_bp
 from services.auth import hash_password, validate_password
 
 FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
 app = Flask(__name__, static_folder=None)
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-only-change-this-secret")
-AUTH_SESSION_IDLE_TIMEOUT_SECONDS = int(os.getenv("AUTH_SESSION_IDLE_TIMEOUT_SECONDS", "120"))
+AUTH_SESSION_IDLE_TIMEOUT_SECONDS = int(os.getenv("AUTH_SESSION_IDLE_TIMEOUT_SECONDS", "3600"))
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
@@ -33,6 +34,7 @@ if frontend_origin:
 app.register_blueprint(auth_bp)
 app.register_blueprint(game_bp)
 app.register_blueprint(player_bp)
+app.register_blueprint(admin_bp)
 
 
 def network_server_settings(environ=None):
@@ -66,8 +68,19 @@ def _accepts_encoding(accept_encoding, encoding):
     return False
 
 
+@app.get("/.well-known/appspecific/com.chrome.devtools.json")
+def chrome_devtools_json():
+    return jsonify({}), 200
+
+
 @app.get("/<path:filename>")
 def frontend_file(filename):
+    # Support /public/player.html, /public/admin.html, etc. by redirecting to root page
+    if filename.startswith("public/"):
+        alt_name = filename[len("public/"):]
+        if (FRONTEND_DIR / alt_name).is_file() and not (FRONTEND_DIR / filename).is_file():
+            return redirect(f"/{alt_name}")
+
     served_filename = filename
     content_filename = filename
     content_encoding = None
@@ -101,6 +114,10 @@ def frontend_file(filename):
     if content_encoding:
         response.headers["Content-Encoding"] = content_encoding
         response.vary.add("Accept-Encoding")
+    if filename.startswith("public/games/three-fps/") or filename.endswith(".js") or filename.endswith(".html"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
     return response
 
 
@@ -112,8 +129,12 @@ def validate_auth_session():
         "/api/health",
         "/api/auth/login",
         "/api/auth/verify-mfa",
+        "/api/auth/verify-recovery-code",
         "/api/auth/signup",
+        "/api/auth/register",
+        "/api/auth/verify-email",
         "/api/auth/forgot-password",
+        "/api/auth/reset-password",
         "/api/auth/logout",
     } or request.method == "OPTIONS":
         return None

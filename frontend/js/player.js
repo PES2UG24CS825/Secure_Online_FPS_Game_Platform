@@ -2,6 +2,11 @@ const playerText = (value) => String(value ?? "").replace(/[&<>"']/g, (character
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
 })[character]);
 
+function escapeHtml(value) {
+  return playerText(value);
+}
+window.escapeHtml = escapeHtml;
+
 const playerDate = (value) => {
   if (!value) return "Not recorded";
   const date = new Date(value);
@@ -161,9 +166,11 @@ function matchCard(match) {
     : state === "active" ? '<p class="match-analysis-note">Risk review starts when this match is completed.</p>'
     : '<p class="match-analysis-note">Risk review is pending for this match.</p>';
   return `<article class="match-card">
-    <div class="match-card-head"><div><span class="match-card-kicker">FPS Microgame${match.demo_test ? ` · ${playerText(match.hacker_profile || "hacker demo")}` : ""}</span><h3>Match ${playerText(match.match_id || "—")}</h3><div class="match-card-date">${playerText(playerDate(match.date))}</div></div><span class="badge ${badge}">${playerText(state === "terminated_banned" ? "PERMANENTLY BANNED" : state)}</span></div>
+    <div class="match-card-head"><div><span class="match-card-kicker">${escapeHtml(match.game || "CyberStrike 3D")}${match.demo_test ? ` · ${playerText(match.hacker_profile || "hacker demo")}` : ""}</span><h3>Match ${playerText(match.match_id || "—")}</h3><div class="match-card-date">${playerText(playerDate(match.date))}</div></div><span class="badge ${badge}">${playerText(state === "terminated_banned" ? "PERMANENTLY BANNED" : state)}</span></div>
     <div class="match-stat-grid"><div class="match-stat"><span>Kills</span><strong>${value("kills")}</strong></div><div class="match-stat"><span>Deaths</span><strong>${value("deaths")}</strong></div><div class="match-stat"><span>K/D</span><strong>${match.kd == null ? "—" : Number(match.kd).toFixed(2)}</strong></div><div class="match-stat"><span>Duration</span><strong>${duration}</strong></div><div class="match-stat"><span>Accuracy</span><strong>${accuracy}</strong></div><div class="match-stat"><span>Analysis</span><strong>${playerText(analysisStatus)}</strong></div></div>
-    <div class="match-risk"><span>Security risk score</span><strong>${playerText(playerRisk(match.risk_score))}</strong></div>${match.enforcement_action ? `<p class="match-analysis-note"><strong>Detection result:</strong> ${playerText(String(match.enforcement_action).replaceAll("_", " "))}</p>` : ""}${analysisNote}
+    <div class="match-risk"><span>Security risk score</span><strong>${playerText(playerRisk(match.risk_score))} ${match.risk_category ? `<span class="badge ${match.risk_category === 'Normal' ? 'good' : match.risk_category === 'Monitoring' ? 'warn' : 'bad'}">${escapeHtml(match.risk_category)}</span>` : ''}</strong></div>
+    <p class="match-analysis-note"><strong>ML Models:</strong> RF: ${escapeHtml(match.random_forest || 'normal')} · IF: ${escapeHtml(match.isolation_forest || 'anomaly')} | <strong>Analysis ID:</strong> ${escapeHtml(match.analysis_id || 'N/A')}</p>
+    ${match.enforcement_action ? `<p class="match-analysis-note"><strong>Detection result:</strong> ${playerText(String(match.enforcement_action).replaceAll("_", " "))}</p>` : ""}${analysisNote}
   </article>`;
 }
 
@@ -236,7 +243,7 @@ async function loadPlayerDashboard() {
       if (honourScore < 80) {
         const noticeKey = `securefps_honour_warning:${user.email || "account"}:${honourScore}`;
         if (localStorage.getItem(noticeKey) !== "shown") {
-          const message = `Honour is ${honourScore}/100. You can keep playing; unfinished matches reduce Honour by 10.`;
+          const message = `Honour is ${honourScore}/100. You can keep playing; unfinished matches reduce Honour by 5.`;
           window.showAppToast?.(message, "warning");
           localStorage.setItem(noticeKey, "shown");
         }
@@ -409,7 +416,7 @@ async function loadPlayerDashboard() {
       const ipRows = history.map((entry) => `<tr><td>${playerText(entry.ip_address || "Unknown")}</td><td>${playerText(playerDate(entry.timestamp))}</td><td>${playerText(entry.authentication_method || "Password + MFA")}</td><td><span class="badge ${entry.success === false ? "bad" : "good"}">${entry.success === false ? "Failed" : "Success"}</span></td></tr>`).join("");
       const warnings = Array.isArray(securityData.security_warnings) ? securityData.security_warnings : [];
       securityStatus.innerHTML = `
-        <article class="security-card honour-score-card" data-honour-risk="${Number(securityData.honour_score ?? 100) >= 80 ? "low" : Number(securityData.honour_score ?? 100) >= 50 ? "medium" : "high"}"><div class="security-card-label">Honour score</div><div class="security-card-value honour-score-value">${Number(securityData.honour_score ?? 100)}/100</div><div class="security-card-meta">Unfinished matches reduce Honour by 10; completed matches add 5.</div></article>
+        <article class="security-card honour-score-card" data-honour-risk="${Number(securityData.honour_score ?? 100) >= 80 ? "low" : Number(securityData.honour_score ?? 100) >= 50 ? "medium" : "high"}"><div class="security-card-label">Honour score</div><div class="security-card-value honour-score-value">${Number(securityData.honour_score ?? 100)}/100</div><div class="security-card-meta">Unfinished matches reduce Honour by 5; completed matches add 5.</div></article>
         <article class="security-card"><div class="security-card-label">MFA / 2FA</div><div class="security-card-value">${securityData.mfa_status === "enabled" ? "Enabled" : "Disabled"}</div><div class="security-card-meta">Authenticator protection</div></article>
         <article class="security-card"><div class="security-card-label">Active sessions</div><div class="security-card-value">${activeSessions.length}</div><div class="security-card-meta">Devices currently signed in</div></article>
         <article class="security-card"><div class="security-card-label">Last login</div><div class="security-card-value security-card-value-small">${playerText(playerDate(securityData.last_login))}</div><div class="security-card-meta">Most recent successful sign in</div></article>
@@ -596,7 +603,7 @@ async function loadPlayerDashboard() {
     const overviewMatches = document.getElementById("overviewMatchList");
     if (overviewMatches) overviewMatches.innerHTML = '<div class="match-empty"><strong>Match history unavailable</strong><span>Reconnect to the API and database to load saved matches.</span></div>';
     const securityStatus = document.getElementById("securityStatus");
-    if (securityStatus) securityStatus.innerHTML = '<div class="match-empty"><strong>Account security unavailable</strong><span>Reconnect to the API and database to load account security.</span></div>';
+    if (securityStatus) securityStatus.innerHTML = '<div class="match-empty"><strong>Account security unavailable</strong><span>Reconnect to the API and database to load account security.</span><button class="play-btn" style="margin-top:10px;padding:6px 14px;border-radius:6px;" onclick="loadPlayerDashboard()">Retry Connection</button></div>';
     const profileContent = document.getElementById("profileContent");
     if (profileContent) profileContent.innerHTML = '<div class="profile-row"><span>Profile</span><strong>Unavailable</strong></div>';
     const liveStatus = document.getElementById("playerLiveStatus");
@@ -625,5 +632,118 @@ if (fpsMicrogameBtn) fpsMicrogameBtn.addEventListener("click", () => {
   window.location.href = "game.html";
 });
 
+const cyberstrikeBtn = document.getElementById("cyberstrikeBtn");
+if (cyberstrikeBtn) cyberstrikeBtn.addEventListener("click", () => {
+  sessionStorage.setItem("securefps_match_before_game", latestPlayerMatchId);
+  const sideNameEl = document.getElementById("sideName");
+  if (sideNameEl && sideNameEl.textContent) {
+    sessionStorage.setItem("securefps_player_name", sideNameEl.textContent.trim());
+  }
+  window.location.href = "public/games/three-fps/index.html";
+});
+
 loadPlayerDashboard();
 playerRefreshTimer = setInterval(loadPlayerDashboard, 15000);
+
+// =========================================================================
+// ACCOUNT SECURITY INTERACTIVE CONTROLS
+// =========================================================================
+
+const changePasswordForm = document.getElementById("changePasswordForm");
+if (changePasswordForm) {
+  changePasswordForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const cur = document.getElementById("currentPasswordInput")?.value || "";
+    const next = document.getElementById("newPasswordInput")?.value || "";
+    const confirm = document.getElementById("confirmNewPasswordInput")?.value || "";
+    const msg = document.getElementById("changePasswordMsg");
+
+    if (next !== confirm) {
+      if (msg) {
+        msg.hidden = false;
+        msg.style.color = "#EF4444";
+        msg.textContent = "New passwords do not match.";
+      }
+      return;
+    }
+
+    try {
+      const res = await api("/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify({ current_password: cur, new_password: next, confirm_password: confirm })
+      });
+      if (msg) {
+        msg.hidden = false;
+        msg.style.color = "#10B981";
+        msg.textContent = res.message || "Password changed successfully!";
+      }
+      changePasswordForm.reset();
+      window.showAppToast?.("Password changed successfully! Other sessions terminated.", "success");
+    } catch (err) {
+      if (msg) {
+        msg.hidden = false;
+        msg.style.color = "#EF4444";
+        msg.textContent = err.message || "Could not change password.";
+      }
+    }
+  });
+}
+
+const generateRecoveryCodesBtn = document.getElementById("generateRecoveryCodesBtn");
+if (generateRecoveryCodesBtn) {
+  generateRecoveryCodesBtn.addEventListener("click", async () => {
+    const password = prompt("Please confirm your current password to generate emergency recovery codes:");
+    if (!password) return;
+
+    const msg = document.getElementById("recoveryCodesMsg");
+    const display = document.getElementById("recoveryCodesDisplay");
+    const grid = document.getElementById("recoveryCodesGrid");
+
+    try {
+      const res = await api("/auth/recovery-codes/generate", {
+        method: "POST",
+        body: JSON.stringify({ password })
+      });
+      if (res.recovery_codes && grid) {
+        grid.innerHTML = res.recovery_codes.map(c => `<div style="background:#fff;padding:6px;border-radius:4px;border:1px solid #e2e8f0;text-align:center;">${c}</div>`).join("");
+        if (display) display.style.display = "block";
+        if (msg) {
+          msg.hidden = false;
+          msg.style.color = "#10B981";
+          msg.textContent = "8 backup recovery codes generated. Store them safely.";
+        }
+      }
+    } catch (err) {
+      if (msg) {
+        msg.hidden = false;
+        msg.style.color = "#EF4444";
+        msg.textContent = err.message || "Could not generate recovery codes.";
+      }
+    }
+  });
+}
+
+const revokeOtherSessionsBtn = document.getElementById("revokeOtherSessionsBtn");
+if (revokeOtherSessionsBtn) {
+  revokeOtherSessionsBtn.addEventListener("click", async () => {
+    if (!confirm("Are you sure you want to log out all other devices and browser sessions?")) return;
+
+    const msg = document.getElementById("revokeSessionsMsg");
+    try {
+      const res = await api("/player/sessions/revoke-others", { method: "POST" });
+      if (msg) {
+        msg.hidden = false;
+        msg.style.color = "#10B981";
+        msg.textContent = res.message || "All other browser sessions revoked successfully.";
+      }
+      window.showAppToast?.("All other sessions revoked.", "success");
+      loadPlayerDashboard();
+    } catch (err) {
+      if (msg) {
+        msg.hidden = false;
+        msg.style.color = "#EF4444";
+        msg.textContent = err.message || "Could not revoke other sessions.";
+      }
+    }
+  });
+}

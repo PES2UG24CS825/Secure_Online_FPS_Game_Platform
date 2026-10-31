@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>CyberStrike 3D | SecureFPS Tactical Simulation</title>
+  <link rel="icon" type="image/svg+xml" href="../../securefps-mark.svg?v=2">
+  <link rel="stylesheet" href="css/game.css?v=20261031_0700">
+</head>
+<body>
+
+  <!-- WebGL 2.0 Fullscreen Viewport Canvas -->
+  <canvas id="game-canvas" tabindex="1"></canvas>
+
+  <!-- =========================================================
+       DYNAMIC ANTI-CHEAT ALERT BANNER
+       ========================================================= -->
+  <div id="cheat-alert-banner" role="alert">
+    SUSPICIOUS GAMEPLAY DETECTED: Real-time telemetry under review.
+  </div>
+
+  <!-- =========================================================
+       PROFESSIONAL LOADING SCREEN & TACTICAL OPERATIONS HUB
+       ========================================================= -->
+  <div id="loading-overlay">
+    <div class="loader-container">
+
+      <!-- Brand Header -->
+      <div class="brand-badge">
+        <span class="pulse-dot"></span>
+        SECUREFPS ANTI-CHEAT PLATFORM
+      </div>
+
+      <h1 class="loader-title">CyberStrike 3D</h1>
+      <p class="loader-subtitle">Advanced 3D Combat Simulator &amp; Authoritative Multiplayer Platform</p>
+
+      <!-- Asset Loading Progress Visualizer -->
+      <div id="loader-progress-box">
+        <div class="progress-track">
+          <div id="loader-progress-fill" class="progress-fill"></div>
+        </div>
+
+        <div class="loader-status-row">
+          <span id="loader-status-text">INITIALIZING TACTICAL SYSTEMS...</span>
+          <span id="loader-percent">0%</span>
+        </div>
+      </div>
+
+      <!-- Tactical Operations Main Menu (Revealed once loaded) -->
+      <div id="main-menu-hub" style="display: none;">
+
+        <!-- Navigation Menu Tabs (6 Options) -->
+        <div class="menu-tabs">
+          <button class="menu-tab" id="tab-solo" type="button">
+            <span class="tab-icon">⚔️</span>
+            <span class="tab-label">PLAY SOLO</span>
+          </button>
+          <button class="menu-tab active" id="tab-bots" type="button">
+            <span class="tab-icon">🤖</span>
+            <span class="tab-label">PLAY WITH BOTS</span>
+          </button>
+          <button class="menu-tab" id="tab-multiplayer" type="button">
+            <span class="tab-icon">🌐</span>
+            <span class="tab-label">MULTIPLAYER</span>
+          </button>
+          <button class="menu-tab" id="tab-training" type="button">
+            <span class="tab-icon">🎯</span>
+            <span class="tab-label">TRAINING MODE</span>
+          </button>
+          <button class="menu-tab" id="tab-settings" type="button">
+            <span class="tab-icon">⚙️</span>
+            <span class="tab-label">SETTINGS</span>
+          </button>
+          <button class="menu-tab exit-tab" id="btn-menu-exit-dashboard" type="button">
+            <span class="tab-icon">🚪</span>
+            <span class="tab-label">DASHBOARD</span>
+          </button>
+        </div>
+
+        <!-- Tab View 1: Play Solo (FFA Combat) -->
+        <div class="menu-view" id="view-solo">
+          <div class="view-header">
+            <h3>Solo Free-For-All Combat</h3>
+            <p>Every operator for themselves. Survive against 3 independent tactical AI operators in the compound.</p>
+          </div>
+
+          <div class="mode-info-card">
+            <div class="info-row"><span>MATCH TYPE:</span><strong>Free-For-All (FFA)</strong></div>
+            <div class="info-row"><span>TARGET SCORE:</span><strong>25 Kills</strong></div>
+            <div class="info-row"><span>TIME LIMIT:</span><strong>10 Minutes</strong></div>
+            <div class="info-row"><span>TELEMETRY:</span><strong style="color: #10b981;">Active ML Anti-Cheat Logging</strong></div>
+          </div>
+
+          <button id="btn-deploy-solo" class="start-btn" type="button" style="display: block; margin-top: 18px;">
+            DEPLOY TO SOLO DEATHMATCH
+          </button>
+        </div>
+
+        <!-- Tab View 2: Play with Bots & Difficulty Selector -->
+        <div class="menu-view active" id="view-bots">
+          <div class="view-header">
+            <h3>Tactical Bot Engagement</h3>
+            <p>Engage realistic adult combat operators calibrated with reaction delays and burst fire</p>
+          </div>
+
+          <div class="difficulty-grid">
+            <div class="difficulty-card" data-diff="easy">
+              <div class="diff-header">
+                <span class="diff-tag easy">EASY</span>
+                <span class="diff-title">Recruit</span>
+              </div>
+              <ul class="diff-specs">
+                <li>1 Active Attacking Bot</li>
+                <li>2.5s – 3.2s Reaction Delay</li>
+                <li>Low Accuracy (25%)</li>
+                <li>8 HP Bullet Damage</li>
+              </ul>
+            </div>
+
+            <div class="difficulty-card selected" data-diff="normal">
+              <div class="diff-badge-rec">RECOMMENDED</div>
+              <div class="diff-header">
+                <span class="diff-tag normal">NORMAL</span>
+                <span class="diff-title">Operator</span>
+              </div>
+              <ul class="diff-specs">
+                <li>Max 2 Active Attackers</li>
+                <li>1.5s – 2.2s Reaction Delay</li>
+                <li>Balanced Accuracy (38%)</li>
+                <li>12 HP Bullet Damage</li>
+              </ul>
+            </div>
+
+            <div class="difficulty-card" data-diff="hard">
+              <div class="diff-header">
+                <span class="diff-tag hard">HARD</span>
+                <span class="diff-title">Apex Veteran</span>
+              </div>
+              <ul class="diff-specs">
+                <li>All 4 Active Attackers</li>
+                <li>0.9s – 1.4s Fast Reaction</li>
+                <li>Combat Accuracy (52%)</li>
+                <li>16 HP Bullet Damage</li>
+              </ul>
+            </div>
+          </div>
+
+          <button id="btn-deploy-bots" class="start-btn" type="button" style="display: block;">
+            DEPLOY TO BOT COMBAT ARENA
+          </button>
+        </div>
+
+        <!-- Tab View 3: Training Mode -->
+        <div class="menu-view" id="view-training">
+          <div class="view-header">
+            <h3>Target Practice &amp; Kinematics</h3>
+            <p>Zero hostile fire. Practice weapon recoil compensation, sprint-sliding, and tactical parkour</p>
+          </div>
+
+          <div class="training-features">
+            <div class="feature-card">
+              <div class="feat-icon">🎯</div>
+              <div class="feat-title">Shooting Pavilions</div>
+              <div class="feat-desc">Static target boards with headshot rings and distance markings.</div>
+            </div>
+            <div class="feature-card">
+              <div class="feat-icon">⚡</div>
+              <div class="feat-title">Movement Course</div>
+              <div class="feat-desc">Elevated catwalks, ramps, and obstacle boxes for bunny hops &amp; crouch jumps.</div>
+            </div>
+            <div class="feature-card">
+              <div class="feat-icon">🛡️</div>
+              <div class="feat-title">Passive Bot Target</div>
+              <div class="feat-desc">Combat bots are in passive diagnostic mode without offensive weapons.</div>
+            </div>
+          </div>
+
+          <button id="btn-deploy-training" class="start-btn" type="button" style="display: block;">
+            ENTER TRAINING SIMULATION
+          </button>
+        </div>
+
+        <!-- Tab View 4: Multiplayer Hub & 6-Char Lobby -->
+        <div class="menu-view" id="view-multiplayer">
+          <div class="view-header">
+            <h3>Authoritative Multiplayer Operations</h3>
+            <p>Peer-to-peer WAN matchmaking with 6-character room codes and 30Hz physics sync</p>
+          </div>
+
+          <!-- Callsign & Server Status Bar -->
+          <div class="mp-profile-bar">
+            <div class="mp-input-group">
+              <label for="mp-player-name">OPERATOR CALLSIGN</label>
+              <input id="mp-player-name" type="text" maxlength="18" value="Ghost_01" spellcheck="false" autocomplete="off" />
+            </div>
+            <div class="mp-status-pill" id="mp-server-status">
+              <span class="status-dot"></span>
+              <span id="mp-status-text">CONNECTING...</span>
+            </div>
+          </div>
+
+          <!-- Section A: Room Selection (Create vs Join) -->
+          <div id="mp-room-selection">
+            <div class="mp-action-grid">
+
+              <!-- Card 1: Create Match -->
+              <div class="mp-card create-card">
+                <div class="mp-card-icon">⚡</div>
+                <h4>CREATE MATCH</h4>
+                <p>Generate a private 6-character room code. Host a dedicated match for up to 8 operators.</p>
+                <button id="btn-create-room" class="hud-btn primary wide" type="button">
+                  CREATE NEW LOBBY
+                </button>
+              </div>
+
+              <!-- Card 2: Join Match -->
+              <div class="mp-card join-card">
+                <div class="mp-card-icon">🔑</div>
+                <h4>JOIN MATCH</h4>
+                <p>Enter a 6-character code provided by another operator to enter their combat room.</p>
+                <div class="code-input-row">
+                  <input id="mp-room-code-input" type="text" maxlength="6" placeholder="ROOM CODE" spellcheck="false" autocomplete="off" />
+                  <button id="btn-join-room" class="hud-btn primary" type="button">
+                    JOIN
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            <div id="mp-error-banner" class="mp-error-banner" style="display: none;"></div>
+          </div>
+
+          <!-- Section B: Waiting Lobby View -->
+          <div id="mp-lobby-view" style="display: none;">
+
+            <div class="lobby-header-bar">
+              <div class="lobby-code-display">
+                <span class="code-label">ROOM CODE:</span>
+                <span id="mp-active-code" class="code-val">------</span>
+                <button id="btn-copy-code" class="copy-btn" type="button" title="Copy code to clipboard">
+                  📋 COPY
+                </button>
+              </div>
+              <div id="mp-role-badge" class="role-badge host">HOST</div>
+            </div>
+
+            <!-- Player List (up to 8 slots) -->
+            <div class="lobby-players-label">OPERATORS IN LOBBY (<span id="mp-player-count">1</span>/8):</div>
+            <div id="mp-players-grid" class="lobby-players-grid">
+              <!-- Rendered dynamically -->
+            </div>
+
+            <!-- Lobby Action Bar -->
+            <div class="lobby-actions">
+              <button id="btn-toggle-ready" class="hud-btn wide" type="button">
+                SET READY
+              </button>
+              <button id="btn-start-match" class="start-btn" type="button" style="display: inline-block;">
+                START MATCH (HOST)
+              </button>
+              <button id="btn-leave-room" class="hud-btn" type="button">
+                LEAVE ROOM
+              </button>
+            </div>
+
+            <div id="mp-lobby-status" class="lobby-status-msg">
+              Waiting for operators to ready up...
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Tab View 5: Settings -->
+        <div class="menu-view" id="view-settings">
+          <div class="view-header">
+            <h3>Tactical Simulation Settings</h3>
+            <p>Calibrate mouse sensitivity, audio balance, graphics quality, and network endpoints</p>
+          </div>
+
+          <div class="settings-form">
+            <!-- Mouse Sensitivity -->
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>Mouse Sensitivity</strong>
+                <span>Hip-fire camera look speed</span>
+              </div>
+              <div class="setting-control">
+                <input id="setting-sens" type="range" min="1" max="10" value="4" />
+                <span id="setting-sens-val">4.0</span>
+              </div>
+            </div>
+
+            <!-- Aim (ADS) Sensitivity -->
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>Aim / ADS Sensitivity</strong>
+                <span>Multiplier when right-click aiming</span>
+              </div>
+              <div class="setting-control">
+                <input id="setting-aim-sens" type="range" min="2" max="15" value="7" />
+                <span id="setting-aim-sens-val">0.7x</span>
+              </div>
+            </div>
+
+            <!-- Master Volume -->
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>Master Volume</strong>
+                <span>Overall game sound balance</span>
+              </div>
+              <div class="setting-control">
+                <input id="setting-master-volume" type="range" min="0" max="100" value="90" />
+                <span id="setting-master-val">90%</span>
+              </div>
+            </div>
+
+            <!-- Sound FX Volume -->
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>Sound FX Volume</strong>
+                <span>Gunfire, hits, reloads, impacts, footsteps</span>
+              </div>
+              <div class="setting-control">
+                <input id="setting-volume" type="range" min="0" max="100" value="85" />
+                <span id="setting-volume-val">85%</span>
+              </div>
+            </div>
+
+            <!-- Music Volume -->
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>Music Volume</strong>
+                <span>Ambient and menu tactical soundtrack</span>
+              </div>
+              <div class="setting-control">
+                <input id="setting-music-volume" type="range" min="0" max="100" value="70" />
+                <span id="setting-music-val">70%</span>
+              </div>
+            </div>
+
+            <!-- Crosshair Size -->
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>Crosshair Size &amp; Reticle</strong>
+                <span>Dimensions of center targeting reticle</span>
+              </div>
+              <div class="setting-control">
+                <select id="setting-crosshair-size" class="hud-select">
+                  <option value="small">Small (Pinpoint)</option>
+                  <option value="normal" selected>Standard (Tactical)</option>
+                  <option value="large">Large (High-Visibility)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Crosshair Colour -->
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>Crosshair Colour</strong>
+                <span>Default non-locked crosshair tone</span>
+              </div>
+              <div class="setting-control">
+                <select id="setting-crosshair-color" class="hud-select">
+                  <option value="cyan" selected>Tactical Cyan (#00f0ff)</option>
+                  <option value="green">Emerald Green (#10b981)</option>
+                  <option value="yellow">Amber Yellow (#fbbf24)</option>
+                  <option value="white">Clean White (#ffffff)</option>
+                  <option value="magenta">Neon Crimson (#f43f5e)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Crosshair Visibility -->
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>Show Crosshair</strong>
+                <span>Enable or disable center targeting reticle</span>
+              </div>
+              <div class="setting-control">
+                <input id="setting-crosshair-visible" type="checkbox" checked style="transform: scale(1.3); cursor: pointer;" />
+              </div>
+            </div>
+
+            <!-- Show FPS Display -->
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>FPS &amp; Diagnostics Overlay</strong>
+                <span>Toggle in-game frame rate and hardware monitor</span>
+              </div>
+              <div class="setting-control">
+                <input id="setting-show-fps" type="checkbox" checked style="transform: scale(1.3); cursor: pointer;" />
+              </div>
+            </div>
+
+            <!-- Field of View (FOV) -->
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>Field of View (FOV)</strong>
+                <span>Camera perspective angle (65° – 105°)</span>
+              </div>
+              <div class="setting-control">
+                <input id="setting-fov" type="range" min="65" max="105" value="75" />
+                <span id="setting-fov-val">75°</span>
+              </div>
+            </div>
+
+            <!-- Graphics Quality -->
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>Graphics Quality</strong>
+                <span>Shadow fidelity and WebGL resolution scaling</span>
+              </div>
+              <div class="setting-control">
+                <select id="setting-graphics" class="hud-select">
+                  <option value="high">High (Victus Dedicated GPU)</option>
+                  <option value="medium" selected>Balanced (Standard)</option>
+                  <option value="low">Performance (Maximum FPS)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Invert Mouse Y -->
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>Invert Vertical Look (Y-Axis)</strong>
+                <span>Invert pitch controls</span>
+              </div>
+              <div class="setting-control">
+                <input id="setting-invert-y" type="checkbox" style="transform: scale(1.3); cursor: pointer;" />
+              </div>
+            </div>
+
+            <!-- Fullscreen -->
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>Display Mode</strong>
+                <span>Toggle fullscreen borderless window</span>
+              </div>
+              <div class="setting-control">
+                <button id="btn-toggle-fullscreen" class="hud-btn" type="button">FULLSCREEN</button>
+              </div>
+            </div>
+
+            <!-- Multiplayer Server URL (Cross-Network WAN Support) -->
+            <div class="setting-row">
+              <div class="setting-info">
+                <strong>Multiplayer Server URL (WAN/Tunnel)</strong>
+                <span>Custom server address or Cloudflare Tunnel</span>
+              </div>
+              <div class="setting-control">
+                <input id="setting-server-url" type="text" placeholder="http://127.0.0.1:4001" style="background: rgba(18,26,42,0.9); border: 1px solid rgba(0,240,255,0.3); border-radius: 4px; padding: 4px 8px; color: #00f0ff; font-family: var(--font-mono); font-size: 11px; width: 180px;" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Controls Guide -->
+          <div class="loader-controls-grid" style="margin-top: 14px;">
+            <div class="control-item"><kbd>W A S D</kbd><span>Move &amp; Strafe</span></div>
+            <div class="control-item"><kbd>LEFT CLICK</kbd><span>Shoot / Fire</span></div>
+            <div class="control-item"><kbd>1 2 3 4 / WHEEL</kbd><span>Switch Weapon</span></div>
+            <div class="control-item"><kbd>R</kbd><span>Reload Ammo</span></div>
+            <div class="control-item"><kbd>SPACE</kbd><span>Tactical Jump</span></div>
+            <div class="control-item"><kbd>TAB</kbd><span>Scoreboard</span></div>
+          </div>
+
+          <button id="btn-save-settings" class="hud-btn primary wide" type="button" style="margin-top: 12px;">
+            SAVE &amp; RETURN
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- =========================================================
+       PAUSE / MENU OVERLAY (5 Complete Functional Actions)
+       ========================================================= -->
+  <div id="pause-overlay">
+    <div class="pause-card">
+      <h2 class="pause-title">Simulation Paused</h2>
+      <p class="pause-desc">Match suspended. Select an action below or press ESC to resume combat.</p>
+
+      <div class="pause-menu-grid">
+        <button id="resume-btn" class="hud-btn primary wide" type="button">
+          ▶ RESUME COMBAT
+        </button>
+        <button id="restart-match-btn" class="hud-btn wide" type="button">
+          🔄 RESTART MATCH
+        </button>
+        <button id="pause-lobby-btn" class="hud-btn wide" type="button">
+          🌐 MULTIPLAYER LOBBY
+        </button>
+        <button id="pause-main-menu-btn" class="hud-btn wide" type="button">
+          📋 RETURN TO MAIN MENU
+        </button>
+        <button id="pause-exit-dashboard-btn" class="hud-btn exit wide" type="button">
+          🚪 EXIT TO PLAYER DASHBOARD
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MATCH SCOREBOARD OVERLAY (Held with TAB)
+       ========================================================= -->
+  <div id="scoreboard-overlay">
+    <div class="scoreboard-container">
+      <div class="scoreboard-header">
+        <div class="sc-title">CYBERSTRIKE 3D // COMBAT SCOREBOARD</div>
+        <div class="sc-mode" id="scoreboard-mode-label">FREE-FOR-ALL</div>
+      </div>
+      <table class="scoreboard-table">
+        <thead>
+          <tr>
+            <th>OPERATOR</th>
+            <th>STATUS</th>
+            <th>KILLS</th>
+            <th>DEATHS</th>
+            <th>K/D</th>
+            <th>SCORE</th>
+            <th>PING</th>
+          </tr>
+        </thead>
+        <tbody id="scoreboard-tbody">
+          <!-- Dynamically populated in HUD.js / main.js -->
+        </tbody>
+      </table>
+      <div class="scoreboard-footer">
+        <span>RELEASE [TAB] TO CLOSE SCOREBOARD</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       PLAYER RESPAWN OVERLAY
+       ========================================================= -->
+  <div id="death-overlay">
+    <h2 class="death-title">OPERATOR ELIMINATED</h2>
+    <p class="death-subtitle">Respawning at secured tactical insertion point...</p>
+    <div id="respawn-timer-val" class="respawn-timer">3s</div>
+  </div>
+
+  <!-- =========================================================
+       MATCH COMPLETION & WINNER SCREEN OVERLAY
+       ========================================================= -->
+  <div id="match-complete-overlay" class="game-modal-overlay" style="display: none;">
+    <div class="game-modal-card">
+      <div id="mc-banner" class="mc-header-banner victory">VICTORY</div>
+      <h2 id="mc-winner-title" class="mc-title">WINNER: OPERATOR (YOU)</h2>
+      <div id="mc-mode-badge" class="mc-mode-badge">SOLO COMBAT MATCH</div>
+
+      <div class="mc-stats-grid">
+        <div class="mc-stat-box"><span class="stat-lbl">ELIMINATIONS</span><strong id="mc-kills" class="stat-val highlight">25</strong></div>
+        <div class="mc-stat-box"><span class="stat-lbl">DEATHS</span><strong id="mc-deaths" class="stat-val">0</strong></div>
+        <div class="mc-stat-box"><span class="stat-lbl">K/D RATIO</span><strong id="mc-kd" class="stat-val">25.0</strong></div>
+        <div class="mc-stat-box"><span class="stat-lbl">ACCURACY</span><strong id="mc-accuracy" class="stat-val">0%</strong></div>
+        <div class="mc-stat-box"><span class="stat-lbl">HEADSHOTS</span><strong id="mc-headshots" class="stat-val">0</strong></div>
+        <div class="mc-stat-box"><span class="stat-lbl">MATCH TIME</span><strong id="mc-duration" class="stat-val">00:00</strong></div>
+        <div class="mc-stat-box span-2"><span class="stat-lbl">FINAL SCORE</span><strong id="mc-score" class="stat-val score-glow">0 PTS</strong></div>
+        <div class="mc-stat-box span-2 honour-box"><span class="stat-lbl">HONOUR SCORE</span><strong id="mc-honour-val" class="stat-val highlight">100/100 (+5 MATCH COMPLETED)</strong></div>
+      </div>
+
+      <div class="mc-security-badge">
+        <span class="sec-dot"></span>
+        <span>TELEMETRY VERIFIED &bull; ML ANTI-CHEAT PIPELINE SECURE</span>
+      </div>
+
+      <div class="mc-actions-row">
+        <button id="btn-match-restart" class="hud-btn primary" type="button">🔄 PLAY AGAIN</button>
+        <button id="btn-match-menu" class="hud-btn" type="button" style="background: rgba(0, 240, 255, 0.2); border-color: #00f0ff; color: #00f0ff;">📋 MAIN MENU</button>
+        <button id="btn-match-dashboard" class="hud-btn exit" type="button">🚪 EXIT TO DASHBOARD</button>
+      </div>
+      <div id="mc-countdown-box" style="margin-top: 14px; text-align: center; font-size: 13px; color: #94a3b8; font-family: monospace;">
+        Returning to Main Menu in <span id="mc-countdown-seconds" style="color: #00f0ff; font-weight: 700; font-size: 16px;">6</span>s...
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       TRAINING COURSE COMPLETION OVERLAY
+       ========================================================= -->
+  <div id="training-complete-overlay" class="game-modal-overlay" style="display: none;">
+    <div class="game-modal-card">
+      <div class="mc-header-banner training">TRAINING COMPLETED</div>
+      <h2 id="tc-rank-title" class="mc-title">TACTICAL MARKSMAN (A-TIER)</h2>
+      <div class="mc-mode-badge">TARGET PRACTICE &amp; KINEMATICS</div>
+
+      <div class="mc-stats-grid">
+        <div class="mc-stat-box"><span class="stat-lbl">TARGETS HIT</span><strong id="tc-targets-hit" class="stat-val highlight">0/20</strong></div>
+        <div class="mc-stat-box"><span class="stat-lbl">TARGETS MISSED</span><strong id="tc-targets-missed" class="stat-val">0</strong></div>
+        <div class="mc-stat-box"><span class="stat-lbl">HIT ACCURACY</span><strong id="tc-accuracy" class="stat-val">0%</strong></div>
+        <div class="mc-stat-box"><span class="stat-lbl">HEADSHOTS</span><strong id="tc-headshots" class="stat-val">0</strong></div>
+        <div class="mc-stat-box"><span class="stat-lbl">AVG REACTION</span><strong id="tc-reaction" class="stat-val">--</strong></div>
+        <div class="mc-stat-box"><span class="stat-lbl">COURSE TIME</span><strong id="tc-duration" class="stat-val">0s</strong></div>
+        <div class="mc-stat-box span-2"><span class="stat-lbl">TRAINING SCORE</span><strong id="tc-score" class="stat-val score-glow">0 PTS</strong></div>
+      </div>
+
+      <div class="mc-actions-row">
+        <button id="btn-training-retry" class="hud-btn primary" type="button">🔄 RETRY COURSE</button>
+        <button id="btn-training-menu" class="hud-btn" type="button">📋 MAIN MENU</button>
+        <button id="btn-training-dashboard" class="hud-btn exit" type="button">🚪 EXIT TO DASHBOARD</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       IN-GAME TACTICAL HUD
+       ========================================================= -->
+  <div id="game-hud">
+
+    <!-- Training Mode Active HUD Bar -->
+    <div id="training-hud" class="training-hud-bar" style="display: none;">
+      <div class="tr-hud-card"><span class="tr-lbl">TARGETS</span><strong id="tr-target-count">0/20</strong></div>
+      <div class="tr-hud-card"><span class="tr-lbl">ACCURACY</span><strong id="tr-accuracy">100%</strong></div>
+      <div class="tr-hud-card"><span class="tr-lbl">HEADSHOTS</span><strong id="tr-headshots">0</strong></div>
+      <div class="tr-hud-card"><span class="tr-lbl">LAST REACTION</span><strong id="tr-reaction">--</strong></div>
+      <div class="tr-hud-card"><span class="tr-lbl">SCORE</span><strong id="tr-score" style="color:#00f0ff;">0</strong></div>
+    </div>
+
+    <!-- Top Left: Match Bar (Kills, Deaths, Assists, Streak, Ping, Timer) -->
+    <div class="hud-match-bar">
+      <div class="match-stat-unit">
+        <span>KILLS</span>
+        <strong id="match-kills">0</strong>
+      </div>
+      <div class="match-stat-unit">
+        <span>DEATHS</span>
+        <strong id="match-deaths">0</strong>
+      </div>
+      <div class="match-stat-unit">
+        <span>ASSISTS</span>
+        <strong id="match-assists">0</strong>
+      </div>
+      <div class="match-stat-unit">
+        <span>STREAK</span>
+        <strong id="match-streak" style="color: #fbbf24;">0</strong>
+      </div>
+      <div class="match-stat-unit">
+        <span>PING</span>
+        <strong id="match-ping" style="color: #10b981;">14ms</strong>
+      </div>
+      <div class="match-stat-unit">
+        <span>MATCH TIME</span>
+        <strong id="match-timer" class="match-timer">12:00</strong>
+      </div>
+    </div>
+
+    <!-- Top Tactical Compass Strip -->
+    <div class="hud-compass-strip">
+      <div class="compass-center-mark"></div>
+      <div id="compass-readout" class="compass-readout">000°</div>
+      <div id="compass-sub" class="compass-sub">NORTH</div>
+    </div>
+
+    <!-- Spawn Protection Shield Badge (Directly below compass) -->
+    <div id="spawn-shield-indicator" class="spawn-shield-indicator" style="display: none;">
+      <span class="shield-icon">🛡️</span>
+      <span class="shield-text">SPAWN PROTECTION: 5.0s</span>
+    </div>
+
+    <!-- Top Right: Diagnostics & FPS Monitor -->
+    <div class="hud-stats-panel">
+      <div class="telemetry-row">
+        <span>ENGINE:</span>
+        <strong>Three.js 3D</strong>
+      </div>
+      <div class="telemetry-row">
+        <span>FRAME RATE:</span>
+        <strong id="hud-fps">60 FPS</strong>
+      </div>
+      <div class="telemetry-row">
+        <span>FRAME TIME:</span>
+        <strong id="hud-frame-time">16.6 ms</strong>
+      </div>
+      <div class="telemetry-row">
+        <span>DRAW CALLS:</span>
+        <strong id="hud-draw-calls">--</strong>
+      </div>
+      <div class="telemetry-row">
+        <span>TRIANGLES:</span>
+        <strong id="hud-triangles">--</strong>
+      </div>
+    </div>
+
+    <!-- Kill Feed: Top Right below stats -->
+    <div id="killfeed"></div>
+
+    <!-- Center Crosshair & Hitmarker -->
+    <div id="crosshair">
+      <div class="ch-dot"></div>
+      <div class="ch-line ch-top"></div>
+      <div class="ch-line ch-bottom"></div>
+      <div class="ch-line ch-left"></div>
+      <div class="ch-line ch-right"></div>
+    </div>
+
+    <!-- Full-Screen Optical Sniper Scope (ADS) -->
+    <div id="sniper-scope-overlay" class="sniper-scope-overlay" style="display: none;">
+      <div class="scope-lens">
+        <div class="scope-cross-h"></div>
+        <div class="scope-cross-v"></div>
+        <div class="scope-circle-inner"></div>
+        <div class="scope-circle-outer"></div>
+        <div class="scope-range-marks">
+          <span>100M</span>
+          <span>200M</span>
+          <span>300M</span>
+          <span>400M</span>
+        </div>
+        <div class="scope-hud-readout">
+          <span>MAG: 8.0X</span>
+          <span>ELEV: 0.0</span>
+          <span>WIND: 0.0 L</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Real-Time Input & Kinematics Debugging HUD -->
+    <div id="input-debug-hud" class="input-debug-hud">
+      <div class="dbg-header">
+        <span class="dbg-title">INPUT DIAGNOSTICS [F3]</span>
+        <span id="dbg-lock-badge" class="dbg-badge locked">LOCKED</span>
+      </div>
+      <div class="dbg-keys-row">
+        <span class="dbg-key" id="dbg-key-w">W</span>
+        <span class="dbg-key" id="dbg-key-a">A</span>
+        <span class="dbg-key" id="dbg-key-s">S</span>
+        <span class="dbg-key" id="dbg-key-d">D</span>
+        <span class="dbg-key" id="dbg-key-shift">SHIFT</span>
+        <span class="dbg-key" id="dbg-key-space">SPACE</span>
+        <span class="dbg-key" id="dbg-key-c">C</span>
+        <span class="dbg-key" id="dbg-key-lmb">LMB</span>
+        <span class="dbg-key" id="dbg-key-rmb">RMB(ADS)</span>
+      </div>
+      <div class="dbg-data-row">
+        <span id="dbg-stat-pos">POS: 0.0, 1.8, 28.0</span>
+        <span id="dbg-stat-vel">VEL: 0.0 m/s</span>
+      </div>
+      <div class="dbg-data-row">
+        <span id="dbg-stat-stance">STANCE: STAND</span>
+        <span id="dbg-stat-ground">GROUND: YES</span>
+      </div>
+    </div>
+
+    <div id="hitmarker">
+      <div class="hm-line hm-v"></div>
+      <div class="hm-line hm-h"></div>
+    </div>
+
+    <!-- Bottom Left: Vitals, Health & Stamina -->
+    <div class="hud-vitals-panel">
+      <div class="movement-tag" id="movement-tag">STATIONARY</div>
+
+      <div class="vital-card" style="padding: 4px 10px; margin-bottom: 4px; background: rgba(6, 12, 22, 0.85); border-left: 3px solid #00f0ff;">
+        <div class="vital-header" style="margin-bottom: 0;">
+          <span style="font-size: 10px; color: #64748b; letter-spacing: 1px;">OPERATOR CALLSIGN</span>
+          <span id="hud-operator-name" style="font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: #00f0ff;">GHOST</span>
+        </div>
+      </div>
+
+      <div class="vital-card">
+        <div class="vital-header">
+          <span>OPERATOR HEALTH</span>
+          <span class="vital-value" id="health-val">100</span>
+        </div>
+        <div class="vital-bar">
+          <div class="vital-fill" id="health-fill" style="width: 100%;"></div>
+        </div>
+      </div>
+
+      <div class="vital-card">
+        <div class="vital-header">
+          <span>TACTICAL ARMOUR</span>
+          <span class="vital-value" id="armour-val" style="color: #60a5fa;">50</span>
+        </div>
+        <div class="vital-bar">
+          <div class="vital-fill armour-fill" id="armour-fill" style="width: 100%;"></div>
+        </div>
+      </div>
+
+      <div class="vital-card">
+        <div class="vital-header">
+          <span>STAMINA SPRINT</span>
+          <span id="stamina-val" style="font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: #fbbf24;">100%</span>
+        </div>
+        <div class="vital-bar">
+          <div class="vital-fill stamina-fill" id="stamina-fill" style="width: 100%;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Center: Weapon Loadout Bar & Reminder -->
+    <div class="hud-center-prompt">
+      <span style="color: #00f0ff;">[1] P-24 Carbine</span> &nbsp;|&nbsp;
+      <span style="color: #94a3b8;">[2] Vector-9</span> &nbsp;|&nbsp;
+      <span style="color: #94a3b8;">[3] AWM-50</span> &nbsp;|&nbsp;
+      <span style="color: #94a3b8;">[4] G-18</span> &nbsp;|&nbsp;
+      <kbd>TAB</kbd> Scoreboard &nbsp;|&nbsp; <kbd>ESC</kbd> Pause
+    </div>
+
+    <!-- Bottom Right: Weapon & Ammunition Panel -->
+    <div class="hud-weapon-panel">
+      <div class="weapon-name">P-24 Carbine</div>
+      <div class="weapon-caliber">5.56x45mm NATO</div>
+      <div id="reloading-indicator" class="reloading-indicator">RELOADING...</div>
+      <div class="ammo-count">
+        <span id="ammo-clip">30</span>
+        <span class="ammo-reserve">/ 120</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Core Game Engine Scripts -->
+  <script src="libs/three.min.js?v=20261031_0700"></script>
+  <script src="libs/GLTFLoader.js?v=20261031_0700"></script>
+  <script src="libs/SkeletonUtils.js?v=20261031_0700"></script>
+  <script src="libs/socket.io.min.js?v=20261031_0700"></script>
+  <script src="js/TextureGenerator.js?v=20261031_0700"></script>
+  <script src="js/Lighting.js?v=20261031_0700"></script>
+  <script src="js/Arena.js?v=20261031_0700"></script>
+  <script src="js/TacticalOperator.js?v=20261031_0700"></script>
+  <script src="js/Controller.js?v=20261031_0700"></script>
+  <script src="js/AudioFX.js?v=20261031_0700"></script>
+  <script src="js/Weapons.js?v=20261031_0700"></script>
+  <script src="js/BotManager.js?v=20261031_0700"></script>
+  <script src="js/TrainingManager.js?v=20261031_0700"></script>
+  <script src="js/GameModeManager.js?v=20261031_0700"></script>
+  <script src="js/HUD.js?v=20261031_0700"></script>
+  <script src="js/TelemetryClient.js?v=20261031_0700"></script>
+  <script src="js/MultiplayerClient.js?v=20261031_0700"></script>
+  <script src="js/main.js?v=20261031_0700"></script>
+
+  <!-- Screen Edge Damage Vignette -->
+  <div id="damage-vignette" class="damage-vignette"></div>
+
+  <!-- Directional Damage Arc Indicators -->
+  <div id="directional-damage-container"></div>
+
+  <!-- Floating 3D / Screen Damage Numbers -->
+  <div id="floating-damage-container"></div>
+
+  <!-- Elimination Confirmation Banner -->
+  <div id="elimination-banner" class="elimination-banner">
+    <span class="elim-icon">💀</span>
+    <span id="elim-text">ELIMINATED ENEMY</span>
+    <span id="elim-pts" class="elim-pts">+100 PTS</span>
+  </div>
+
+  <!-- Multi-Kill & Streak Announcement Banner -->
+  <div id="streak-banner" class="streak-banner">
+    <h3 id="streak-title">DOUBLE KILL</h3>
+    <p id="streak-sub">MULTI-KILL</p>
+  </div>
+
+
+  <!-- =========================================================
+       VOLUNTARY MATCH EXIT CONFIRMATION MODAL
+       ========================================================= -->
+  <div id="voluntary-exit-modal" class="hud-modal-overlay" style="display: none;">
+    <div class="hud-modal-card">
+      <div class="hud-modal-header">
+        <span class="warning-icon">⚠️</span>
+        <h3>ABANDON ACTIVE MATCH?</h3>
+      </div>
+      <div class="hud-modal-body">
+        <p class="modal-main-text">Leaving this match while in progress will reduce your <strong>Honour Score</strong> by <strong>5 points</strong>.</p>
+        <div class="modal-honour-summary">
+          <div class="honour-stat">
+            <span class="stat-label">CURRENT HONOUR</span>
+            <span class="stat-val" id="exit-modal-current-honour">100/100</span>
+          </div>
+          <div class="honour-arrow">➔</div>
+          <div class="honour-stat penalty">
+            <span class="stat-label">AFTER FORFEIT</span>
+            <span class="stat-val penalty-val" id="exit-modal-after-honour">95/100</span>
+          </div>
+        </div>
+        <p class="modal-subtext">Are you sure you want to abandon the match? This action cannot be reversed.</p>
+      </div>
+      <div class="hud-modal-actions">
+        <button id="btn-cancel-exit-match" class="hud-btn" type="button">RETURN TO MATCH</button>
+        <button id="btn-confirm-exit-match" class="hud-btn danger" type="button">ABANDON (-5 HONOUR)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pointer Lock Engagement Prompt (Auto-prompts click to lock controls) -->
+  <div id="pointer-lock-prompt" class="pointer-lock-prompt" style="display: none;">
+    <span class="prompt-icon">🎯</span>
+    <span class="prompt-text">CLICK ANYWHERE TO LOCK RETICLE &amp; ENGAGE CONTROLS</span>
+  </div>
+
+  <!-- Synchronized Multiplayer Match Countdown Overlay -->
+  <div id="match-countdown-overlay" class="match-countdown-overlay" style="display: none;">
+    <div class="countdown-badge">TACTICAL DEPLOYMENT</div>
+    <div id="match-countdown-num" class="countdown-number">3</div>
+    <div id="match-countdown-sub" class="countdown-subtitle">MISSION COMMENCING...</div>
+  </div>
+
+</body>
+</html>

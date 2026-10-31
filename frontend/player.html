@@ -129,6 +129,8 @@
       <section class="overview-lower-grid">
         <article class="overview-breakdown"><div class="dashboard-panel-head"><h2>Risk trend, last 9 matches</h2><span class="dashboard-panel-caption">Older → Recent</span></div><div class="overview-trend-chart overview-risk-line" id="overviewRiskTrend" role="img" aria-label="Recent match risk trend"><span class="overview-trend-empty">Match analysis appears here</span></div><div class="overview-trend-foot"><span>Hover a point for match details</span></div></article>
         <article class="overview-leaderboard"><div class="dashboard-panel-head"><div><h2>Top performers</h2><span class="dashboard-panel-caption">Kills · K/D · accuracy</span></div><a href="#leaderboard" data-section="leaderboard">View all</a></div><div id="overviewLeaderboardList" class="leaderboard-list"><div class="empty">Loading performance…</div></div></article>
+
+
       </section>
       <section class="dashboard-panel overview-recent-panel"><div class="dashboard-panel-head"><h2>Recent completed matches</h2><a href="#matches" data-section="matches">View matches</a></div><div class="overview-table-wrap"><table class="overview-recent-table"><thead><tr><th>Match</th><th>Date</th><th>K/D</th><th>Accuracy</th><th>Headshot %</th><th>Risk</th><th></th></tr></thead><tbody id="overviewRecentRows"><tr><td colspan="7">Loading match history…</td></tr></tbody></table></div></section>
 
@@ -154,10 +156,10 @@
         <div>
           <p class="eyebrow">GAME HUB</p>
 
-          <h2>FPS Microgame</h2>
+          <h2>FPS Training Arenas</h2>
 
           <p class="page-description">
-            Launch the FPS Microgame to record a match and gameplay telemetry.
+            Select an arena: launch CyberStrike 3D or the original FPS Microgame to record matches and real-time telemetry.
           </p>
         </div>
 
@@ -165,6 +167,31 @@
 
 
       <div class="player-game-grid">
+
+        <!-- FPS 02: CyberStrike 3D Card -->
+        <article class="game-card featured" style="border: 2px solid rgba(124, 58, 237, 0.4); box-shadow: 0 10px 30px rgba(124, 58, 237, 0.12);">
+          <div class="game-art art-one" style="background: linear-gradient(135deg, #1E1B4B 0%, #4C1D95 100%);">
+            <span style="color: #A78BFA; font-weight: 700;">FPS 02</span>
+            <div class="game-art-mascot" aria-hidden="true"><span>3D ARENA</span><img id="gameHubCyberMascot" src="public/avatars/chibi-female-2.png" alt=""></div>
+          </div>
+          <div class="game-info">
+            <span class="tag" style="background: rgba(124, 58, 237, 0.15); color: #7C3AED; border-color: rgba(124, 58, 237, 0.4); font-weight: 700;">NEW 3D BROWSER ARENA</span>
+            <h3>CyberStrike 3D</h3>
+            <p>
+              High-performance Three.js 3D tactical FPS arena with first-person kinematics,
+              intelligent combat AI bots, and live telemetry anti-cheat protection.
+            </p>
+            <button
+              id="cyberstrikeBtn"
+              class="play-btn"
+              data-game="three-fps"
+              type="button"
+              style="background: linear-gradient(135deg, #7C3AED, #6D28D9); color: #FFFFFF; font-weight: 700;">
+              Play CyberStrike <span>→</span>
+            </button>
+          </div>
+        </article>
+
 
         <article class="game-card featured">
 
@@ -320,6 +347,72 @@
           <div class="security-card-meta">
             Current account state
           </div>
+        </article>
+
+      </div>
+
+
+      <!-- Account Security Interactive Actions -->
+      <div class="security-actions-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-top: 24px;">
+
+        <!-- Change Password Card -->
+        <article class="profile-card" style="padding: 24px; border-radius: 14px; background: #FFFFFF; border: 1px solid rgba(124, 58, 237, 0.15); box-shadow: 0 4px 16px rgba(124, 58, 237, 0.05);">
+          <div class="dashboard-panel-head" style="margin-bottom: 16px;">
+            <div>
+              <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1E1B4B;">Change Password</h3>
+              <span class="dashboard-panel-caption" style="color: #64748B; font-size: 13px;">Update your master account password</span>
+            </div>
+          </div>
+          <form id="changePasswordForm" style="display: flex; flex-direction: column; gap: 12px;">
+            <div>
+              <label for="currentPasswordInput" style="font-size: 12px; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;">Current Password</label>
+              <input id="currentPasswordInput" type="password" required autocomplete="current-password" placeholder="••••••••" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #CBD5E1; font-size: 14px; box-sizing: border-box;" />
+            </div>
+            <div>
+              <label for="newPasswordInput" style="font-size: 12px; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;">New Password</label>
+              <input id="newPasswordInput" type="password" required autocomplete="new-password" placeholder="At least 8 chars with uppercase & symbol" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #CBD5E1; font-size: 14px; box-sizing: border-box;" />
+            </div>
+            <div>
+              <label for="confirmNewPasswordInput" style="font-size: 12px; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;">Confirm New Password</label>
+              <input id="confirmNewPasswordInput" type="password" required autocomplete="new-password" placeholder="Confirm new password" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #CBD5E1; font-size: 14px; box-sizing: border-box;" />
+            </div>
+            <div id="changePasswordMsg" style="font-size: 13px; font-weight: 500; min-height: 18px;" hidden></div>
+            <button type="submit" class="play-btn" style="margin-top: 6px; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; background: #7C3AED; color: #FFFFFF; border: none;">Update Password</button>
+          </form>
+        </article>
+
+        <!-- Emergency Backup Recovery Codes Card -->
+        <article class="profile-card" style="padding: 24px; border-radius: 14px; background: #FFFFFF; border: 1px solid rgba(124, 58, 237, 0.15); box-shadow: 0 4px 16px rgba(124, 58, 237, 0.05);">
+          <div class="dashboard-panel-head" style="margin-bottom: 16px;">
+            <div>
+              <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1E1B4B;">Backup Recovery Codes</h3>
+              <span class="dashboard-panel-caption" style="color: #64748B; font-size: 13px;">Single-use access if 2FA device is lost</span>
+            </div>
+          </div>
+          <p style="font-size: 13px; color: #475569; line-height: 1.5; margin-bottom: 14px;">
+            Recovery codes allow emergency sign-in when you cannot access your authenticator app. Keep them in a safe password manager.
+          </p>
+          <div id="recoveryCodesDisplay" style="display: none; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; padding: 14px; margin-bottom: 14px;">
+            <div id="recoveryCodesGrid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-family: monospace; font-size: 13px; color: #1E293B; font-weight: 600;"></div>
+            <p style="font-size: 11px; color: #64748B; margin-top: 8px; margin-bottom: 0;">Save these now. They will not be shown again.</p>
+          </div>
+          <button id="generateRecoveryCodesBtn" type="button" class="play-btn" style="padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; background: #6D28D9; color: #FFFFFF; border: none;">Generate 8 Recovery Codes</button>
+          <div id="recoveryCodesMsg" style="font-size: 13px; margin-top: 10px;" hidden></div>
+        </article>
+
+        <!-- Session Security Card -->
+        <article class="profile-card" style="padding: 24px; border-radius: 14px; background: #FFFFFF; border: 1px solid rgba(124, 58, 237, 0.15); box-shadow: 0 4px 16px rgba(124, 58, 237, 0.05);">
+          <div class="dashboard-panel-head" style="margin-bottom: 16px;">
+            <div>
+              <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1E1B4B;">Active Session Protection</h3>
+              <span class="dashboard-panel-caption" style="color: #64748B; font-size: 13px;">Manage signed-in devices</span>
+            </div>
+          </div>
+          <p style="font-size: 13px; color: #475569; line-height: 1.5; margin-bottom: 14px;">
+            SecureFPS strictly enforces single-session integrity. If you suspect an unauthorized device is connected, terminate all other active sign-ins immediately.
+          </p>
+          <button id="revokeOtherSessionsBtn" type="button" class="play-btn" style="padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; background: #EF4444; color: #FFFFFF; border: none;">Revoke All Other Sessions</button>
+          <div id="revokeSessionsMsg" style="font-size: 13px; margin-top: 10px;" hidden></div>
         </article>
 
       </div>

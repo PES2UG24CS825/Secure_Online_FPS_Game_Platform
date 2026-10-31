@@ -35,3 +35,26 @@ Thumbs.db
 !frontend/public/games/FPS_Microgame/TemplateData/
 !frontend/public/games/FPS_Microgame/TemplateData/**
 !frontend/public/games/FPS_Microgame/index.html
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+
+# Node dependencies
+node_modules/
+**/node_modules/
+
+# Python environment and cache
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Local runtime files
+*.log
