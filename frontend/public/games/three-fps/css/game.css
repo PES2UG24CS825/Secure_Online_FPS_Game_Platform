@@ -2398,18 +2398,22 @@ html, body {
 /* =========================================================
    MATCH COMPLETION & WINNER SCREEN MODAL (VICTORY / DEFEAT)
    ========================================================= */
+.game-modal-overlay[style*="display: none"] {
+  display: none !important;
+}
+
 .game-modal-overlay {
-  position: fixed !important;
-  inset: 0 !important;
-  width: 100vw !important;
-  height: 100vh !important;
-  z-index: 99999 !important;
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 99999;
   background: radial-gradient(circle at center, rgba(10, 16, 28, 0.94) 0%, rgba(3, 7, 18, 0.98) 100%) !important;
   backdrop-filter: blur(14px) !important;
-  display: flex !important;
+  display: flex;
   align-items: center !important;
   justify-content: center !important;
-  pointer-events: auto !important;
+  pointer-events: auto;
   animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 

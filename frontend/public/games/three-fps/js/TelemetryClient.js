@@ -46,8 +46,12 @@ class TelemetryClient {
       });
     });
 
-    window.addEventListener('fps:telemetry_death', (e) => {
-      this.sendEvent('player_death', {});
+    window.addEventListener("fps:telemetry_death", (e) => {
+      this.sendEvent("player_death", {});
+      // Reset tracking so respawn jump across map is never calculated as player speed
+      this.lastPositionX = undefined;
+      this.lastPositionZ = undefined;
+      this.lastMovementSampleTime = 0;
     });
 
     window.addEventListener('fps:game_completed', async (e) => {
@@ -123,7 +127,10 @@ class TelemetryClient {
           controller.position.z - this.lastPositionZ
         );
         const deltaTime = Math.max(0.001, now - this.lastMovementSampleTime);
-        integratedSpeed = deltaDist / deltaTime;
+        // Only integrate if realistic continuous movement (<= 20 meters per sample)
+        if (deltaDist <= 20.0) {
+          integratedSpeed = deltaDist / deltaTime;
+        }
       }
 
       this.lastPositionX = controller.position.x;

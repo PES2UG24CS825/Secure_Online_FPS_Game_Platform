@@ -131,8 +131,19 @@ class Controller {
     window.addEventListener('blur', () => this.resetKeys());
 
     // Auto-acquire Pointer Lock on user interaction when in match
-    window.addEventListener('mousedown', (e) => {
-      if (!window.SecureFPSGame?.isMenuOpen && !this.isLocked) {
+        // Auto-acquire Pointer Lock on user interaction when in match
+    window.addEventListener("mousedown", (e) => {
+      // Ignore clicks on UI elements, buttons, overlays, inputs, modals
+      if (
+        e.target &&
+        e.target.closest &&
+        e.target.closest(
+          "button, input, select, textarea, a, .game-modal-overlay, .hud-modal-overlay, #pause-overlay, #loading-overlay, #main-menu-hub, .mc-actions-row, .modal-card, .pause-card, .hud-btn"
+        )
+      ) {
+        return;
+      }
+      if (!window.SecureFPSGame?.isMenuOpen && !this.isLocked && !window.SecureFPSGame?.isPaused) {
         this.requestLock();
       }
     });
@@ -148,20 +159,30 @@ class Controller {
 
   requestLock() {
     // Unfocus any active input elements from lobby so keyboard focus is active
-    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    if (document.activeElement && typeof document.activeElement.blur === "function") {
       document.activeElement.blur();
     }
     if (this.domElement) {
-      if (typeof this.domElement.focus === 'function') {
+      if (typeof this.domElement.focus === "function") {
         this.domElement.focus();
       }
       try {
-        this.domElement.requestPointerLock();
+        const lockPromise = this.domElement.requestPointerLock();
+        if (lockPromise && typeof lockPromise.catch === "function") {
+          lockPromise.catch((err) => {
+            // Ignore browser security lock cooldowns (e.g. immediately after exiting lock)
+            if (err && err.name !== "SecurityError") {
+              console.warn("[SecureFPS Controller] Pointer lock error:", err);
+            }
+          });
+        }
       } catch (err) {
-        console.warn('[SecureFPS Controller] Pointer lock request:', err);
+        if (err && err.name !== "SecurityError") {
+          console.warn("[SecureFPS Controller] Pointer lock request:", err);
+        }
       }
     }
-    if (typeof window.focus === 'function') {
+    if (typeof window.focus === "function") {
       window.focus();
     }
   }

@@ -355,7 +355,8 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
   window.localPlayerHonour = 100;
   async function syncAuthenticatedProfile() {
     try {
-      const res = await fetch('/api/player/profile', { credentials: 'include' });
+      const apiBase = window.API_BASE || (window.location.port === "5000" ? `${window.location.origin}/api` : `http://${window.location.hostname || "127.0.0.1"}:5000/api`);
+      const res = await fetch(`${apiBase}/player/profile`, { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
         if (data && data.name) {
@@ -369,7 +370,7 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
         }
       }
       // Also fetch live honour endpoint
-      const hRes = await fetch('/api/game/honour', { credentials: 'include' });
+      const hRes = await fetch(`${apiBase}/game/honour`, { credentials: 'include' });
       if (hRes.ok) {
         const hData = await hRes.json();
         if (typeof hData.honour_score === 'number') {
@@ -1235,34 +1236,60 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
   }
 
   function returnToMainMenu() {
-    const loadingOverlay = document.getElementById('loading-overlay');
-    const pauseOverlay = document.getElementById('pause-overlay');
-    const mcOverlay = document.getElementById('match-complete-overlay');
-    const tcOverlay = document.getElementById('training-complete-overlay');
-    const mainMenuHub = document.getElementById('main-menu-hub');
-    const loaderProgress = document.getElementById('loader-progress-box');
-    const gameHud = document.getElementById('game-hud');
-    const trainingHud = document.getElementById('training-hud');
+    const loadingOverlay = document.getElementById("loading-overlay");
+    const pauseOverlay = document.getElementById("pause-overlay");
+    const mcOverlay = document.getElementById("match-complete-overlay");
+    const tcOverlay = document.getElementById("training-complete-overlay");
+    const mainMenuHub = document.getElementById("main-menu-hub");
+    const loaderProgress = document.getElementById("loader-progress-box");
+    const gameHud = document.getElementById("game-hud");
+    const trainingHud = document.getElementById("training-hud");
+    const voluntaryExitModal = document.getElementById("voluntary-exit-modal");
+    const btnConfirmExit = document.getElementById("btn-confirm-exit-match");
 
     if (document.exitPointerLock) {
       document.exitPointerLock();
     }
-    if (window.SecureFPSGame?.controller?.controls) {
-      window.SecureFPSGame.controller.controls.unlock();
+    if (window.SecureFPSGame?.controller?.unlock) {
+      window.SecureFPSGame.controller.unlock();
     }
 
-    if (pauseOverlay) pauseOverlay.classList.remove('active');
-    if (mcOverlay) mcOverlay.style.display = 'none';
-    if (tcOverlay) tcOverlay.style.display = 'none';
-    if (gameHud) gameHud.style.display = 'none';
-    if (trainingHud) trainingHud.style.display = 'none';
+    if (pauseOverlay) pauseOverlay.classList.remove("active");
+    if (mcOverlay) mcOverlay.style.display = "none";
+    if (tcOverlay) tcOverlay.style.display = "none";
+    if (voluntaryExitModal) voluntaryExitModal.style.display = "none";
+    if (btnConfirmExit) {
+      btnConfirmExit.disabled = false;
+      btnConfirmExit.textContent = "ABANDON & EXIT";
+    }
+    if (gameHud) gameHud.style.display = "none";
+    if (trainingHud) trainingHud.style.display = "none";
 
     window.SecureFPSGame.isMenuOpen = true;
     window.SecureFPSGame.isPaused = false;
 
-    if (loadingOverlay) loadingOverlay.classList.remove('hidden');
-    if (mainMenuHub) mainMenuHub.style.display = 'block';
-    if (loaderProgress) loaderProgress.style.display = 'none';
+    // Reset match state
+    if (window.SecureFPSGame?.gameMode) {
+      window.SecureFPSGame.gameMode.isMatchActive = false;
+      window.SecureFPSGame.gameMode.isMatchEnded = false;
+    }
+
+    // Leave room if in multiplayer match
+    if (window.SecureFPSGame?.multiplayer?.isInRoom) {
+      window.SecureFPSGame.multiplayer.leaveRoom();
+    }
+
+    // Reset weapons state (ADS / scopes)
+    if (window.SecureFPSGame?.weapons) {
+      window.SecureFPSGame.weapons.isAiming = false;
+      if (window.SecureFPSGame.weapons.sniperScopeOverlay) {
+        window.SecureFPSGame.weapons.sniperScopeOverlay.style.display = "none";
+      }
+    }
+
+    if (loadingOverlay) loadingOverlay.classList.remove("hidden");
+    if (mainMenuHub) mainMenuHub.style.display = "block";
+    if (loaderProgress) loaderProgress.style.display = "none";
 
     // Stop bots and training targets
     const botMgr = window.SecureFPSGame.botManager;
@@ -1309,7 +1336,7 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
   // Canvas click to lock if paused and clicked
   if (canvas) {
     canvas.addEventListener('click', () => {
-      if (loadingOverlay && loadingOverlay.classList.contains('hidden') && !controller.isLocked && !window.SecureFPSGame.isMenuOpen) {
+      if (loadingOverlay && loadingOverlay.classList.contains('hidden') && !controller.isLocked && !window.SecureFPSGame.isMenuOpen && !window.SecureFPSGame.isPaused) {
         controller.requestLock();
       }
     });
@@ -1409,6 +1436,12 @@ function updateScoreboardTable(gameMode, multiplayer) {
  * Safe Exit to Player Dashboard (Preserves authentication, stops loops/audio)
  */
 async function safeExitToDashboard(telemetry) {
+  const getDashboardUrl = () => {
+    return window.location.pathname.includes("/frontend/")
+      ? `${window.location.origin}/frontend/player.html`
+      : `${window.location.origin}/player.html`;
+  };
+
   try {
     if (window.SecureFPSGame?.animationFrameId) {
       cancelAnimationFrame(window.SecureFPSGame.animationFrameId);
@@ -1427,9 +1460,12 @@ async function safeExitToDashboard(telemetry) {
     if (document.exitPointerLock) {
       document.exitPointerLock();
     }
-    window.location.href = '/player.html';
+    if (window.SecureFPSGame?.controller?.unlock) {
+      window.SecureFPSGame.controller.unlock();
+    }
+    window.location.href = getDashboardUrl();
   } catch (e) {
-    window.location.href = '/player.html';
+    window.location.href = getDashboardUrl();
   }
 }
 

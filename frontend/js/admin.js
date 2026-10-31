@@ -398,16 +398,14 @@ function renderGameplayAlerts(data) {
         </div>
       </div>` : ""}
 
-      ${!hackerAlert && alert.review_status === "pending" && !alert.is_superseded && alert.session_id ? `<div class="gameplay-review-actions">
-        ${["approve", "warn", ...(window.adminRole === "moderator" ? [] : ["suspend", "ban"])].map((action) => {
-          const descriptions = {
-            approve: "Mark reviewed without changing the player account.",
-            warn: "Send a security warning the player can see.",
-            suspend: "Block this player from signing in until restored.",
-            ban: "Choose a 24-hour, 7-day, or permanent ban."
-          };
-          return `<button class="play-btn ${action === "ban" ? "danger-btn" : ""}" type="button" title="${descriptions[action]}" aria-label="${action[0].toUpperCase() + action.slice(1)} alert for ${escapeHtml(player)}. ${descriptions[action]}" data-review-action="${action}" data-session-id="${escapeHtml(alert.session_id)}">${action[0].toUpperCase() + action.slice(1)}</button>`;
-        }).join("")}
+            ${alert.session_id ? `<div class="gameplay-review-actions" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; align-items:center;">
+        <button class="play-btn success-btn" type="button" title="1-Click: Confirm and clear alert as legitimate normal player" aria-label="Mark as normal player" data-review-action="normal" data-session-id="${escapeHtml(alert.session_id)}">✔ Mark Normal (1-Click)</button>
+        <button class="play-btn" type="button" title="Send a security warning note to this player" aria-label="Warn player" data-review-action="warn" data-session-id="${escapeHtml(alert.session_id)}">⚠ Warn</button>
+        ${window.adminRole === "moderator" ? "" : `
+          <button class="play-btn warning-btn" type="button" title="Suspend this player account from logging in" aria-label="Suspend player" data-review-action="suspend" data-session-id="${escapeHtml(alert.session_id)}">⏸ Suspend</button>
+          <button class="play-btn danger-btn" type="button" title="Choose a 24h, 7-day, or permanent ban" aria-label="Ban player" data-review-action="ban" data-session-id="${escapeHtml(alert.session_id)}">⛔ Ban</button>
+        `}
+        ${alert.review_status && alert.review_status !== "pending" ? `<span class="badge ${alert.review_status === "reviewed" || alert.review_status === "cleared" ? "good" : "warn"}" style="margin-left:auto;">${escapeHtml(alert.review_status.toUpperCase())}</span>` : ""}
       </div>` : ""}
     </article>`;
   }).join("") || '<div class="empty">No gameplay alerts.</div>';
@@ -992,11 +990,34 @@ document.getElementById("gameplayAlerts")?.addEventListener("click", async (even
     }
     return;
   }
-  const button = event.target.closest("button[data-review-action]");
+    const button = event.target.closest("button[data-review-action]");
   if (!button) return;
+  const action = button.dataset.reviewAction;
+  const sessionId = button.dataset.sessionId;
+
+  // 1-Click instant resolution for normal / legitimate gameplay
+  if (action === "approve" || action === "normal") {
+    button.disabled = true;
+    try {
+      await api(`/admin/gameplay/alerts/${encodeURIComponent(sessionId)}/review`, {
+        method: "POST",
+        body: JSON.stringify({
+          action: "approve",
+          note: "Reviewed and confirmed as legitimate normal gameplay."
+        })
+      });
+      window.showAppToast("Alert verified and marked as legitimate normal player.", "success");
+      await loadAdmin(true);
+    } catch (error) {
+      window.showAppAlert(error.message || "Failed to mark as normal.", { title: "Review Action Failed", tone: "error" });
+    } finally {
+      if (button?.isConnected) button.disabled = false;
+    }
+    return;
+  }
+
   pendingReview = button;
   document.getElementById("reviewNote").value = "";
-  const action = button.dataset.reviewAction;
   const banDuration = document.getElementById("banDuration");
   const banDurationLabel = document.getElementById("banDurationLabel");
   banDuration.hidden = action !== "ban";
