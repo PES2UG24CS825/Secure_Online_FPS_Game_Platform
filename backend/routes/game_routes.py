@@ -2021,6 +2021,8 @@ def extract_features(
                     )
 
                     if math.isfinite(rotation_change):
+                        if event.get("game") == "FPS_Microgame" or rotation_change > math.pi * 2:
+                            rotation_change = math.radians(rotation_change)
                         aim_changes.append(
                             abs(rotation_change)
                         )
