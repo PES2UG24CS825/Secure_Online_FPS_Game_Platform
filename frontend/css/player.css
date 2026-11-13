@@ -1114,27 +1114,51 @@
       color: #312E81 !important;
     }
 
-    /* CSS Classes Replacing Inline Styles (Item 11) */
-    .cyberstrike-card-theme {
-      border: 2px solid rgba(124, 58, 237, 0.4) !important;
-      box-shadow: 0 10px 30px rgba(124, 58, 237, 0.12) !important;
+    /* CyberStrike 3D Unique Featured Purple Center Theme */
+    .player-page .player-game-grid .cyberstrike-card-theme {
+      border: 2px solid #7c3aed !important;
+      box-shadow: 0 12px 35px rgba(124, 58, 237, 0.25) !important;
     }
 
-    .cyberstrike-art-theme {
-      background: linear-gradient(135deg, #1E1B4B 0%, #4C1D95 100%) !important;
+    .player-page .player-game-grid .cyberstrike-card-theme .game-art,
+    .player-page .player-game-grid .cyberstrike-art-theme {
+      background: radial-gradient(circle at 75% 35%, rgba(168, 85, 247, 0.4), transparent 55%), linear-gradient(135deg, #2e1065 0%, #581c87 50%, #7c3aed 100%) !important;
+      border-bottom: 2px solid rgba(168, 85, 247, 0.4) !important;
     }
 
-    .cyberstrike-tag-theme {
-      background: rgba(124, 58, 237, 0.15) !important;
-      color: #7C3AED !important;
-      border-color: rgba(124, 58, 237, 0.4) !important;
+    .player-page .player-game-grid .cyberstrike-card-theme .game-art span {
+      background: rgba(124, 58, 237, 0.95) !important;
+      color: #ffffff !important;
+      border-color: rgba(255, 255, 255, 0.3) !important;
+    }
+
+    .player-page .player-game-grid .cyberstrike-card-theme .game-art .game-art-mascot span {
+      background: #7c3aed !important;
+      color: #ffffff !important;
+      border-color: #a855f7 !important;
+    }
+
+    .player-page .player-game-grid .cyberstrike-card-theme .game-info {
+      background: #faf5ff !important;
+    }
+
+    .player-page .player-game-grid .cyberstrike-card-theme .cyberstrike-tag-theme {
+      background: rgba(124, 58, 237, 0.18) !important;
+      color: #6d28d9 !important;
+      border: 1px solid rgba(124, 58, 237, 0.45) !important;
       font-weight: 700 !important;
     }
 
-    .cyberstrike-btn-theme {
-      background: linear-gradient(135deg, #7C3AED, #6D28D9) !important;
-      color: #FFFFFF !important;
+    .player-page .player-game-grid .cyberstrike-card-theme .play-btn {
+      background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%) !important;
+      color: #ffffff !important;
+      box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35) !important;
       font-weight: 700 !important;
+    }
+
+    .player-page .player-game-grid .cyberstrike-card-theme .play-btn:hover {
+      background: linear-gradient(135deg, #6d28d9 0%, #5b21b6 100%) !important;
+      box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5) !important;
     }
 
     .security-actions-container {

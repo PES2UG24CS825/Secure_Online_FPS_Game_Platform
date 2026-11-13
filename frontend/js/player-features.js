@@ -110,9 +110,9 @@ async function loadRewards() {
     store.innerHTML = (data.store || []).map((item) => {
       const hasItem = owned.has(item.id);
       const equipped = data.equipped_item === item.id;
-      const label = equipped ? "Equipped" : hasItem ? "Equip badge" : `Buy · ${item.price} coins`;
+      const label = equipped ? "Equipped" : hasItem ? "Equip perk" : `Unlock · ${item.price} coins`;
       const action = hasItem ? "equip" : "buy";
-      return `<article class="reward-item"><strong aria-hidden="true">${featureEscape(item.icon)}</strong><h3>${featureEscape(item.name)}</h3><p>${featureEscape(item.description)}</p><span class="reward-price">${hasItem ? "Owned" : `${item.price} coins`}</span><button class="play-btn" type="button" data-reward-action="${action}" data-item-id="${featureEscape(item.id)}" ${equipped ? "disabled" : ""}>${label}</button></article>`;
+      return `<article class="reward-item"><strong aria-hidden="true">${featureEscape(item.icon)}</strong><h3>${featureEscape(item.name)}</h3><p>${featureEscape(item.description)}</p><span class="reward-price">${hasItem ? "Unlocked" : `${item.price} coins`}</span><button class="play-btn" type="button" data-reward-action="${action}" data-item-id="${featureEscape(item.id)}" ${equipped ? "disabled" : ""}>${label}</button></article>`;
     }).join("") || '<div class="empty">No store items are available.</div>';
 
     const history = document.getElementById("rewardHistory");

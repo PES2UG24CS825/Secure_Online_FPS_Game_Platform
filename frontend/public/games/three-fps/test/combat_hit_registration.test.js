@@ -50,4 +50,65 @@ describe('Combat & Hit Registration Verification', () => {
     assert.match(html, /CyberStrike 3D/);
     assert.match(html, /FPS Microgame/);
   });
+
+  it('Weapons.js prevents firing and damage after player death', () => {
+    const wepCode = fs.readFileSync(path.join(rootDir, 'js/Weapons.js'), 'utf-8');
+    assert.match(wepCode, /isPlayerAlive\(\)/);
+    assert.match(wepCode, /if\s*\(!this\.isPlayerAlive\(\)\)\s*\{\s*this\.isFiring\s*=\s*false;\s*return;\s*\}/);
+  });
+
+  it('BotManager.js implements penetration resolution and anti-stuck wall sliding', () => {
+    const botCode = fs.readFileSync(path.join(rootDir, 'js/BotManager.js'), 'utf-8');
+    assert.match(botCode, /resolvePenetration\(\)/);
+    assert.match(botCode, /this\.resolvePenetration\(\)/);
+  });
+
+  it('Match completion displays total shots, hits landed, and accuracy calculation transparency', () => {
+    const html = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf-8');
+    const mainJs = fs.readFileSync(path.join(rootDir, 'js/main.js'), 'utf-8');
+    assert.match(html, /id="mc-shots"/);
+    assert.match(html, /id="mc-hits"/);
+    assert.match(mainJs, /setEl\('mc-shots'/);
+    assert.match(mainJs, /setEl\('mc-hits'/);
+  });
+
+  it('Player overview dashboard displays career combat stats and clean match feature badges', () => {
+    const playerHtml = fs.readFileSync(path.resolve(rootDir, '../../../player.html'), 'utf-8');
+    const playerJs = fs.readFileSync(path.resolve(rootDir, '../../../js/player.js'), 'utf-8');
+    const playerCss = fs.readFileSync(path.resolve(rootDir, '../../../css/player.css'), 'utf-8');
+    const routesPy = fs.readFileSync(path.resolve(rootDir, '../../../../backend/routes/player_routes.py'), 'utf-8');
+
+    assert.match(playerHtml, /id="careerTotalKills"/);
+    assert.match(playerHtml, /id="careerTotalDeaths"/);
+    assert.match(playerHtml, /id="careerKd"/);
+    assert.match(playerHtml, /id="careerAccuracy"/);
+    assert.match(playerJs, /careerTotalKills/);
+    assert.match(playerJs, /match-features-strip/);
+    assert.doesNotMatch(playerJs, /ML Models:\s*<\/strong>\s*RF:/);
+    assert.doesNotMatch(playerJs, /Analysis needs gameplay data:/);
+
+    // Image 3 requirement: strip shows only Fair Play, XP, and Coins (no Weapon or Hits tags)
+    assert.match(playerJs, /Fair Play Verified/);
+    assert.match(playerJs, /XP<\/span>/);
+    assert.match(playerJs, /Coins<\/span>/);
+    assert.doesNotMatch(playerJs, /🎯 Weapon:/);
+
+    // Accuracy stat box displays only percentage without total shots in card
+    assert.match(playerJs, /const accuracyStr = match\.accuracy == null \? "—" : `\$\{Number\(match\.accuracy\)\.toFixed\(1\)\}%`;/);
+
+    // Useful rewards store
+    assert.match(routesPy, /Recoil Compensator/);
+    assert.match(routesPy, /Tactical Extended Mags/);
+
+    // Purple featured center styling for CyberStrike
+    assert.match(playerCss, /cyberstrike-card-theme/);
+    assert.match(playerCss, /#7c3aed/);
+  });
+
+  it('BotManager prevents elevation floating and checks full diagonal step collision', () => {
+    const botCode = fs.readFileSync(path.join(rootDir, 'js/BotManager.js'), 'utf-8');
+    assert.match(botCode, /this\.position\.y\s*=\s*0\.0;/);
+    assert.match(botCode, /!this\.checkCollisionAt\(nextX,\s*nextZ\)/);
+    assert.match(botCode, /hasLineOfSight\(targetPos\)/);
+  });
 });

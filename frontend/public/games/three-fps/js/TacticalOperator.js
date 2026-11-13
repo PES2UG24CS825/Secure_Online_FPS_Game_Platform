@@ -276,32 +276,69 @@ class TacticalOperator {
     const accentHex = isBlue ? 0x00f0ff : 0xff0055;
     this.accentColor = new THREE.Color(accentHex);
 
+    // Generate authentic procedural military textures if available
+    let camoTex = null;
+    let faceTex = null;
+    let patchTex = null;
+    if (typeof TextureGenerator !== 'undefined') {
+      try {
+        if (typeof TextureGenerator.createMulticamTexture === 'function') {
+          camoTex = TextureGenerator.createMulticamTexture(this.team, this.isFemale);
+        }
+        if (typeof TextureGenerator.createHumanFaceTexture === 'function') {
+          faceTex = TextureGenerator.createHumanFaceTexture(this.isFemale);
+        }
+        if (typeof TextureGenerator.createPatchTexture === 'function') {
+          patchTex = TextureGenerator.createPatchTexture(this.team, 'CS-3D');
+        }
+      } catch (e) {
+        console.warn('[TacticalOperator] Failed generating procedural textures:', e);
+      }
+    }
+
     this.materials = {
-      // Dark tactical uniform ripstop fabric (charcoal-navy for blue, charcoal-maroon for red)
+      // Authentic MultiCam tactical uniform fabric (camo pattern)
       uniform: new THREE.MeshStandardMaterial({
-        color: isBlue ? 0x181e26 : 0x221a1f,
-        roughness: 0.75,
-        metalness: 0.12
+        map: camoTex,
+        color: isBlue ? 0x242e3d : 0x3d3328,
+        roughness: 0.78,
+        metalness: 0.08
       }),
       // Coyote tan pants for female operator
       femalePants: new THREE.MeshStandardMaterial({
-        color: 0x4f4333,
+        map: camoTex,
+        color: 0x5a4d3c,
         roughness: 0.75,
-        metalness: 0.10
+        metalness: 0.08
       }),
-      // Plate carrier fabric (tan/coyote or dark charcoal)
+      // Plate carrier fabric (tan/coyote or dark charcoal with camo)
       plateCarrier: new THREE.MeshStandardMaterial({
-        color: this.isFemale ? 0x594a38 : (isBlue ? 0x242830 : 0x3d302a),
-        roughness: 0.65,
-        metalness: 0.15
+        map: camoTex,
+        color: this.isFemale ? 0x4f4232 : (isBlue ? 0x222a36 : 0x3d3228),
+        roughness: 0.70,
+        metalness: 0.12
       }),
-      // Matte tactical polymer (helmet, knee pads, holster, radio, boots)
+      // Matte tactical polymer (helmet rails, radio, boots, straps)
       gearPolymer: new THREE.MeshStandardMaterial({
-        color: 0x16181d,
-        roughness: 0.40,
-        metalness: 0.40
+        color: 0x1c1f24,
+        roughness: 0.45,
+        metalness: 0.25
       }),
-      // Ballistic Goggle Lens (mirrored reflective tint matching team color)
+      // Ballistic Sunglasses polarized lens (dark smoke polarized tint)
+      sunglassesLens: new THREE.MeshStandardMaterial({
+        color: 0x0e141d,
+        roughness: 0.12,
+        metalness: 0.75,
+        transparent: true,
+        opacity: 0.85
+      }),
+      // Ballistic Sunglasses matte frame
+      sunglassesFrame: new THREE.MeshStandardMaterial({
+        color: 0x111317,
+        roughness: 0.45,
+        metalness: 0.35
+      }),
+      // Legacy goggleLens reference for optics/attachments
       goggleLens: new THREE.MeshStandardMaterial({
         color: accentHex,
         roughness: 0.1,
@@ -309,7 +346,7 @@ class TacticalOperator {
         transparent: true,
         opacity: 0.85
       }),
-      // Team identification glowing accent (used only for small patches & lenses)
+      // Team identification subtle accent patch
       teamAccent: new THREE.MeshBasicMaterial({
         color: accentHex
       }),
@@ -325,21 +362,28 @@ class TacticalOperator {
         roughness: 0.6,
         metalness: 0.2
       }),
-      // Adult human skin tone
+      // Authentic adult human skin tone
       skin: new THREE.MeshStandardMaterial({
         color: this.isFemale ? 0xd4a58a : 0xc8967b,
-        roughness: 0.65,
-        metalness: 0.05
+        roughness: 0.60,
+        metalness: 0.02
       }),
-      // Balaclava dark fabric
+      // Human face with facial features (eyes, eyebrows, lips, shading)
+      face: new THREE.MeshStandardMaterial({
+        map: faceTex,
+        color: this.isFemale ? 0xffffff : 0xf4eee8,
+        roughness: 0.58,
+        metalness: 0.02
+      }),
+      // Balaclava dark fabric fallback
       balaclava: new THREE.MeshStandardMaterial({
-        color: 0x14161a,
+        color: 0x1b1f26,
         roughness: 0.85,
         metalness: 0.05
       }),
-      // Dark tactical hair
+      // Dark tactical operator hair
       hair: new THREE.MeshStandardMaterial({
-        color: 0x221a16,
+        color: this.isFemale ? 0x2c1f19 : 0x1c1714,
         roughness: 0.85
       }),
       // Brass for ejected shell casings
@@ -347,20 +391,12 @@ class TacticalOperator {
         color: 0xd4af37,
         roughness: 0.25,
         metalness: 0.90
-      })
+      }),
+      // Velcro team/moral patch
+      patch: patchTex
+        ? new THREE.MeshBasicMaterial({ map: patchTex, transparent: true })
+        : new THREE.MeshBasicMaterial({ color: accentHex })
     };
-
-    // Authentic CS-3D Velcro Chest Patch
-    if (typeof TextureGenerator !== 'undefined' && typeof TextureGenerator.createPatchTexture === 'function') {
-      try {
-        const patchTex = TextureGenerator.createPatchTexture(this.team, 'CS-3D');
-        this.materials.patch = new THREE.MeshBasicMaterial({ map: patchTex, transparent: true });
-      } catch (_) {
-        this.materials.patch = this.materials.teamAccent;
-      }
-    } else {
-      this.materials.patch = this.materials.teamAccent;
-    }
   }
 
   buildCharacter() {
@@ -667,21 +703,59 @@ class TacticalOperator {
     this.neckGroup.position.set(0, 0.26, 0);
     this.chestGroup.add(this.neckGroup);
 
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.075, 0.10, 10), balaclava);
-    neck.position.set(0, 0.05, 0);
+    // Anatomical collar (tactical uniform shirt collar at base of neck)
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.082, 0.035, 12), uniform);
+    collar.position.set(0, 0.018, 0);
+    this.neckGroup.add(collar);
+
+    // Human neck with authentic skin
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.068, 0.09, 12), this.materials.skin);
+    neck.position.set(0, 0.065, 0);
+    neck.castShadow = true;
     this.neckGroup.add(neck);
 
     this.headGroup = new THREE.Group();
     this.headGroup.position.set(0, 0.12, 0);
     this.neckGroup.add(this.headGroup);
 
-    // Head base (balaclava / skin)
-    const headBase = new THREE.Mesh(new THREE.SphereGeometry(0.125, 14, 14), balaclava);
+    // Authentic Tactical Operator Head with Form-Fitting Combat Balaclava
+    const headGeo = new THREE.SphereGeometry(0.125, 18, 16);
+    const headBase = new THREE.Mesh(headGeo, this.materials.balaclava);
     headBase.position.set(0, 0.04, 0);
     headBase.castShadow = true;
     this.headGroup.add(headBase);
 
-    // Headgear (FAST Helmet / Goggles / Comms Headset OR Female Cap + Ponytail)
+    // Anatomical Eye Opening revealing authentic human skin
+    const eyeCutout = new THREE.Mesh(new THREE.BoxGeometry(0.125, 0.040, 0.012), this.materials.skin);
+    eyeCutout.position.set(0, 0.036, 0.122);
+    this.headGroup.add(eyeCutout);
+
+    // Left & Right Sclera (Human Eyeballs)
+    const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.2 });
+    const eyeIrisMat = new THREE.MeshStandardMaterial({ color: 0x3d4f5d, roughness: 0.3 });
+
+    const lEyeWhite = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.013, 0.005), eyeWhiteMat);
+    lEyeWhite.position.set(-0.036, 0.036, 0.127);
+    this.headGroup.add(lEyeWhite);
+
+    const lIris = new THREE.Mesh(new THREE.BoxGeometry(0.013, 0.013, 0.006), eyeIrisMat);
+    lIris.position.set(-0.036, 0.036, 0.129);
+    this.headGroup.add(lIris);
+
+    const rEyeWhite = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.013, 0.005), eyeWhiteMat);
+    rEyeWhite.position.set(0.036, 0.036, 0.127);
+    this.headGroup.add(rEyeWhite);
+
+    const rIris = new THREE.Mesh(new THREE.BoxGeometry(0.013, 0.013, 0.006), eyeIrisMat);
+    rIris.position.set(0.036, 0.036, 0.129);
+    this.headGroup.add(rIris);
+
+    // Balaclava nose bridge definition (clean fabric ridge)
+    const noseRidge = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.032, 0.016), this.materials.balaclava);
+    noseRidge.position.set(0, 0.028, 0.129);
+    this.headGroup.add(noseRidge);
+
+    // Headgear (FAST Helmet / Ballistic Eyewear / Comms Headset OR Female Cap + Ponytail)
     const headGear = this.isFemale ? this.buildFemaleHeadGear() : this.buildMaleHeadGear();
     headGear.position.set(0, 0.04, 0);
     this.headGroup.add(headGear);
@@ -706,9 +780,15 @@ class TacticalOperator {
     this.rElbowGroup.position.set(0, -0.24, 0);
     this.rShoulderGroup.add(this.rElbowGroup);
 
-    const rForearmGeo = new THREE.CylinderGeometry(0.046, 0.040, 0.22, 10);
-    const rForearm = new THREE.Mesh(rForearmGeo, uniform);
-    rForearm.position.set(0, -0.11, 0);
+    // Rolled combat sleeve cuff
+    const rCuff = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.050, 0.035, 10), uniform);
+    rCuff.position.set(0, -0.018, 0);
+    this.rElbowGroup.add(rCuff);
+
+    // Muscular human forearm with realistic skin
+    const rForearmGeo = new THREE.CylinderGeometry(0.045, 0.038, 0.19, 10);
+    const rForearm = new THREE.Mesh(rForearmGeo, this.materials.skin);
+    rForearm.position.set(0, -0.12, 0);
     rForearm.castShadow = true;
     this.rElbowGroup.add(rForearm);
 
@@ -739,11 +819,26 @@ class TacticalOperator {
     this.lElbowGroup.position.set(0, -0.24, 0);
     this.lShoulderGroup.add(this.lElbowGroup);
 
-    const lForearmGeo = new THREE.CylinderGeometry(0.046, 0.040, 0.22, 10);
-    const lForearm = new THREE.Mesh(lForearmGeo, uniform);
-    lForearm.position.set(0, -0.11, 0);
+    // Rolled combat sleeve cuff
+    const lCuff = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.050, 0.035, 10), uniform);
+    lCuff.position.set(0, -0.018, 0);
+    this.lElbowGroup.add(lCuff);
+
+    // Muscular human forearm with realistic skin
+    const lForearmGeo = new THREE.CylinderGeometry(0.045, 0.038, 0.19, 10);
+    const lForearm = new THREE.Mesh(lForearmGeo, this.materials.skin);
+    lForearm.position.set(0, -0.12, 0);
     lForearm.castShadow = true;
     this.lElbowGroup.add(lForearm);
+
+    // Tactical GPS Field Watch on Left Wrist
+    const watchBand = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.022, 10), gearPolymer);
+    watchBand.position.set(0, -0.18, 0);
+    this.lElbowGroup.add(watchBand);
+
+    const watchFace = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.016, 0.026), this.materials.metal);
+    watchFace.position.set(0, -0.18, 0.038);
+    this.lElbowGroup.add(watchFace);
 
     // Left Hand / Tactical Glove (Supporting handguard)
     this.lHandGroup = new THREE.Group();
@@ -867,54 +962,97 @@ class TacticalOperator {
 
   buildMaleHeadGear() {
     const group = new THREE.Group();
-    const { gearPolymer, goggleLens, teamAccent } = this.materials;
+    const { gearPolymer, uniform, sunglassesFrame, sunglassesLens, hair, teamAccent, metal } = this.materials;
 
-    // FAST Tactical High-Cut Helmet Shell
+    // Cropped Tactical Buzz Cut Hair (visible beneath helmet / around temples and nape)
+    const hairNape = new THREE.Mesh(new THREE.CylinderGeometry(0.122, 0.126, 0.06, 14), hair);
+    hairNape.position.set(0, 0.01, -0.02);
+    group.add(hairNape);
+
+    // FAST Tactical High-Cut Helmet Shell with authentic MultiCam camouflage cover
     const helmetShell = new THREE.Mesh(
-      new THREE.SphereGeometry(0.138, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.56),
-      gearPolymer
+      new THREE.SphereGeometry(0.136, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.54),
+      uniform
     );
-    helmetShell.position.set(0, 0.04, -0.01);
+    helmetShell.position.set(0, 0.045, -0.008);
     helmetShell.castShadow = true;
     group.add(helmetShell);
 
+    // Helmet Lower Rubber Edge Rim
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.134, 0.008, 6, 20), gearPolymer);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.set(0, 0.038, -0.008);
+    group.add(rim);
+
     // Front Wilcox NVG Shroud Mount Bracket
     const nvgMount = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.048, 0.016), gearPolymer);
-    nvgMount.position.set(0, 0.065, 0.135);
+    nvgMount.position.set(0, 0.068, 0.132);
     group.add(nvgMount);
 
-    const nvgSocket = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.018, 8), this.materials.metal);
-    nvgSocket.position.set(0, 0.065, 0.144);
+    const nvgSocket = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.018, 8), metal);
+    nvgSocket.position.set(0, 0.068, 0.141);
     nvgSocket.rotation.x = Math.PI / 2;
     group.add(nvgSocket);
 
     // Side ARC Accessory Rails
-    const leftRail = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.028, 0.12), gearPolymer);
-    leftRail.position.set(-0.135, 0.04, 0.01);
+    const leftRail = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.028, 0.11), gearPolymer);
+    leftRail.position.set(-0.134, 0.042, 0.01);
     group.add(leftRail);
 
-    const rightRail = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.028, 0.12), gearPolymer);
-    rightRail.position.set(0.135, 0.04, 0.01);
+    const rightRail = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.028, 0.11), gearPolymer);
+    rightRail.position.set(0.134, 0.042, 0.01);
     group.add(rightRail);
 
-    // Ballistic Tactical Goggles with Team-Tinted Mirrored Lens
-    const goggleFrame = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.052, 0.038), gearPolymer);
-    goggleFrame.position.set(0, 0.015, 0.125);
-    group.add(goggleFrame);
+    // Tactical Chinstrap (4-point harness hugging the jawline - unmistakably human military)
+    const leftStrap = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.09, 6), gearPolymer);
+    leftStrap.position.set(-0.09, -0.02, 0.02);
+    leftStrap.rotation.z = -0.45;
+    group.add(leftStrap);
 
-    const goggleGlass = new THREE.Mesh(new THREE.BoxGeometry(0.155, 0.038, 0.012), goggleLens);
-    goggleGlass.position.set(0, 0.015, 0.142);
-    group.add(goggleGlass);
+    const rightStrap = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.09, 6), gearPolymer);
+    rightStrap.position.set(0.09, -0.02, 0.02);
+    rightStrap.rotation.z = 0.45;
+    group.add(rightStrap);
+
+    // AUTHENTIC MILITARY BALLISTIC SUNGLASSES (Oakley M-Frame tactical shades)
+    // Dark polarized smoke lenses resting realistically on nose bridge, letting face be seen
+    const leftLens = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.026, 0.008), sunglassesLens);
+    leftLens.position.set(-0.038, 0.022, 0.128);
+    leftLens.rotation.y = 0.15;
+    group.add(leftLens);
+
+    const rightLens = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.026, 0.008), sunglassesLens);
+    rightLens.position.set(0.038, 0.022, 0.128);
+    rightLens.rotation.y = -0.15;
+    group.add(rightLens);
+
+    // Sunglasses Matte Frame & Bridge
+    const glassesBridge = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.007, 0.010), sunglassesFrame);
+    glassesBridge.position.set(0, 0.032, 0.132);
+    group.add(glassesBridge);
+
+    const glassesBrowbar = new THREE.Mesh(new THREE.BoxGeometry(0.132, 0.006, 0.012), sunglassesFrame);
+    glassesBrowbar.position.set(0, 0.036, 0.126);
+    group.add(glassesBrowbar);
+
+    // Glasses Temples (arms reaching back towards ears)
+    const lTemple = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.006, 0.11), sunglassesFrame);
+    lTemple.position.set(-0.082, 0.032, 0.065);
+    group.add(lTemple);
+
+    const rTemple = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.006, 0.11), sunglassesFrame);
+    rTemple.position.set(0.082, 0.032, 0.065);
+    group.add(rTemple);
 
     // Comms Headset with Boom Mic
     const leftCup = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.028, 10), gearPolymer);
     leftCup.rotation.z = Math.PI / 2;
-    leftCup.position.set(-0.135, 0.01, -0.01);
+    leftCup.position.set(-0.136, 0.01, -0.01);
     group.add(leftCup);
 
     const rightCup = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.028, 10), gearPolymer);
     rightCup.rotation.z = Math.PI / 2;
-    rightCup.position.set(0.135, 0.01, -0.01);
+    rightCup.position.set(0.136, 0.01, -0.01);
     group.add(rightCup);
 
     const boomMic = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.12, 6), gearPolymer);
@@ -924,7 +1062,7 @@ class TacticalOperator {
 
     // Rear Team Identification Velcro Tab
     const rearTag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.024, 0.006), teamAccent);
-    rearTag.position.set(0, 0.04, -0.138);
+    rearTag.position.set(0, 0.045, -0.138);
     group.add(rearTag);
 
     return group;
@@ -932,43 +1070,71 @@ class TacticalOperator {
 
   buildFemaleHeadGear() {
     const group = new THREE.Group();
-    const { uniform, goggleLens, hair, teamAccent, gearPolymer } = this.materials;
+    const { uniform, hair, teamAccent, gearPolymer, sunglassesFrame, sunglassesLens } = this.materials;
+
+    // Female Hair Layer (textured sides & crown)
+    const hairSides = new THREE.Mesh(
+      new THREE.SphereGeometry(0.128, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.60),
+      hair
+    );
+    hairSides.position.set(0, 0.035, -0.01);
+    group.add(hairSides);
 
     // Tactical Operator Low-Profile Cap
     const capCrown = new THREE.Mesh(
-      new THREE.SphereGeometry(0.132, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.52),
+      new THREE.SphereGeometry(0.134, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.48),
       uniform
     );
-    capCrown.position.set(0, 0.04, 0);
+    capCrown.position.set(0, 0.05, 0);
     group.add(capCrown);
 
     // Forward Cap Brim / Visor
     const capBrim = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.008, 0.09), uniform);
-    capBrim.position.set(0, 0.025, 0.14);
+    capBrim.position.set(0, 0.032, 0.14);
     capBrim.rotation.x = -0.15;
     group.add(capBrim);
 
-    // Rear Ponytail Exit Aperture & Styled Hair
-    const ponytail = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.028, 0.28, 8), hair);
-    ponytail.position.set(0, -0.04, -0.18);
-    ponytail.rotation.x = -0.40;
+    // Rear Ponytail Exit Aperture & Flowing Styled Hair
+    const ponytail = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.034, 0.30, 10), hair);
+    ponytail.position.set(0, -0.06, -0.19);
+    ponytail.rotation.x = -0.42;
     group.add(ponytail);
 
-    // Ballistic Goggles Resting over Crown/Forehead
-    const goggleFrame = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.048, 0.035), gearPolymer);
-    goggleFrame.position.set(0, 0.075, 0.10);
-    goggleFrame.rotation.x = -0.35;
-    group.add(goggleFrame);
+    const hairTie = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.016, 10), gearPolymer);
+    hairTie.position.set(0, 0.02, -0.14);
+    hairTie.rotation.x = -0.42;
+    group.add(hairTie);
 
-    const goggleGlass = new THREE.Mesh(new THREE.BoxGeometry(0.145, 0.034, 0.010), goggleLens);
-    goggleGlass.position.set(0, 0.075, 0.115);
-    goggleGlass.rotation.x = -0.35;
-    group.add(goggleGlass);
+    // Ballistic Sunglasses Resting up on Cap Crown
+    const leftLens = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.024, 0.008), sunglassesLens);
+    leftLens.position.set(-0.034, 0.076, 0.10);
+    leftLens.rotation.x = -0.32;
+    group.add(leftLens);
+
+    const rightLens = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.024, 0.008), sunglassesLens);
+    rightLens.position.set(0.034, 0.076, 0.10);
+    rightLens.rotation.x = -0.32;
+    group.add(rightLens);
+
+    const goggleFrame = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.006, 0.010), sunglassesFrame);
+    goggleFrame.position.set(0, 0.088, 0.095);
+    goggleFrame.rotation.x = -0.32;
+    group.add(goggleFrame);
 
     // Front Velcro Morale Patch
     const capPatch = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.026, 0.006), teamAccent);
-    capPatch.position.set(0, 0.065, 0.128);
+    capPatch.position.set(0, 0.072, 0.126);
     group.add(capPatch);
+
+    // Comms Earpiece on Left Ear
+    const commsEarpiece = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.025, 0.018), gearPolymer);
+    commsEarpiece.position.set(-0.126, 0.035, -0.01);
+    group.add(commsEarpiece);
+
+    const commsMic = new THREE.Mesh(new THREE.CylinderGeometry(0.0025, 0.0025, 0.10, 6), gearPolymer);
+    commsMic.position.set(-0.10, 0.00, 0.06);
+    commsMic.rotation.x = Math.PI / 3;
+    group.add(commsMic);
 
     return group;
   }
@@ -1119,14 +1285,21 @@ class TacticalOperator {
 
   buildTacticalGlove(isLeft = false) {
     const group = new THREE.Group();
-    const { gearPolymer, uniform } = this.materials;
+    const { gearPolymer, tanPolymer } = this.materials;
 
-    const glove = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.09, 0.045), uniform);
+    // Tactical shooting glove palm & fingers (tan/coyote combat leather)
+    const glove = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.088, 0.042), tanPolymer || gearPolymer);
     group.add(glove);
 
-    const knuckleGuard = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.025, 0.035), gearPolymer);
-    knuckleGuard.position.set(0, 0.025, isLeft ? -0.015 : 0.015);
+    // Molded carbon-fiber knuckle protector
+    const knuckleGuard = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.026, 0.032), gearPolymer);
+    knuckleGuard.position.set(0, 0.025, isLeft ? -0.016 : 0.016);
     group.add(knuckleGuard);
+
+    // Wrist cinch velcro strap
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.016, 0.044), gearPolymer);
+    strap.position.set(0, -0.032, 0);
+    group.add(strap);
 
     return group;
   }
@@ -1139,77 +1312,118 @@ class TacticalOperator {
     const { metal, gearPolymer, tanPolymer, goggleLens } = this.materials;
 
     if (weaponKey === 'smg') {
-      // Vector-9 SMG
-      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.085, 0.26), metal);
+      // Vector-9 SMG (Tactical Compact Submachine Gun)
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.095, 0.28), metal);
       group.add(receiver);
 
-      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.14, 8), metal);
-      barrel.rotation.x = Math.PI / 2;
-      barrel.position.set(0, 0.015, -0.19);
-      group.add(barrel);
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.012, 0.24), gearPolymer);
+      rail.position.set(0, 0.054, -0.01);
+      group.add(rail);
 
-      const optic = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.05), gearPolymer);
-      optic.position.set(0, 0.06, -0.02);
+      const optic = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.035, 0.06), gearPolymer);
+      optic.position.set(0, 0.078, -0.02);
       group.add(optic);
 
-      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.18, 0.036), gearPolymer);
-      mag.position.set(0, -0.08, -0.02);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.16, 10), metal);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.02, -0.22);
+      group.add(barrel);
+
+      const comp = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.020, 0.06, 10), metal);
+      comp.rotation.x = Math.PI / 2;
+      comp.position.set(0, 0.02, -0.28);
+      group.add(comp);
+
+      const foregrip = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.065, 0.035), gearPolymer);
+      foregrip.position.set(0, -0.045, -0.15);
+      foregrip.rotation.x = 0.22;
+      group.add(foregrip);
+
+      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.20, 0.045), tanPolymer || gearPolymer);
+      mag.position.set(0, -0.10, -0.03);
+      mag.rotation.x = 0.22;
       group.add(mag);
 
-      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.10, 0.04), gearPolymer);
-      grip.position.set(0, -0.06, 0.08);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.11, 0.045), gearPolymer);
+      grip.position.set(0, -0.065, 0.08);
       grip.rotation.x = 0.35;
       group.add(grip);
 
-      this.muzzlePoint.set(0, 0.015, -0.27);
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.075, 0.16), gearPolymer);
+      stock.position.set(0, 0.02, 0.20);
+      group.add(stock);
+
+      this.muzzlePoint.set(0, 0.02, -0.32);
 
     } else if (weaponKey === 'sniper') {
-      // AWM-50 Sniper Rifle
-      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.08, 0.42), metal);
+      // AWM-50 Precision Sniper Rifle
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.085, 0.44), metal);
       group.add(receiver);
 
       // Fluted heavy barrel
-      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.014, 0.55, 10), metal);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.015, 0.60, 10), metal);
       barrel.rotation.x = Math.PI / 2;
-      barrel.position.set(0, 0.015, -0.48);
+      barrel.position.set(0, 0.02, -0.52);
       group.add(barrel);
 
-      // Large High-Magnification Scope
-      const scopeBody = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.020, 0.22, 10), gearPolymer);
+      const brake = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.042, 0.085), metal);
+      brake.position.set(0, 0.02, -0.84);
+      group.add(brake);
+
+      // Large High-Magnification Scope with turrets
+      const scopeBody = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.022, 0.26, 12), gearPolymer);
       scopeBody.rotation.x = Math.PI / 2;
-      scopeBody.position.set(0, 0.075, -0.06);
+      scopeBody.position.set(0, 0.082, -0.07);
       group.add(scopeBody);
 
-      const scopeLens = new THREE.Mesh(new THREE.CircleGeometry(0.018, 12), goggleLens);
-      scopeLens.position.set(0, 0.075, -0.171);
+      const scopeLens = new THREE.Mesh(new THREE.CircleGeometry(0.022, 12), goggleLens);
+      scopeLens.position.set(0, 0.082, -0.201);
       group.add(scopeLens);
 
-      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.11, 0.065), tanPolymer);
-      mag.position.set(0, -0.07, -0.06);
+      const turret = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.018, 8), metal);
+      turret.position.set(0, 0.108, -0.07);
+      group.add(turret);
+
+      // Bipod
+      const bipod = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.12, 0.035), gearPolymer);
+      bipod.position.set(0, -0.05, -0.38);
+      group.add(bipod);
+
+      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.12, 0.072), tanPolymer);
+      mag.position.set(0, -0.075, -0.06);
       group.add(mag);
 
-      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.11, 0.042), gearPolymer);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.11, 0.042), gearPolymer);
       grip.position.set(0, -0.08, 0.12);
       grip.rotation.x = 0.35;
       group.add(grip);
 
-      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.11, 0.28), tanPolymer);
-      stock.position.set(0, 0.01, 0.34);
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.12, 0.30), tanPolymer);
+      stock.position.set(0, 0.01, 0.35);
       group.add(stock);
 
-      this.muzzlePoint.set(0, 0.015, -0.76);
+      this.muzzlePoint.set(0, 0.02, -0.88);
 
     } else if (weaponKey === 'pistol') {
-      // G-18 Tactical Pistol
-      const slide = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.045, 0.18), metal);
+      // G-18 Tactical Combat Handgun
+      const slide = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.046, 0.20), metal);
+      slide.position.set(0, 0.022, -0.03);
       group.add(slide);
 
-      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.11, 0.045), gearPolymer);
-      grip.position.set(0, -0.065, 0.04);
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.040, 0.18), gearPolymer);
+      frame.position.set(0, -0.010, -0.03);
+      group.add(frame);
+
+      const pSights = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.012, 0.010), gearPolymer);
+      pSights.position.set(0, 0.050, 0.06);
+      group.add(pSights);
+
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.11, 0.048), gearPolymer);
+      grip.position.set(0, -0.068, 0.042);
       grip.rotation.x = 0.32;
       group.add(grip);
 
-      this.muzzlePoint.set(0, 0.01, -0.10);
+      this.muzzlePoint.set(0, 0.022, -0.14);
 
     } else {
       // Default: P-24 Tactical Assault Rifle (Carbine)

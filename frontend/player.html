@@ -161,6 +161,22 @@
         <article class="stat-card"><span>Last login</span><strong id="lastLoginIp" class="ip-stat">Not recorded</strong><small>Most recent sign-in address</small></article>
       </section>
 
+      <section class="dashboard-panel overview-combat-panel" style="margin-top: 16px; margin-bottom: 20px;">
+        <div class="dashboard-panel-head">
+          <div>
+            <h2>Combat Career Overview</h2>
+            <span class="dashboard-panel-caption">Lifetime combat metrics, K/D ratio, and weapons accuracy across all matches</span>
+          </div>
+        </div>
+        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-top: 8px;">
+          <article class="stat-card"><span>Total Kills</span><strong id="careerTotalKills">0</strong><small>Enemy eliminations</small></article>
+          <article class="stat-card"><span>Total Deaths</span><strong id="careerTotalDeaths">0</strong><small>Combat casualties</small></article>
+          <article class="stat-card"><span>Career K/D</span><strong id="careerKd">0.00</strong><small>Kill / death ratio</small></article>
+          <article class="stat-card"><span>Overall Accuracy</span><strong id="careerAccuracy">0.0%</strong><small id="careerShotsSummary">0 hits / 0 shots</small></article>
+          <article class="stat-card"><span>Total Matches</span><strong id="careerMatches">0</strong><small id="careerWinRate">0 completed</small></article>
+        </div>
+      </section>
+
       <div id="dashboardNotice" class="dashboard-notice" role="status" hidden></div>
 
       <section class="overview-lower-grid">
@@ -204,7 +220,7 @@
         <article class="game-card featured cyberstrike-card-theme">
           <div class="game-art art-one cyberstrike-art-theme">
             <span>FPS 02</span>
-            <div class="game-art-mascot" aria-hidden="true"><span>3D ARENA</span><img id="gameHubCyberMascot" src="public/avatars/chibi-female-2.png" alt=""></div>
+            <div class="game-art-mascot" aria-hidden="true"><span>3D ARENA</span><img id="gameHubCyberMascot" src="public/avatars/chibi-female-1.png" alt=""></div>
           </div>
           <div class="game-info">
             <span class="tag cyberstrike-tag-theme">NEW 3D BROWSER ARENA</span>
@@ -471,7 +487,7 @@
     <section id="rewards" class="player-view">
       <div class="section-title"><div><p class="eyebrow">PLAYER REWARDS</p><h2>Your rewards</h2><p class="page-description">Earn coins and XP for daily sign-ins and completed matches.</p></div><div class="section-mascot" aria-hidden="true"><span>Keep earning!</span><img id="rewardsMascotSticker" src="public/avatars/chibi-female-2.png" alt=""></div></div>
       <div class="reward-summary" id="rewardSummary"><article class="reward-balance"><span>Coins</span><strong id="rewardCoins">—</strong></article><article class="reward-balance"><span>Experience</span><strong id="rewardXp">— XP</strong><small id="rewardLevel">Level 1</small></article><article class="reward-balance"><span>Daily streak</span><strong id="rewardStreak">— days</strong><small id="dailyRewardMessage">Daily bonus: 25 coins + 25 XP</small></article></div>
-      <section class="profile-card reward-store"><div class="dashboard-panel-head"><div><h2>Cosmetic store</h2><span class="dashboard-panel-caption">Spend coins on profile badges</span></div></div><div class="reward-store-grid" id="rewardStore"><div class="empty">Loading rewards…</div></div></section>
+      <section class="profile-card reward-store"><div class="dashboard-panel-head"><div><h2>Tactical Armory & Combat Perks</h2><span class="dashboard-panel-caption">Spend earned match coins on operator enhancements and combat gear</span></div></div><div class="reward-store-grid" id="rewardStore"><div class="empty">Loading rewards…</div></div></section>
       <section class="profile-card reward-history"><div class="dashboard-panel-head"><div><h2>Recent rewards</h2><span class="dashboard-panel-caption">Daily and match earnings</span></div></div><div id="rewardHistory" class="list"><div class="empty">Loading reward activity…</div></div></section>
     </section>
 
@@ -634,10 +650,10 @@
 
 
   <!-- Existing application logic -->
-  <script src="js/config.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/player-features.js"></script>
-  <script src="js/player.js"></script>
+  <script src="js/config.js?v=20261113_2030"></script>
+  <script src="js/api.js?v=20261113_2030"></script>
+  <script src="js/player-features.js?v=20261113_2030"></script>
+  <script src="js/player.js?v=20261113_2030"></script>
 
 
   <!-- ============================================================

@@ -814,17 +814,20 @@ def receive_game_event():
 
         now = utc_now()
         inserted_docs = []
+        user_id = game_session.get("user_id")
         for item in batch_events:
             ev_type = item.get("event_type")
             ev_telemetry = item.get("telemetry", {})
             if ev_type:
                 inserted_docs.append({
                     "session_id": session_id,
+                    "user_id": user_id,
                     "event_type": ev_type,
                     "telemetry": ev_telemetry,
                     "game": game_name,
                     "seq": item.get("seq"),
                     "timestamp": item.get("timestamp"),
+                    "created_at": now,
                     "received_at": now
                 })
         if inserted_docs:
@@ -1913,9 +1916,27 @@ def end_game():
                 reason="match_completed",
                 is_automatic=True
             )
+            match_kills = int(data.get("kills", 0) or 0)
+            match_deaths = int(data.get("deaths", 0) or 0)
+            match_shots = int(data.get("shots", 0) or 0)
+            match_hits = int(data.get("hits", 0) or 0)
+            match_accuracy = float(data.get("accuracy", 0.0) or (round(match_hits / max(1, match_shots), 3) if match_shots > 0 else 0.0))
+            match_kdr = float(data.get("kdr", 0.0) or (round(match_kills / max(1, match_deaths), 2)))
+
             game_sessions.update_one(
                 {"session_id": session_id, "user_id": user_id},
-                {"$set": {"honour_awarded": honour_awarded, "duration_seconds": duration_seconds}},
+                {
+                    "$set": {
+                        "honour_awarded": honour_awarded,
+                        "duration_seconds": duration_seconds,
+                        "kills": match_kills,
+                        "deaths": match_deaths,
+                        "shots": match_shots,
+                        "hits": match_hits,
+                        "accuracy": match_accuracy,
+                        "kdr": match_kdr
+                    }
+                },
             )
             if coins_to_award > 0 or xp_to_award > 0:
                 users.update_one({"_id": user_id}, {"$inc": {"rewards.coins": coins_to_award, "rewards.xp": xp_to_award}})
@@ -2054,8 +2075,11 @@ def extract_features(
     if features_dict.get("aim_speed_mean") is not None:
         features_dict["aim_smoothness"] = round(1.0 / (1.0 + features_dict["aim_speed_mean"] / 100.0), 4)
     else:
-        features_dict["aim_smoothness"] = None
+        # Graceful fallback to normal human aim consistency
+        features_dict["aim_smoothness"] = 0.82
     features_dict["movement_speed"] = features_dict.get("movement_speed_mean")
+    if features_dict.get("movement_speed") is None:
+        features_dict["movement_speed"] = 4.2
     features_dict["low_confidence"] = meta.get("low_confidence", False)
     features_dict["is_fallback"] = meta.get("is_fallback", False)
 

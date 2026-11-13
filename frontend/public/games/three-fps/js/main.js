@@ -1130,7 +1130,12 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
     setEl('mc-kills', detail.kills ?? 0);
     setEl('mc-deaths', detail.deaths ?? 0);
     setEl('mc-kd', typeof detail.kdr === 'number' ? detail.kdr.toFixed(2) : detail.kdr);
-    setEl('mc-accuracy', `${Math.round((detail.accuracy || 0) * 100)}%`);
+    const totalShots = detail.shots ?? 0;
+    const totalHits = detail.hits ?? 0;
+    const calcAcc = totalShots > 0 ? ((totalHits / totalShots) * 100).toFixed(1) : ((detail.accuracy || 0) * 100).toFixed(1);
+    setEl('mc-shots', totalShots);
+    setEl('mc-hits', totalHits);
+    setEl('mc-accuracy', `${calcAcc}% (${totalHits}/${totalShots})`);
     setEl('mc-headshots', detail.headshots ?? 0);
 
     const dur = detail.duration || 0;

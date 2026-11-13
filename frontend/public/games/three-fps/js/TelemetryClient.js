@@ -350,6 +350,12 @@ class TelemetryClient {
     if (!this.sessionId) return;
     const sessId = this.sessionId;
     this.isSessionActive = false;
+
+    // Ensure all pending queued telemetry events are flushed to backend before ending session
+    try {
+      await this.flushQueue();
+    } catch (_) {}
+
     this.sessionId = null;
     this.gameToken = null;
     try {
@@ -366,7 +372,10 @@ class TelemetryClient {
           reason: completed ? 'match_completed' : 'player_exit',
           kills: details.kills || 0,
           deaths: details.deaths || 0,
-          accuracy: details.accuracy || 0
+          shots: details.shots || 0,
+          hits: details.hits || 0,
+          accuracy: details.accuracy || 0,
+          kdr: details.kdr || 0
         }),
         signal: controller.signal
       });

@@ -32,21 +32,21 @@ const TACTICAL_ARENA_WAYPOINTS = [
   new THREE.Vector3(-26, 0, 0),    // 11: W Perimeter Lane
   new THREE.Vector3(-12, 0, 0),    // 12: W Courtyard
   new THREE.Vector3(0, 0, -11),    // 13: N Ramp approach
-  new THREE.Vector3(0, 2.0, 0),    // 14: Central elevated compound
+  new THREE.Vector3(-6, 0, -6),    // 14: Central courtyard perimeter
   new THREE.Vector3(0, 0, 11)      // 15: S Ramp approach
 ];
 
 const TACTICAL_SPAWN_POINTS = [
-  new THREE.Vector3(-22, 0, -18),  // NW Compound
-  new THREE.Vector3(22, 0, -18),   // NE Warehouse
-  new THREE.Vector3(0, 0, -25),    // Far North Wall
-  new THREE.Vector3(-25, 0, 0),    // West Flank
-  new THREE.Vector3(25, 0, 0),     // East Flank
-  new THREE.Vector3(14, 0, -14),   // NE Courtyard
-  new THREE.Vector3(-14, 0, -14),  // NW Courtyard
-  new THREE.Vector3(0, 0, -12),    // North Center Corridor
-  new THREE.Vector3(-18, 0, -6),   // West Mid Approach
-  new THREE.Vector3(18, 0, -6)     // East Mid Approach
+  new THREE.Vector3(-22, 0, -22),  // NW Compound open ground
+  new THREE.Vector3(22, 0, -22),   // NE Warehouse open ground
+  new THREE.Vector3(0, 0, -26),    // Far North Wall
+  new THREE.Vector3(-26, 0, 0),    // West Flank
+  new THREE.Vector3(26, 0, 0),     // East Flank
+  new THREE.Vector3(14, 0, -20),   // NE Lane
+  new THREE.Vector3(-14, 0, -20),  // NW Lane
+  new THREE.Vector3(0, 0, -18),    // North Center
+  new THREE.Vector3(-24, 0, 14),   // SW Courtyard
+  new THREE.Vector3(24, 0, 14)     // SE Courtyard
 ];
 
 // Built-in dataset-grounded persona fallback bank
@@ -85,10 +85,8 @@ class Bot {
     this.audio = audio;
     this.botManager = botManager;
 
-    if (this.arena && typeof this.arena.getGroundHeight === 'function') {
-      this.spawnPos.y = this.arena.getGroundHeight(this.spawnPos.x, this.spawnPos.z);
-      this.position.y = this.spawnPos.y;
-    }
+    this.spawnPos.y = 0.0;
+    this.position.y = 0.0;
 
     // Combat Vitals
     this.maxHealth = 100;
@@ -327,11 +325,9 @@ class Bot {
       this.spawnProtectionTimer -= delta;
     }
 
-    // Always clamp to terrain elevation
-    if (this.arena && typeof this.arena.getGroundHeight === 'function') {
-      this.position.y = this.arena.getGroundHeight(this.position.x, this.position.z);
-      this.operator.root.position.copy(this.position);
-    }
+    // Ensure ground bot stays firmly at ground level
+    this.position.y = 0.0;
+    this.operator.root.position.copy(this.position);
 
     // 1. Reload Cycle
     if (this.currentAmmo <= 0 && !this.isReloading) {
@@ -603,26 +599,31 @@ class Bot {
   }
 
   hasLineOfSight(targetPos) {
-    const origin = new THREE.Vector3(this.position.x, this.position.y + 1.4, this.position.z);
-    const target = new THREE.Vector3(targetPos.x, targetPos.y + 1.2, targetPos.z);
+    const origin = new THREE.Vector3(this.position.x, 1.4, this.position.z);
+    const target = new THREE.Vector3(targetPos.x, (targetPos.y || 0) + 1.2, targetPos.z);
     const dir = target.clone().sub(origin);
     const distanceToTarget = dir.length();
+    if (distanceToTarget < 1.0) return true;
     dir.normalize();
 
-    const ray = new THREE.Ray(origin, dir);
+    // Start ray 0.75m forward from bot so bot does not self-occlude on its own collision boundary
+    const rayStart = origin.clone().add(dir.clone().multiplyScalar(0.75));
+    const ray = new THREE.Ray(rayStart, dir);
     const box = new THREE.Box3();
     const intersect = new THREE.Vector3();
 
     if (this.arena && this.arena.colliders) {
       for (let i = 0; i < this.arena.colliders.length; i++) {
         const col = this.arena.colliders[i];
-        box.min.set(col.minX, col.minY, col.minZ);
-        box.max.set(col.maxX, col.maxY, col.maxZ);
+        if (col.type === 'box' && col.maxY > 0.5) {
+          box.min.set(col.minX, col.minY, col.minZ);
+          box.max.set(col.maxX, col.maxY, col.maxZ);
 
-        if (ray.intersectBox(box, intersect)) {
-          const distToObstacle = origin.distanceTo(intersect);
-          if (distToObstacle < distanceToTarget - 0.35) {
-            return false;
+          if (ray.intersectBox(box, intersect)) {
+            const distToObstacle = rayStart.distanceTo(intersect);
+            if (distToObstacle < distanceToTarget - 1.2) {
+              return false;
+            }
           }
         }
       }
@@ -648,25 +649,53 @@ class Bot {
 
   checkCollisionAt(x, z) {
     if (!this.arena || !this.arena.colliders) return false;
-    const r = 0.52;
-    const y = this.position.y;
+    const r = 0.60;
+    if (x < -36.0 || x > 36.0 || z < -36.0 || z > 36.0) return true;
 
     for (let i = 0; i < this.arena.colliders.length; i++) {
       const col = this.arena.colliders[i];
-      if (col.type === 'box') {
-        if (y + 1.6 > col.minY && y < col.maxY) {
-          if (
-            x + r > col.minX &&
-            x - r < col.maxX &&
-            z + r > col.minZ &&
-            z - r < col.maxZ
-          ) {
-            return true;
-          }
+      if (col.type === 'box' && col.maxY > 0.1) {
+        if (
+          x + r > col.minX &&
+          x - r < col.maxX &&
+          z + r > col.minZ &&
+          z - r < col.maxZ
+        ) {
+          return true;
         }
       }
     }
     return false;
+  }
+
+  resolvePenetration() {
+    if (!this.arena || !this.arena.colliders) return;
+    const r = 0.65;
+    for (let i = 0; i < this.arena.colliders.length; i++) {
+      const col = this.arena.colliders[i];
+      if (col.type === 'box' && col.maxY > 0.1) {
+        if (
+          this.position.x + r > col.minX &&
+          this.position.x - r < col.maxX &&
+          this.position.z + r > col.minZ &&
+          this.position.z - r < col.maxZ
+        ) {
+          const leftDist = (this.position.x + r) - col.minX;
+          const rightDist = col.maxX - (this.position.x - r);
+          const backDist = (this.position.z + r) - col.minZ;
+          const frontDist = col.maxZ - (this.position.z - r);
+
+          const minPen = Math.min(leftDist, rightDist, backDist, frontDist);
+          if (minPen === leftDist) this.position.x = col.minX - r - 0.08;
+          else if (minPen === rightDist) this.position.x = col.maxX + r + 0.08;
+          else if (minPen === backDist) this.position.z = col.minZ - r - 0.08;
+          else if (minPen === frontDist) this.position.z = col.maxZ + r + 0.08;
+        }
+      }
+    }
+    this.position.x = Math.max(-36.0, Math.min(36.0, this.position.x));
+    this.position.z = Math.max(-36.0, Math.min(36.0, this.position.z));
+    this.position.y = 0.0;
   }
 
   moveTowards(targetPos, speed, delta) {
@@ -699,13 +728,45 @@ class Bot {
       const nextX = this.position.x + moveVec.x;
       const nextZ = this.position.z + moveVec.z;
 
-      if (!this.checkCollisionAt(nextX, this.position.z)) this.position.x = nextX;
-      if (!this.checkCollisionAt(this.position.x, nextZ)) this.position.z = nextZ;
+      // 1. Try full diagonal step first
+      if (!this.checkCollisionAt(nextX, nextZ)) {
+        this.position.x = nextX;
+        this.position.z = nextZ;
+      } else {
+        // 2. Try individual axis sliding
+        const canMoveX = !this.checkCollisionAt(nextX, this.position.z);
+        const canMoveZ = !this.checkCollisionAt(this.position.x, nextZ);
 
-      const groundY = this.arena && typeof this.arena.getGroundHeight === 'function'
-        ? this.arena.getGroundHeight(this.position.x, this.position.z)
-        : 0;
-      this.position.y = groundY;
+        if (canMoveX) {
+          this.position.x = nextX;
+        } else if (canMoveZ) {
+          this.position.z = nextZ;
+        } else {
+          // 3. Tangential sliding along obstacle surface
+          const slideVec = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(this.currentSpeed * delta * 0.8);
+          const altX1 = this.position.x + slideVec.x;
+          const altZ1 = this.position.z + slideVec.z;
+          if (!this.checkCollisionAt(altX1, altZ1)) {
+            this.position.x = altX1;
+            this.position.z = altZ1;
+          } else {
+            const altX2 = this.position.x - slideVec.x;
+            const altZ2 = this.position.z - slideVec.z;
+            if (!this.checkCollisionAt(altX2, altZ2)) {
+              this.position.x = altX2;
+              this.position.z = altZ2;
+            }
+          }
+        }
+      }
+
+      // Push out of any internal penetration so bot is never stuck
+      this.resolvePenetration();
+
+      // Clamp within arena perimeter & ground elevation
+      this.position.x = Math.max(-36.0, Math.min(36.0, this.position.x));
+      this.position.z = Math.max(-36.0, Math.min(36.0, this.position.z));
+      this.position.y = 0.0;
 
       this.operator.root.position.copy(this.position);
       this.aimAt(targetPos, delta * 10.0);
@@ -809,9 +870,7 @@ class Bot {
     this.position.copy(newPos);
     this.spawnPos.copy(newPos);
 
-    if (this.arena && typeof this.arena.getGroundHeight === 'function') {
-      this.position.y = this.arena.getGroundHeight(this.position.x, this.position.z);
-    }
+    this.position.y = 0.0;
 
     this.reactionTimer = 0;
     this.hasReactionLock = false;
@@ -905,14 +964,29 @@ class BotManager {
       const pt = TACTICAL_SPAWN_POINTS[i];
       const distToPlayer = pt.distanceTo(pPos);
 
-      // Must be at least 18 meters from player
-      if (distToPlayer < 18.0) continue;
+      // Must be at least 16 meters from player
+      if (distToPlayer < 16.0) continue;
 
-      // Must be at least 7 meters from other living bots
+      // Must not collide with any arena boxes or walls
+      let collidesWithWorld = false;
+      if (this.arena && this.arena.colliders) {
+        const r = 0.85;
+        for (const col of this.arena.colliders) {
+          if (col.type === 'box') {
+            if (pt.x + r > col.minX && pt.x - r < col.maxX && pt.z + r > col.minZ && pt.z - r < col.maxZ) {
+              collidesWithWorld = true;
+              break;
+            }
+          }
+        }
+      }
+      if (collidesWithWorld) continue;
+
+      // Must be at least 6 meters from other living bots
       let tooClose = false;
       for (const bot of this.bots) {
         if (bot.id !== currentBotId && !bot.isDead) {
-          if (bot.position.distanceTo(pt) < 7.0) {
+          if (bot.position.distanceTo(pt) < 6.0) {
             tooClose = true;
             break;
           }
@@ -924,9 +998,7 @@ class BotManager {
 
     if (candidates.length > 0) {
       const chosen = candidates[Math.floor(Math.random() * candidates.length)].clone();
-      if (this.arena && typeof this.arena.getGroundHeight === 'function') {
-        chosen.y = this.arena.getGroundHeight(chosen.x, chosen.z);
-      }
+      chosen.y = 0.0;
       return chosen;
     }
 
@@ -941,9 +1013,7 @@ class BotManager {
     });
 
     const fallback = furthest.clone();
-    if (this.arena && typeof this.arena.getGroundHeight === 'function') {
-      fallback.y = this.arena.getGroundHeight(fallback.x, fallback.z);
-    }
+    fallback.y = 0.0;
     return fallback;
   }
 

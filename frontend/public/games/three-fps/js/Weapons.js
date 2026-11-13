@@ -269,76 +269,202 @@ class WeaponManager {
     this.viewmodelMeshes.carbine = carbineGroup;
     this.weaponRoot.add(carbineGroup);
 
-    // 2. Build Vector-9 SMG Viewmodel
+    // 2. Build Vector-9 SMG Viewmodel (Realistic Tactical Submachine Gun)
     const smgGroup = new THREE.Group();
-    const sReceiver = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.11, 0.28), polymerMat);
+    const sReceiver = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.105, 0.30), polymerMat);
     smgGroup.add(sReceiver);
 
-    const sBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.18, 12), metalMat);
+    const sUpperReceiver = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.045, 0.28), metalMat);
+    sUpperReceiver.position.set(0, 0.055, -0.01);
+    smgGroup.add(sUpperReceiver);
+
+    const sRail = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.012, 0.26), polymerMat);
+    sRail.position.set(0, 0.082, -0.01);
+    smgGroup.add(sRail);
+
+    // Reflex Micro Sight
+    const sOpticBase = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.016, 0.065), polymerMat);
+    sOpticBase.position.set(0, 0.095, -0.02);
+    smgGroup.add(sOpticBase);
+
+    const sOpticHood = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.040, 0.06), polymerMat);
+    sOpticHood.position.set(0, 0.118, -0.02);
+    smgGroup.add(sOpticHood);
+
+    const sOpticLens = new THREE.Mesh(new THREE.CircleGeometry(0.016, 12), glassMat);
+    sOpticLens.position.set(0, 0.118, 0.01);
+    smgGroup.add(sOpticLens);
+
+    // Threaded barrel & muzzle compensator
+    const sBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.16, 12), metalMat);
     sBarrel.rotation.x = Math.PI / 2;
-    sBarrel.position.set(0, 0.02, -0.23);
+    sBarrel.position.set(0, 0.045, -0.21);
     smgGroup.add(sBarrel);
 
-    const sMag = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.20, 0.05), metalMat);
-    sMag.position.set(0, -0.12, -0.08);
-    sMag.rotation.x = 0.25;
+    const sComp = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.06, 10), metalMat);
+    sComp.rotation.x = Math.PI / 2;
+    sComp.position.set(0, 0.045, -0.28);
+    smgGroup.add(sComp);
+
+    // Angled tactical foregrip
+    const sForegrip = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.075, 0.040), polymerMat);
+    sForegrip.position.set(0, -0.05, -0.16);
+    sForegrip.rotation.x = 0.25;
+    smgGroup.add(sForegrip);
+
+    // Curved tactical magazine
+    const sMag = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.22, 0.052), tanMagMat);
+    sMag.position.set(0, -0.11, -0.04);
+    sMag.rotation.x = 0.22;
     smgGroup.add(sMag);
 
-    const sGrip = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.12, 0.05), polymerMat);
-    sGrip.position.set(0, -0.07, 0.08);
+    // Textured pistol grip
+    const sGrip = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.13, 0.052), polymerMat);
+    sGrip.position.set(0, -0.07, 0.09);
     sGrip.rotation.x = 0.32;
     smgGroup.add(sGrip);
+
+    // Folding tactical stock
+    const sStock = new THREE.Mesh(new THREE.BoxGeometry(0.040, 0.08, 0.18), polymerMat);
+    sStock.position.set(0, 0.03, 0.22);
+    smgGroup.add(sStock);
 
     smgGroup.visible = false;
     this.viewmodelMeshes.smg = smgGroup;
     this.weaponRoot.add(smgGroup);
 
-    // 3. Build AWM-50 Recon Sniper Viewmodel
+    // 3. Build AWM-50 Recon Sniper Viewmodel (Precision Tactical Long Rifle)
     const sniperGroup = new THREE.Group();
-    const snReceiver = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.09, 0.44), metalMat);
+    const snReceiver = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.095, 0.44), metalMat);
     sniperGroup.add(snReceiver);
 
-    const snBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.58, 12), metalMat);
+    // Heavy fluted precision barrel
+    const snBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.015, 0.62, 14), metalMat);
     snBarrel.rotation.x = Math.PI / 2;
-    snBarrel.position.set(0, 0.02, -0.51);
+    snBarrel.position.set(0, 0.025, -0.53);
     sniperGroup.add(snBarrel);
 
-    const snBrake = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.08), metalMat);
-    snBrake.position.set(0, 0.02, -0.82);
+    // Large ported tactical muzzle brake
+    const snBrake = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.044, 0.09), metalMat);
+    snBrake.position.set(0, 0.025, -0.87);
     sniperGroup.add(snBrake);
 
-    const snStock = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.12, 0.30), polymerMat);
-    snStock.position.set(0, -0.02, 0.35);
+    // Ergonomic sniper chassis stock with adjustable cheekpad
+    const snStock = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.13, 0.32), polymerMat);
+    snStock.position.set(0, -0.02, 0.36);
     sniperGroup.add(snStock);
 
-    // Telescopic Sniper Scope
-    const snScopeTube = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.26, 16), metalMat);
+    const snCheek = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.035, 0.14), tanMagMat);
+    snCheek.position.set(0, 0.065, 0.34);
+    sniperGroup.add(snCheek);
+
+    // Bolt-action handle
+    const snBoltHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.08, 8), metalMat);
+    snBoltHandle.rotation.z = Math.PI / 3;
+    snBoltHandle.position.set(0.055, 0.04, 0.08);
+    sniperGroup.add(snBoltHandle);
+
+    const snBoltKnob = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 8), metalMat);
+    snBoltKnob.position.set(0.085, 0.06, 0.08);
+    sniperGroup.add(snBoltKnob);
+
+    // High-Power Variable Telescopic Sniper Scope
+    const snScopeTube = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.022, 0.30, 16), metalMat);
     snScopeTube.rotation.x = Math.PI / 2;
-    snScopeTube.position.set(0, 0.08, -0.06);
+    snScopeTube.position.set(0, 0.095, -0.08);
     sniperGroup.add(snScopeTube);
 
-    const snScopeLens = new THREE.Mesh(new THREE.CircleGeometry(0.021, 16), glassMat);
-    snScopeLens.position.set(0, 0.08, 0.07);
+    // Scope turrets (windage & elevation)
+    const snElevTurret = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.022, 10), polymerMat);
+    snElevTurret.position.set(0, 0.125, -0.08);
+    sniperGroup.add(snElevTurret);
+
+    const snWindTurret = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.022, 10), polymerMat);
+    snWindTurret.rotation.z = Math.PI / 2;
+    snWindTurret.position.set(0.030, 0.095, -0.08);
+    sniperGroup.add(snWindTurret);
+
+    const snScopeLens = new THREE.Mesh(new THREE.CircleGeometry(0.023, 16), glassMat);
+    snScopeLens.position.set(0, 0.095, 0.07);
     sniperGroup.add(snScopeLens);
+
+    // Folded tactical bipod legs
+    const bipodMount = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.025, 0.04), polymerMat);
+    bipodMount.position.set(0, -0.01, -0.40);
+    sniperGroup.add(bipodMount);
+
+    const bipodLegL = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.005, 0.20, 6), metalMat);
+    bipodLegL.rotation.x = -Math.PI / 2 + 0.15;
+    bipodLegL.position.set(-0.025, -0.02, -0.30);
+    sniperGroup.add(bipodLegL);
+
+    const bipodLegR = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.005, 0.20, 6), metalMat);
+    bipodLegR.rotation.x = -Math.PI / 2 + 0.15;
+    bipodLegR.position.set(0.025, -0.02, -0.30);
+    sniperGroup.add(bipodLegR);
+
+    // Detachable box magazine
+    const snMag = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.13, 0.075), tanMagMat);
+    snMag.position.set(0, -0.08, -0.05);
+    sniperGroup.add(snMag);
 
     sniperGroup.visible = false;
     this.viewmodelMeshes.sniper = sniperGroup;
     this.weaponRoot.add(sniperGroup);
 
-    // 4. Build G-18 Tactical Pistol Viewmodel
+    // 4. Build G-18 Tactical Pistol Viewmodel (Military Combat Handgun)
     const pistolGroup = new THREE.Group();
-    const pSlide = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.22), metalMat);
-    pSlide.position.set(0, 0.02, -0.04);
+    // Beveled Gunmetal Slide with cocking serrations
+    const pSlide = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.048, 0.22), metalMat);
+    pSlide.position.set(0, 0.022, -0.04);
     pistolGroup.add(pSlide);
 
-    const pFrame = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.04, 0.20), polymerMat);
-    pFrame.position.set(0, -0.01, -0.04);
+    // Ejection port cutout
+    const pPort = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.016, 0.045), polymerMat);
+    pPort.position.set(0.015, 0.036, -0.03);
+    pistolGroup.add(pPort);
+
+    // Front blade sight & rear combat notch sight
+    const pFrontSight = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.012, 0.012), polymerMat);
+    pFrontSight.position.set(0, 0.050, -0.13);
+    pistolGroup.add(pFrontSight);
+
+    const pRearSight = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.014, 0.012), polymerMat);
+    pRearSight.position.set(0, 0.050, 0.05);
+    pistolGroup.add(pRearSight);
+
+    // Polymer ergonomic frame with underbarrel Picatinny rail
+    const pFrame = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.042, 0.20), polymerMat);
+    pFrame.position.set(0, -0.012, -0.04);
     pistolGroup.add(pFrame);
 
-    const pGrip = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.12, 0.055), polymerMat);
-    pGrip.position.set(0, -0.07, 0.04);
+    // Compact underbarrel laser/tactical light unit
+    const pLight = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.026, 0.065), polymerMat);
+    pLight.position.set(0, -0.042, -0.09);
+    pistolGroup.add(pLight);
+
+    // Trigger guard & curved metal trigger
+    const pTriggerGuard = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.004, 6, 12, Math.PI), polymerMat);
+    pTriggerGuard.position.set(0, -0.045, -0.01);
+    pTriggerGuard.rotation.y = Math.PI / 2;
+    pistolGroup.add(pTriggerGuard);
+
+    const pTrigger = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.020, 0.008), metalMat);
+    pTrigger.position.set(0, -0.035, -0.01);
+    pTrigger.rotation.x = -0.2;
+    pistolGroup.add(pTrigger);
+
+    // Stippled pistol combat grip
+    const pGrip = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.13, 0.055), polymerMat);
+    pGrip.position.set(0, -0.075, 0.045);
     pGrip.rotation.x = 0.32;
     pistolGroup.add(pGrip);
+
+    // Extended magazine bumper baseplate
+    const pMagBase = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.018, 0.060), tanMagMat);
+    pMagBase.position.set(0, -0.142, 0.068);
+    pMagBase.rotation.x = 0.32;
+    pistolGroup.add(pMagBase);
 
     pistolGroup.visible = false;
     this.viewmodelMeshes.pistol = pistolGroup;
@@ -460,6 +586,10 @@ class WeaponManager {
       }
 
       if (e.button === 0) {
+        if (!this.isPlayerAlive()) {
+          this.isFiring = false;
+          return;
+        }
         this.isFiring = true;
         // Immediate shot trigger on click
         const isLocked = !!(this.controller?.isLocked || document.pointerLockElement);
@@ -613,9 +743,12 @@ class WeaponManager {
     }
 
     // 3. Firing Logic (Automatic Trigger Check)
+    if (!this.isPlayerAlive()) {
+      this.isFiring = false;
+    }
     const isLocked = !!(controller?.isLocked || this.controller?.isLocked || document.pointerLockElement);
     const inGame = !window.SecureFPSGame?.isMenuOpen && !window.SecureFPSGame?.isPaused;
-    if (this.isFiring && !this.isReloading && !this.isSwitching && (isLocked || inGame)) {
+    if (this.isFiring && this.isPlayerAlive() && !this.isReloading && !this.isSwitching && (isLocked || inGame)) {
       if (now - this.lastShotTime >= w.fireRate) {
         if (w.magAmmo > 0) {
           this.fire(controller || this.controller, botManager || this.botManager);
@@ -701,7 +834,18 @@ class WeaponManager {
     }
   }
 
+  isPlayerAlive() {
+    if (window.SecureFPSGame?.gameMode?.isDead) return false;
+    if (window.SecureFPSGame?.gameMode?.isMatchCompleted) return false;
+    if (this.controller && (this.controller.isDead || this.controller.health <= 0)) return false;
+    return true;
+  }
+
   fire(controller, botManager) {
+    if (!this.isPlayerAlive()) {
+      this.isFiring = false;
+      return;
+    }
     const w = this.activeWeapon;
     w.magAmmo--;
     this.updateHUD();

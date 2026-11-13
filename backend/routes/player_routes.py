@@ -75,6 +75,10 @@ REWARD_STORE = {
     "guardian_badge": {"name": "Guardian badge", "description": "A shield badge for your player profile.", "price": 100, "icon": "⬡"},
     "marksman_badge": {"name": "Marksman badge", "description": "A reticle badge for your player profile.", "price": 180, "icon": "◎"},
     "elite_badge": {"name": "Elite sentinel badge", "description": "A premium SecureFPS profile badge.", "price": 300, "icon": "✦"},
+    "tactical_comp": {"name": "Recoil Compensator", "description": "High-efficiency muzzle brake reducing weapon climb.", "price": 150, "icon": "🎯"},
+    "combat_booster": {"name": "+25% XP Combat Protocol", "description": "Combat protocol booster granting +25% bonus XP on match victory.", "price": 120, "icon": "⚡"},
+    "stealth_camo": {"name": "Night-Stalker Operator Camo", "description": "Matte-black stealth ballistic weave tactical uniform.", "price": 250, "icon": "🥷"},
+    "extended_mag": {"name": "Tactical Extended Mags", "description": "High-capacity combat magazine upgrade (+5 rounds reserve).", "price": 200, "icon": "📦"},
 }
 
 UPLOADS_DIR = Path(__file__).resolve().parents[1] / "uploads"
@@ -308,13 +312,24 @@ def get_player_stats():
     session_ids = [s.get("session_id") for s in completed_sessions if s.get("session_id")]
     kills_telemetry = game_telemetry.count_documents({"user_id": user_oid, "session_id": {"$in": session_ids}, "event_type": "enemy_killed"}) if session_ids else 0
     deaths_telemetry = game_telemetry.count_documents({"user_id": user_oid, "session_id": {"$in": session_ids}, "event_type": "player_death"}) if session_ids else 0
+    shots_telemetry = game_telemetry.count_documents({"user_id": user_oid, "session_id": {"$in": session_ids}, "event_type": "weapon_fire"}) if session_ids else 0
+    hits_telemetry = game_telemetry.count_documents({"user_id": user_oid, "session_id": {"$in": session_ids}, "event_type": "enemy_hit"}) if session_ids else 0
 
     legacy_kills = sum(m.get("kills", 0) for m in completed_legacy)
     legacy_deaths = sum(m.get("deaths", 0) for m in completed_legacy)
 
-    total_kills = kills_telemetry + legacy_kills
-    total_deaths = deaths_telemetry + legacy_deaths
+    session_kills = sum(int(s.get("kills") or 0) for s in completed_sessions)
+    session_deaths = sum(int(s.get("deaths") or 0) for s in completed_sessions)
+    session_shots = sum(int(s.get("shots") or 0) for s in completed_sessions)
+    session_hits = sum(int(s.get("hits") or 0) for s in completed_sessions)
+
+    total_kills = max(kills_telemetry, session_kills) + legacy_kills
+    total_deaths = max(deaths_telemetry, session_deaths) + legacy_deaths
+    total_shots = max(shots_telemetry, session_shots)
+    total_hits = max(hits_telemetry, session_hits)
+
     kdr = round(total_kills / max(total_deaths, 1), 2)
+    overall_accuracy = round((total_hits / max(1, total_shots)) * 100, 1) if total_shots > 0 else 0.0
 
     total_matches = len(completed_sessions) + len(completed_legacy)
     wins = sum(1 for s in completed_sessions if s.get("winner") in {"Operator", "player", player.get("name")}) + sum(1 for m in completed_legacy if m.get("result") in {"victory", "win"})
@@ -351,6 +366,9 @@ def get_player_stats():
         "kills": total_kills,
         "deaths": total_deaths,
         "kdr": kdr,
+        "accuracy": overall_accuracy,
+        "shots_fired": total_shots,
+        "shots_hit": total_hits,
         "total_playtime_seconds": total_seconds,
         "honour_score": player.get("honour_score", 100),
         "coins": coins,
@@ -428,8 +446,17 @@ def get_matches():
             elif ended_at.tzinfo is None and started_at.tzinfo is not None:
                 ended_at = ended_at.replace(tzinfo=started_at.tzinfo)
             duration = max(0, int((ended_at - started_at).total_seconds()))
-        kills = event_count(session_id, "enemy_killed")
-        deaths = event_count(session_id, "player_death")
+        kills_ev = event_count(session_id, "enemy_killed")
+        deaths_ev = event_count(session_id, "player_death")
+        shots_ev = event_count(session_id, "weapon_fire")
+        hits_ev = event_count(session_id, "enemy_hit")
+
+        kills = kills_ev if kills_ev > 0 else int(game_session.get("kills", 0) or 0)
+        deaths = deaths_ev if deaths_ev > 0 else int(game_session.get("deaths", 0) or 0)
+        shots = shots_ev if shots_ev > 0 else int(game_session.get("shots", 0) or 0)
+        hits = hits_ev if hits_ev > 0 else int(game_session.get("hits", 0) or 0)
+
+        calc_acc = round((hits / max(1, shots)) * 100, 1) if shots > 0 else round(float(raw.get("accuracy", 0) or game_session.get("accuracy", 0) or 0) * 100, 1)
         auth_created = analysis.get("created_at")
         raw_score = analysis.get("risk_score", result.get("risk_score"))
         clamped_score = clamp_risk_score(raw_score)
@@ -445,11 +472,14 @@ def get_matches():
             "duration": duration,
             "game": (game_session.get("game") or "CyberStrike 3D").replace("_", " "),
             "status": game_session.get("status", "unknown"),
+            "weapon": game_session.get("weapon") or "P-24 Carbine",
             "kills": kills,
             "deaths": deaths,
+            "shots_fired": shots,
+            "shots_hit": hits,
             "kd": round(kills / max(deaths, 1), 2),
             "honour_awarded": game_session.get("honour_awarded"),
-            "accuracy": round(float(raw.get("accuracy", 0) or 0) * 100, 1),
+            "accuracy": calc_acc,
             "headshot_ratio": raw.get("headshot_ratio"),
             "risk_score": clamped_score,
             "risk_category": classification["category"],
@@ -1136,21 +1166,28 @@ def get_match_detail(session_id):
     analysis = game_events.find_one({"session_id": session_id, "analysis_type": "game_session"}) or {}
     raw_feats = analysis.get("raw_features", {})
 
-    # Fetch kill and death events
-    events = list(game_telemetry.find(
-        {"session_id": session_id, "event_type": {"$in": ["enemy_killed", "player_death", "weapon_fire", "enemy_hit"]}}
-    ).sort("timestamp", 1).limit(200))
+    # Authoritative counts across all telemetry events matching get_matches()
+    kills_count = game_telemetry.count_documents({"session_id": session_id, "event_type": "enemy_killed"})
+    deaths_count = game_telemetry.count_documents({"session_id": session_id, "event_type": "player_death"})
+    shots_count = game_telemetry.count_documents({"session_id": session_id, "event_type": "weapon_fire"})
+    hits_count = game_telemetry.count_documents({"session_id": session_id, "event_type": "enemy_hit"})
+
+    final_kills = kills_count if kills_count > 0 else int(sess.get("kills", 0) or raw_feats.get("kills", 0) or 0)
+    final_deaths = deaths_count if deaths_count > 0 else int(sess.get("deaths", 0) or raw_feats.get("deaths", 0) or 0)
+    final_shots = shots_count if shots_count > 0 else int(sess.get("shots", 0) or 0)
+    final_hits = hits_count if hits_count > 0 else int(sess.get("hits", 0) or 0)
+
+    calc_acc = round((final_hits / max(1, final_shots)) * 100, 1) if final_shots > 0 else round(float(raw_feats.get("accuracy", 0) or sess.get("accuracy", 0) or 0) * 100, 1)
+
+    # Fetch kill and death events for the combat timeline
+    combat_events = list(game_telemetry.find(
+        {"session_id": session_id, "event_type": {"$in": ["enemy_killed", "player_death"]}}
+    ).sort("timestamp", 1).limit(100))
 
     timeline = []
-    kills_count = 0
-    deaths_count = 0
-    shots_count = 0
-    hits_count = 0
-
-    for ev in events:
+    for ev in combat_events:
         etype = ev.get("event_type")
         if etype == "enemy_killed":
-            kills_count += 1
             timeline.append({
                 "type": "kill",
                 "time": ev.get("timestamp"),
@@ -1158,27 +1195,22 @@ def get_match_detail(session_id):
                 "body_part": ev.get("data", {}).get("body_part", "body")
             })
         elif etype == "player_death":
-            deaths_count += 1
             timeline.append({
                 "type": "death",
                 "time": ev.get("timestamp"),
                 "killer_id": ev.get("data", {}).get("killer_id", "Enemy")
             })
-        elif etype == "weapon_fire":
-            shots_count += 1
-        elif etype == "enemy_hit":
-            hits_count += 1
-
-    calc_acc = round((hits_count / max(1, shots_count)) * 100, 1) if shots_count > 0 else round(float(raw_feats.get("accuracy", 0) or 0) * 100, 1)
 
     return jsonify({
         "session_id": session_id,
         "game": sess.get("game", "CyberStrike 3D"),
         "date": (sess.get("ended_at") or sess.get("started_at") or sess.get("created_at")).isoformat() if (sess.get("ended_at") or sess.get("started_at") or sess.get("created_at")) else None,
         "duration_seconds": int((sess["ended_at"] - sess["started_at"]).total_seconds()) if (sess.get("ended_at") and sess.get("started_at")) else None,
-        "kills": kills_count or raw_feats.get("kills", 0),
-        "deaths": deaths_count or raw_feats.get("deaths", 0),
-        "kdr": round((kills_count or raw_feats.get("kills", 0)) / max(1, (deaths_count or raw_feats.get("deaths", 0))), 2),
+        "kills": final_kills,
+        "deaths": final_deaths,
+        "shots_fired": final_shots,
+        "shots_hit": final_hits,
+        "kdr": round(final_kills / max(1, final_deaths), 2),
         "accuracy": calc_acc,
         "result": sess.get("winner", "Completed"),
         "features": {

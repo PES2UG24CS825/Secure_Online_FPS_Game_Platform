@@ -54,6 +54,15 @@ describe('Task 1 - Characters & Procedural Articulated Rig', () => {
     assert.ok(opSrc.includes("case 'sniper':") || opSrc.includes("sniper"), 'Supports sniper');
     assert.ok(opSrc.includes("case 'pistol':") || opSrc.includes("pistol"), 'Supports pistol');
   });
+
+  it('1e: human tactical operator features (skin tone, face contours, ballistic sunglasses, rolled sleeves, MultiCam)', () => {
+    assert.ok(opSrc.includes('createHumanFaceTexture'), 'Must generate procedural human face texture');
+    assert.ok(opSrc.includes('createMulticamTexture'), 'Must generate procedural MultiCam camo texture');
+    assert.ok(opSrc.includes('sunglassesLens') && opSrc.includes('sunglassesFrame'), 'Must include tactical ballistic sunglasses');
+    assert.ok(opSrc.includes('rCuff') && opSrc.includes('lCuff'), 'Must include rolled-up combat shirt sleeves');
+    assert.ok(opSrc.includes('rForearmGeo') && opSrc.includes('materials.skin'), 'Forearms must show human skin tone');
+    assert.ok(opSrc.includes('watchBand') || opSrc.includes('watchFace'), 'Must feature tactical field watch');
+  });
 });
 
 describe('Task 2 - Game AI & Dataset-Driven Bots', () => {
