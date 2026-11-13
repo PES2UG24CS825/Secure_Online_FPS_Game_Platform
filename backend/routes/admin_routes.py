@@ -1223,8 +1223,30 @@ def export_audit_log_csv():
 def list_recent_logins():
     limit = max(1, min(request.args.get("limit", 20, type=int), 100))
     offset = max(0, request.args.get("offset", 0, type=int))
+    role_filter = request.args.get("role", "player").strip().lower()
 
-    docs = list(login_history.find().sort("created_at", -1).skip(offset).limit(limit))
+    # Find admin user IDs and emails to exclude when role_filter is 'player'
+    admin_users = list(users.find({"role": {"$in": ["admin", "super_admin", "demo_admin"]}}, {"_id": 1, "email": 1}))
+    admin_ids = [u["_id"] for u in admin_users]
+    admin_emails = [u.get("email", "").lower() for u in admin_users if u.get("email")]
+
+    query = {}
+    if role_filter == "player":
+        query = {
+            "$and": [
+                {"user_id": {"$nin": admin_ids}},
+                {"identifier": {"$nin": admin_emails}}
+            ]
+        }
+    elif role_filter == "admin":
+        query = {
+            "$or": [
+                {"user_id": {"$in": admin_ids}},
+                {"identifier": {"$in": admin_emails}}
+            ]
+        }
+
+    docs = list(login_history.find(query).sort("created_at", -1).skip(offset).limit(limit))
     user_ids = [d["user_id"] for d in docs if d.get("user_id")]
     user_map = {}
     if user_ids:
@@ -1235,7 +1257,7 @@ def list_recent_logins():
     formatted = []
     for d in docs:
         uid = d.get("user_id")
-        pname = user_map.get(uid, user_map.get(str(uid) if uid else None, d.get("identifier", "Unknown")))
+        pname = user_map.get(uid, user_map.get(str(uid) if uid else None, d.get("identifier", "Player")))
         ip = d.get("ip_address", "127.0.0.1")
         status = d.get("status", "success")
         is_succ = status == "success" or d.get("type") == "login_success"
@@ -1247,6 +1269,8 @@ def list_recent_logins():
                 device_str = "Mozilla Firefox"
             elif "Safari" in device_str:
                 device_str = "Apple Safari"
+            elif "Brave" in device_str:
+                device_str = "Brave Browser"
             else:
                 device_str = device_str[:32] + "..."
 

@@ -247,11 +247,12 @@ async function loadPlayerDashboard() {
         return null;
       }
     };
-    const [matchesData, securityData, profileData, statsData] = await Promise.all([
+    const [matchesData, securityData, profileData, statsData, rewardsData] = await Promise.all([
       loadSection("matches", "/player/matches"),
       loadSection("account security", "/player/security"),
       loadSection("profile", "/player/profile"),
-      loadSection("stats", "/player/stats")
+      loadSection("stats", "/player/stats"),
+      loadSection("rewards", "/player/rewards")
     ]);
 
     const matches = Array.isArray(matchesData?.matches) ? matchesData.matches : [];
@@ -641,18 +642,14 @@ async function loadPlayerDashboard() {
     renderPlayerAppearance();
 
     // Dynamically render player's OWNED banners and avatars in order (Requirement 3)
-    const renderOwnedAppearancePickers = async () => {
+    const renderOwnedAppearancePickers = async (preloadedRewards) => {
       const bannerContainer = document.getElementById("bannerOptions");
       const avatarContainer = document.getElementById("avatarOptions");
       if (!bannerContainer && !avatarContainer) return;
 
       let ownedSet = new Set();
-      try {
-        const rewRes = await api("/player/rewards");
-        (rewRes?.owned_items || []).forEach(id => ownedSet.add(id));
-      } catch (e) {
-        // Fallback
-      }
+      const rew = preloadedRewards || rewardsData;
+      (rew?.owned_items || []).forEach(id => ownedSet.add(id));
 
       const ALL_AVATARS_ORDERED = [
         { key: "default-operator", name: "Recruit Operative (Default Starter)", img: "public/avatars/default-operator.png", isDefault: true },
@@ -1286,18 +1283,26 @@ function initPlayerPolling() {
     }
   };
 
+  let lastDashboardLoadTimestamp = Date.now();
+
+  const throttledLoad = () => {
+    if (Date.now() - lastDashboardLoadTimestamp < 20000) return;
+    lastDashboardLoadTimestamp = Date.now();
+    loadPlayerDashboard();
+  };
+
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       stopPolling();
     } else {
-      loadPlayerDashboard();
+      throttledLoad();
       startPolling();
     }
   });
 
   window.addEventListener("focus", () => {
     if (!document.hidden) {
-      loadPlayerDashboard();
+      throttledLoad();
     }
   });
 

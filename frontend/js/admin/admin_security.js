@@ -24,6 +24,19 @@ export async function initSecuritySection() {
     });
   }
 
+  const roleFilterEl = document.getElementById('loginAuditRoleFilter');
+  if (roleFilterEl) {
+    roleFilterEl.addEventListener('change', () => {
+      loadRecentLoginsTable();
+    });
+  }
+  const refreshLoginsBtn = document.getElementById('refreshLoginsBtn');
+  if (refreshLoginsBtn) {
+    refreshLoginsBtn.addEventListener('click', () => {
+      loadRecentLoginsTable();
+    });
+  }
+
   await Promise.all([
     loadBanAppeals(),
     loadAntiCheatDecisions(),
@@ -330,8 +343,10 @@ export async function loadRecentLoginsTable() {
   const tbody = document.getElementById('recentLogins');
   if (!tbody) return;
 
+  const roleFilter = document.getElementById('loginAuditRoleFilter')?.value || 'player';
+
   try {
-    const resp = await fetch('/api/admin/logins?limit=15', {
+    const resp = await fetch(`/api/admin/logins?role=${encodeURIComponent(roleFilter)}&limit=20`, {
       credentials: 'include',
       headers: { 'X-Requested-With': 'XMLHttpRequest' }
     });

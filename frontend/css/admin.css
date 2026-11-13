@@ -966,3 +966,94 @@
   color: #475569;
   font-size: 11px;
 }
+
+/* 8. Player Matches & Career Inspector Modal */
+.player-matches-dialog {
+  max-width: 880px !important;
+  width: 95% !important;
+  background: #FFFFFF !important;
+  color: #1E1B4B !important;
+  border: 1px solid #DDD6FE !important;
+  border-radius: 18px !important;
+  padding: 24px 30px !important;
+  box-shadow: 0 25px 60px rgba(109, 40, 217, 0.25) !important;
+}
+.player-matches-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(5px);
+}
+.player-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #EDE9FE;
+  margin-bottom: 18px;
+}
+.modal-close-btn {
+  background: #F3E8FF;
+  border: none;
+  color: #6D28D9;
+  font-size: 16px;
+  font-weight: 700;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all .15s ease;
+}
+.modal-close-btn:hover {
+  background: #DC2626;
+  color: #FFFFFF;
+}
+.modal-career-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.modal-stat-box {
+  background: #FAF5FF;
+  border: 1px solid #DDD6FE;
+  border-radius: 10px;
+  padding: 12px 14px;
+  text-align: center;
+}
+.modal-stat-box small {
+  display: block;
+  font-size: 11px;
+  color: #64748B;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.modal-stat-box strong {
+  display: block;
+  font-size: 18px;
+  color: #4C1D95;
+}
+.modal-match-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.modal-match-table th {
+  background: #F5F3FF;
+  color: #4C1D95;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 10px 14px;
+  border-bottom: 1px solid #DDD6FE;
+}
+.modal-match-table td {
+  padding: 12px 14px;
+  font-size: 12px;
+  border-bottom: 1px solid #EDE9FE;
+  color: #1E1B4B;
+}
+.modal-match-table tr:hover td {
+  background: #FAF5FF;
+}

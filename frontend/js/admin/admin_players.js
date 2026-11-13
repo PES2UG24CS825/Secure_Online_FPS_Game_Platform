@@ -42,7 +42,12 @@ export async function initPlayersSection() {
     });
   }
 
-  setupBulkActions();
+  const closeBtn = document.getElementById('closePlayerModalBtn');
+  const closeFooterBtn = document.getElementById('closePlayerModalFooterBtn');
+  const modal = document.getElementById('playerMatchesModal');
+  if (closeBtn && modal) closeBtn.addEventListener('click', () => modal.close());
+  if (closeFooterBtn && modal) closeFooterBtn.addEventListener('click', () => modal.close());
+
   await loadPlayersTable();
 }
 
@@ -97,7 +102,6 @@ function renderPlayersRows(players, tbody) {
   const isSuper = Boolean(window.isSuperAdmin || (window.currentAdmin && window.currentAdmin.is_super_admin));
 
   tbody.innerHTML = players.map(p => {
-    const isChecked = selectedPlayerIds.has(p.id);
     const status = p.account_status || 'active';
     let statusBadge = '<span class="badge badge-success">Active</span>';
     if (status === 'suspended') {
@@ -112,13 +116,8 @@ function renderPlayersRows(players, tbody) {
     const riskScore = p.risk_score !== null && p.risk_score !== undefined ? p.risk_score : '—';
     const riskClass = (p.risk_score >= 70) ? 'risk-high' : ((p.risk_score >= 40) ? 'risk-med' : 'risk-low');
 
-    const checkboxCell = isSuper
-      ? `<td><input type="checkbox" class="player-select-cb" data-id="${escapeHtml(p.id)}" ${isChecked ? 'checked' : ''}></td>`
-      : `<td style="color:#94A3B8; text-align:center;">•</td>`;
-
     return `
-      <tr data-player-id="${escapeHtml(p.id)}" class="${isChecked ? 'row-selected' : ''}">
-        ${checkboxCell}
+      <tr data-player-id="${escapeHtml(p.id)}">
         <td>
           <div class="player-cell">
             <strong>${escapeHtml(p.name)}</strong>
@@ -137,6 +136,7 @@ function renderPlayersRows(players, tbody) {
         <td><span class="risk-pill ${riskClass}">${escapeHtml(riskScore)}</span></td>
         <td>${formatTimeAgo(p.created_at)}</td>
         <td class="table-actions">
+          <button class="action-btn view-matches-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}" data-email="${escapeHtml(p.email)}" style="background:#7C3AED !important; color:#FFFFFF !important; font-weight:700 !important;">📊 Matches</button>
           ${isSuper ? (
             status === 'active' ? `
               <button class="action-btn suspend-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Suspend</button>
@@ -148,7 +148,7 @@ function renderPlayersRows(players, tbody) {
               <button class="action-btn unban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Unban</button>
             ` : ''))
           ) : `
-            <span class="badge" style="background:#F3E8FF; color:#6D28D9; font-weight:600;">Verified Human</span>
+            <span class="badge" style="background:#F3E8FF; color:#6D28D9; font-weight:600;">Verified</span>
           `}
           ${isSuper && status !== 'deleted' ? `
             <button class="action-btn delete-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}" title="Soft delete (anonymize PII)">Soft Delete</button>
@@ -176,6 +176,9 @@ function attachRowListeners(tbody) {
   });
 
   // Action Buttons
+  tbody.querySelectorAll('.view-matches-btn').forEach(btn => {
+    btn.addEventListener('click', () => openPlayerMatchesModal(btn.dataset.id, btn.dataset.name, btn.dataset.email));
+  });
   tbody.querySelectorAll('.suspend-btn').forEach(btn => {
     btn.addEventListener('click', () => handleSuspend(btn.dataset.id, btn.dataset.name));
   });
@@ -271,6 +274,78 @@ function handleUnban(id, name) {
       await loadPlayersTable();
     }
   });
+}
+
+export async function openPlayerMatchesModal(id, name, email) {
+  const modal = document.getElementById('playerMatchesModal');
+  if (!modal) return;
+
+  const nameEl = document.getElementById('modalPlayerName');
+  const emailEl = document.getElementById('modalPlayerEmail');
+  const avatarEl = document.getElementById('modalPlayerAvatar');
+  if (nameEl) nameEl.textContent = name || 'Player';
+  if (emailEl) emailEl.textContent = email || '';
+  if (avatarEl) avatarEl.textContent = (name || 'P').charAt(0).toUpperCase();
+
+  const tbody = document.getElementById('modalMatchesTableBody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">Loading combat sessions…</td></tr>';
+
+  modal.showModal();
+
+  try {
+    const resp = await fetch(`/api/admin/players/${id}`, {
+      credentials: 'include',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    if (!resp.ok) throw new Error('Failed to load player match history');
+    const data = await resp.json();
+
+    const stats = data.stats || {};
+    const totalM = document.getElementById('modalTotalMatches');
+    const totalK = document.getElementById('modalTotalKills');
+    const totalD = document.getElementById('modalTotalDeaths');
+    const kdrEl = document.getElementById('modalCareerKdr');
+    const honourEl = document.getElementById('modalHonourScore');
+    const riskEl = document.getElementById('modalRiskScore');
+    const badgeEl = document.getElementById('modalMatchCountBadge');
+
+    if (totalM) totalM.textContent = stats.total_matches ?? 0;
+    if (totalK) totalK.textContent = stats.kills ?? 0;
+    if (totalD) totalD.textContent = stats.deaths ?? 0;
+    if (kdrEl) kdrEl.textContent = stats.kdr ?? '0.00';
+    if (honourEl) honourEl.textContent = data.account_info?.honour_score ?? 100;
+
+    const riskVal = stats.risk_score != null ? `${stats.risk_score} (${stats.risk_category || 'Normal'})` : 'Normal';
+    if (riskEl) riskEl.textContent = riskVal;
+
+    const matches = data.recent_matches || [];
+    if (badgeEl) badgeEl.textContent = `${matches.length} Sessions`;
+
+    if (!tbody) return;
+    if (matches.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty">No completed combat sessions found for this player.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = matches.map(m => {
+      const riskScore = m.risk_score != null ? `${Number(m.risk_score).toFixed(1)} / 100` : 'Normal';
+      const riskClass = (m.risk_score >= 70) ? 'risk-high' : ((m.risk_score >= 40) ? 'risk-med' : 'risk-low');
+      return `
+        <tr>
+          <td><code style="background:#EDE9FE; color:#5B21B6; padding:2px 6px; border-radius:4px; font-weight:700;">${escapeHtml(m.session_id ? m.session_id.substring(0, 8) : '—')}</code></td>
+          <td><strong>${escapeHtml(m.game || 'CyberStrike 3D')}</strong></td>
+          <td>${formatTimeAgo(m.started_at)}</td>
+          <td><strong style="color:#059669;">${m.kills ?? 0}</strong></td>
+          <td><strong style="color:#DC2626;">${m.deaths ?? 0}</strong></td>
+          <td><span style="font-weight:700; color:#4C1D95;">${m.kdr ?? '0.00'}</span></td>
+          <td><span class="risk-pill ${riskClass}">${riskScore}</span></td>
+          <td><span class="badge badge-success">${escapeHtml(m.status || 'completed')}</span></td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="error-cell">Error: ${escapeHtml(err.message)}</td></tr>`;
+  }
 }
 
 function handleDelete(id, name) {
