@@ -232,10 +232,10 @@ export function renderAdminHeaderBadge(admin) {
       tierBanner.className = 'admin-tier-banner super-tier';
       tierBanner.innerHTML = `
         <div>
-          <strong>👑 Super Administrator Executive Session:</strong>
-          <span>Unrestricted authority across all systems: Bulk Sanctions, GDPR Purge, ML Anti-Cheat Tuning, and Database Exports.</span>
+          <strong>👑 Super Administrator Command Center (Level 2):</strong>
+          <span>Full executive platform authority: Administrator Management, Granular RBAC, AI/ML Model Rollback &amp; Tuning, Emergency Lockdown, Backups &amp; Disaster Recovery.</span>
         </div>
-        <span class="badge" style="background:#F59E0B; color:#000; font-weight:800; padding:6px 12px; border-radius:8px;">EXECUTIVE ROOT</span>
+        <span class="admin-tier-badge level-2">EXECUTIVE ROOT (L2)</span>
       `;
     }
     if (mlNavBtn) {
@@ -243,9 +243,12 @@ export function renderAdminHeaderBadge(admin) {
       mlNavBtn.innerHTML = `<span class="admin-nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5h16M6.5 16V11M12 16V5M17.5 16V8"/></svg></span>Game &amp; ML Anti-Cheat <span style="font-size:10px; background:#F59E0B; color:#000; padding:1px 5px; border-radius:4px; margin-left:auto; font-weight:800;">ROOT</span>`;
     }
     document.querySelectorAll('[id*="Export"], [href*="/export/"]').forEach(el => el.style.display = '');
+
+    const superCat = document.getElementById('superAdminNavCategory');
+    if (superCat) superCat.hidden = false;
   } else {
     if (nameEl) nameEl.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;"><span>🛡️</span><strong>Security Admin</strong></span>`;
-    if (emailEl) emailEl.innerHTML = `<span style="color:#A78BFA; font-weight:600;">Tier-1 Operations</span> · ${escapeHtml(admin.email || '')}`;
+    if (emailEl) emailEl.innerHTML = `<span style="color:#A78BFA; font-weight:600;">Normal Administrator (Level 1)</span> · ${escapeHtml(admin.email || '')}`;
     if (avatarEl) {
       avatarEl.textContent = 'SA';
       avatarEl.classList.remove('super-admin-avatar');
@@ -254,15 +257,19 @@ export function renderAdminHeaderBadge(admin) {
       tierBanner.className = 'admin-tier-banner normal-tier';
       tierBanner.innerHTML = `
         <div>
-          <strong>🛡️ Operational Moderator Mode (Tier-1):</strong>
-          <span>Authorized for player verification, ban appeals review, and support tickets. Destructive actions, exports, and ML tuning are restricted.</span>
+          <strong>🛡️ Normal Administrator Console (Level 1):</strong>
+          <span>Operational console for Player Management, Threat Monitoring, Ban Appeals review, and Customer Support.</span>
         </div>
-        <span class="badge" style="background:#7C3AED; color:#fff; font-weight:700; padding:6px 12px; border-radius:8px;">OPERATIONS ONLY</span>
+        <span class="admin-tier-badge level-1">OPERATIONAL (L1)</span>
       `;
     }
     if (mlNavBtn) {
-      mlNavBtn.style.display = 'none';
+      mlNavBtn.style.display = 'flex';
+      mlNavBtn.innerHTML = `<span class="admin-nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5h16M6.5 16V11M12 16V5M17.5 16V8"/></svg></span>Game &amp; ML Anti-Cheat`;
     }
     document.querySelectorAll('[id*="Export"], [href*="/export/"]').forEach(el => el.style.display = 'none');
+
+    const superCat = document.getElementById('superAdminNavCategory');
+    if (superCat) superCat.hidden = true;
   }
 }

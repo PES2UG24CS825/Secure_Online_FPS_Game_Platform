@@ -17,8 +17,25 @@
       <button class="admin-nav-btn active" type="button" data-admin-section="overview" role="tab" aria-selected="true"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg></span>Overview</button>
       <button class="admin-nav-btn" type="button" data-admin-section="players" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3.5 20v-1.5a5.5 5.5 0 0 1 11 0V20M16 5.2a3.5 3.5 0 0 1 0 6.6M17 14a4.8 4.8 0 0 1 3.5 4.6V20"/></svg></span>Players</button>
       <button class="admin-nav-btn" type="button" data-admin-section="security" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 19 6v5.2c0 4.5-2.8 7.8-7 9.8-4.2-2-7-5.3-7-9.8V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>Security &amp; Appeals</button>
+      <button class="admin-nav-btn" type="button" data-admin-section="threats" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m10.29 3.86-8.6 14.9A2 2 0 0 0 3.42 22h17.16a2 2 0 0 0 1.73-3.24l-8.6-14.9a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>Threat Monitoring</button>
+      <button class="admin-nav-btn" type="button" data-admin-section="analytics" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>Reports &amp; Analytics</button>
       <button class="admin-nav-btn" type="button" data-admin-section="gameplay" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19.5h16M6.5 16V11M12 16V5M17.5 16V8"/></svg></span>Game &amp; ML Anti-Cheat</button>
       <button class="admin-nav-btn" type="button" data-admin-section="support" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="m4.5 7 7.5 5.5L19.5 7"/></svg></span>Customer support</button>
+
+      <!-- Super Admin Command Center Category (Exclusive to Level 2 Super Admin) -->
+      <div id="superAdminNavCategory" class="admin-nav-category" hidden>
+        <div class="admin-nav-divider">
+          <span>👑 COMMAND CENTER</span>
+        </div>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_admins" role="tab" aria-selected="false"><span class="admin-nav-icon">👥</span>Admin Management</button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_roles" role="tab" aria-selected="false"><span class="admin-nav-icon">🔑</span>Roles &amp; Permissions</button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_ml" role="tab" aria-selected="false"><span class="admin-nav-icon">🧠</span>AI &amp; ML Models</button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_risk" role="tab" aria-selected="false"><span class="admin-nav-icon">⚙️</span>Risk Engine Config</button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_command" role="tab" aria-selected="false"><span class="admin-nav-icon">🚨</span>Security Command</button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_control" role="tab" aria-selected="false"><span class="admin-nav-icon">🖥️</span>System Control</button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_backups" role="tab" aria-selected="false"><span class="admin-nav-icon">💾</span>Backup &amp; Recovery</button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_config" role="tab" aria-selected="false"><span class="admin-nav-icon">🛠️</span>Platform Settings</button>
+      </div>
     </nav>
     <div class="admin-sidebar-mascots" aria-hidden="true">
       <img src="public/admin-characters.png?v=2" alt="">
@@ -264,6 +281,625 @@
         <div id="supportTicketInbox" class="admin-support-inbox"><div class="empty">Loading player messages…</div></div>
       </section>
     </section>
+
+    <!-- SECTION 6: THREAT MONITORING (Normal Admin & Super Admin) -->
+    <section class="admin-section" id="admin-threats" data-admin-view="threats" role="tabpanel">
+      <div class="admin-section-heading">
+        <div>
+          <h2>Threat Monitoring</h2>
+          <p>Real-time detection of high-risk player behavior, repeat violations, and suspicious sign-in activities.</p>
+        </div>
+        <button id="refreshThreatsBtn" class="play-btn" type="button">Refresh Threats</button>
+      </div>
+
+      <div class="stats-grid" style="margin-bottom: 20px;">
+        <article class="stat-card">
+          <span>Active Threat Flags</span>
+          <strong id="threatActiveCount" style="color: #DC2626;">0</strong>
+          <small>Suspicious accounts under watch</small>
+        </article>
+        <article class="stat-card">
+          <span>High-Risk Accounts</span>
+          <strong id="threatHighRiskCount" style="color: #EA580C;">0</strong>
+          <small>Risk score &ge; 65 / 100</small>
+        </article>
+        <article class="stat-card">
+          <span>Repeat Violators</span>
+          <strong id="threatRepeatViolatorsCount" style="color: #7C3AED;">0</strong>
+          <small>Multiple security infractions</small>
+        </article>
+        <article class="stat-card">
+          <span>Suspicious Sign-ins</span>
+          <strong id="threatFailedLoginsCount" style="color: #4B5563;">0</strong>
+          <small>Failed or flagged logins</small>
+        </article>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
+        <!-- High Risk Accounts Table -->
+        <section class="panel admin-table-panel">
+          <div class="section-title">
+            <div><p class="eyebrow">PRIORITY INTERVENTION</p><h2>High-Risk Players</h2></div>
+          </div>
+          <div class="admin-table-wrap">
+            <table>
+              <thead>
+                <tr><th>Player</th><th>Risk Score</th><th>Status</th><th>Action</th></tr>
+              </thead>
+              <tbody id="threatHighRiskTableBody">
+                <tr><td colspan="4" class="empty">Loading high-risk players…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Repeat Violators Table -->
+        <section class="panel admin-table-panel">
+          <div class="section-title">
+            <div><p class="eyebrow">INFRACTION LOGS</p><h2>Repeat Violators</h2></div>
+          </div>
+          <div class="admin-table-wrap">
+            <table>
+              <thead>
+                <tr><th>Player</th><th>Violations</th><th>Risk Score</th><th>Inspect</th></tr>
+              </thead>
+              <tbody id="threatRepeatViolatorsTableBody">
+                <tr><td colspan="4" class="empty">Loading repeat violators…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- Suspicious Sign-in Activity -->
+      <section class="panel admin-table-panel" style="margin-top: 20px;">
+        <div class="section-title">
+          <div><p class="eyebrow">AUTH INTEGRITY</p><h2>Suspicious Login Attempts</h2></div>
+        </div>
+        <div class="admin-table-wrap">
+          <table>
+            <thead>
+              <tr><th>Identifier</th><th>Player</th><th>IP Address</th><th>Device</th><th>Reason</th><th>Time</th></tr>
+            </thead>
+            <tbody id="threatSuspiciousLoginsTableBody">
+              <tr><td colspan="6" class="empty">Loading suspicious logins…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <!-- SECTION 7: REPORTS & ANALYTICS (Normal Admin & Super Admin) -->
+    <section class="admin-section" id="admin-analytics" data-admin-view="analytics" role="tabpanel">
+      <div class="admin-section-heading">
+        <div>
+          <h2>Reports &amp; Platform Analytics</h2>
+          <p>Comprehensive security trends, player status distribution, model accuracy, and false-positive statistics.</p>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <a href="/api/admin/export/players" class="ghost-btn" download="players_report.csv">📥 Export Players</a>
+          <a href="/api/admin/export/audit-log" class="ghost-btn" download="audit_report.csv">📥 Export Audit Log</a>
+          <button id="refreshAnalyticsBtn" class="play-btn" type="button">Refresh Metrics</button>
+        </div>
+      </div>
+
+      <div class="stats-grid" style="margin-bottom: 20px;">
+        <article class="stat-card">
+          <span>Active Players</span>
+          <strong id="analyticsActivePlayers">—</strong>
+          <small id="analyticsTotalPlayersCaption">Total registered</small>
+        </article>
+        <article class="stat-card">
+          <span>Sanctioned Accounts</span>
+          <strong id="analyticsSanctionedPlayers" style="color: #DC2626;">—</strong>
+          <small>Suspended + Banned</small>
+        </article>
+        <article class="stat-card">
+          <span>Analyzed Matches</span>
+          <strong id="analyticsAnalyzedMatches">—</strong>
+          <small>Scored by ML Engine</small>
+        </article>
+        <article class="stat-card">
+          <span>Model Precision</span>
+          <strong id="analyticsPrecisionEstimate" style="color: #059669;">98.4%</strong>
+          <small>Low false-positive rate</small>
+        </article>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+        <!-- Distribution Card -->
+        <section class="panel admin-table-panel">
+          <div class="section-title"><div><p class="eyebrow">COMMUNITY DEMOGRAPHICS</p><h2>Player Status Distribution</h2></div></div>
+          <div style="padding: 16px; display: flex; flex-direction: column; gap: 12px;" id="analyticsDistributionContainer">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 13px; font-weight: 600; color: #166534;">🟢 Active Players</span>
+              <strong id="distActiveVal" style="font-size: 14px;">0</strong>
+            </div>
+            <div style="background: #E2E8F0; border-radius: 999px; height: 8px; overflow: hidden;">
+              <div id="distActiveBar" style="background: #10B981; height: 100%; width: 0%;"></div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #B45309;">🟠 Suspended Accounts</span>
+              <strong id="distSuspendedVal" style="font-size: 14px;">0</strong>
+            </div>
+            <div style="background: #E2E8F0; border-radius: 999px; height: 8px; overflow: hidden;">
+              <div id="distSuspendedBar" style="background: #F59E0B; height: 100%; width: 0%;"></div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #991B1B;">🔴 Banned Accounts</span>
+              <strong id="distBannedVal" style="font-size: 14px;">0</strong>
+            </div>
+            <div style="background: #E2E8F0; border-radius: 999px; height: 8px; overflow: hidden;">
+              <div id="distBannedBar" style="background: #EF4444; height: 100%; width: 0%;"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- False Positive Tracking -->
+        <section class="panel admin-table-panel">
+          <div class="section-title"><div><p class="eyebrow">QUALITY ASSURANCE</p><h2>False-Positive Tracking</h2></div></div>
+          <div style="padding: 16px;">
+            <p style="font-size: 13px; color: #475569; margin: 0 0 16px;">Anti-cheat decisions validated through player appeals review process:</p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px; text-align: center;">
+                <small style="color: #64748B; font-weight: 600; text-transform: uppercase; font-size: 10px;">Reviewed Appeals</small>
+                <strong id="analyticsTotalAppeals" style="display: block; font-size: 20px; color: #1E1B4B; margin-top: 4px;">0</strong>
+              </div>
+              <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px; text-align: center;">
+                <small style="color: #64748B; font-weight: 600; text-transform: uppercase; font-size: 10px;">Overturned (FP)</small>
+                <strong id="analyticsOverturnedAppeals" style="display: block; font-size: 20px; color: #059669; margin-top: 4px;">0</strong>
+              </div>
+            </div>
+            <div style="margin-top: 16px; font-size: 12px; color: #6D28D9; font-weight: 600; background: #FAF5FF; padding: 10px 14px; border-radius: 8px; border: 1px solid #DDD6FE;">
+              🛡️ Model Precision: <span id="analyticsModelPrecisionLabel">98.4% accurate enforcement rate</span>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- SUPER ADMIN COMMAND CENTER EXCLUSIVE MODULES (Level 2 Only) -->
+    <!-- ================================================================= -->
+
+    <!-- SUPER SECTION A: ADMINISTRATOR MANAGEMENT -->
+    <section class="admin-section" id="admin-super-admins" data-admin-view="super_admins" role="tabpanel">
+      <div class="command-center-header">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="admin-tier-badge level-2">EXECUTIVE ROOT</span>
+            <h2 class="command-center-title">Administrator Management</h2>
+          </div>
+          <p class="command-center-subtitle">Provision Normal Admin accounts, edit profiles, monitor active sessions, and revoke credentials.</p>
+        </div>
+        <button id="openCreateAdminModalBtn" class="play-btn" type="button" style="background: #F59E0B; color: #000; font-weight: 700;">+ Provision Normal Admin</button>
+      </div>
+
+      <section class="panel admin-table-panel">
+        <div class="section-title">
+          <div><p class="eyebrow">PRIVILEGED IDENTITY</p><h2>Registered Platform Administrators</h2></div>
+          <button id="refreshSuperAdminsBtn" class="ghost-btn" type="button">↻ Refresh Roster</button>
+        </div>
+        <div class="admin-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Administrator</th>
+                <th>Role Tier</th>
+                <th>Status</th>
+                <th>MFA Security</th>
+                <th>Active Sessions</th>
+                <th>Last Login</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="superAdminsTableBody">
+              <tr><td colspan="7" class="loading-cell">Loading administrator roster…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <!-- SUPER SECTION B: ROLE & PERMISSION MANAGEMENT -->
+    <section class="admin-section" id="admin-super-roles" data-admin-view="super_roles" role="tabpanel">
+      <div class="command-center-header">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="admin-tier-badge level-2">EXECUTIVE ROOT</span>
+            <h2 class="command-center-title">Role &amp; Permission Management</h2>
+          </div>
+          <p class="command-center-subtitle">Centralized access matrix, route-level enforcement, and granular action privileges.</p>
+        </div>
+        <button id="saveNormalAdminPermissionsBtn" class="play-btn" type="button">Save Role Permissions</button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
+        <!-- Level 1 Permissions Card -->
+        <section class="panel admin-table-panel">
+          <div class="section-title">
+            <div>
+              <p class="eyebrow">LEVEL 1 HIERARCHY</p>
+              <h2>NORMAL_ADMIN Permissions</h2>
+            </div>
+            <span class="admin-tier-badge level-1">OPERATIONAL</span>
+          </div>
+          <p style="font-size: 12px; color: #475569; margin: 0 0 12px;">Configure granted capabilities for Level 1 Operational Administrators:</p>
+          <div id="normalAdminPermissionsGrid" class="permission-toggle-grid">
+            Loading permissions matrix…
+          </div>
+        </section>
+
+        <!-- Level 2 Immutable Root Card -->
+        <section class="panel admin-table-panel">
+          <div class="section-title">
+            <div>
+              <p class="eyebrow">LEVEL 2 HIERARCHY</p>
+              <h2>SUPER_ADMIN Permissions</h2>
+            </div>
+            <span class="admin-tier-badge level-2">IMMUTABLE ROOT</span>
+          </div>
+          <p style="font-size: 12px; color: #475569; margin: 0 0 12px;">Super Administrators hold unconditional executive authority across all routes and services:</p>
+          <div style="background: #FAF5FF; border: 1px solid #DDD6FE; border-radius: 10px; padding: 16px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+              <span style="font-size: 20px;">👑</span>
+              <strong style="color: #4C1D95; font-size: 13px;">Full Authority Inherited (*)</strong>
+            </div>
+            <ul style="margin: 0; padding-left: 20px; font-size: 12px; color: #5B21B6; line-height: 1.8;">
+              <li>Unrestricted Read / Write / Delete on all Player records</li>
+              <li>Administrative Account Provisioning &amp; Deactivation</li>
+              <li>AI / ML Detection Model Tuning &amp; Instant Rollback</li>
+              <li>Risk Engine Boundary Configuration &amp; Rule Automation</li>
+              <li>Emergency Platform Lockdown &amp; Policy Control</li>
+              <li>Database Exports, Backups &amp; Disaster Recovery</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- SUPER SECTION C: AI & ML DETECTION MANAGEMENT -->
+    <section class="admin-section" id="admin-super-ml" data-admin-view="super_ml" role="tabpanel">
+      <div class="command-center-header">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="admin-tier-badge level-2">EXECUTIVE ROOT</span>
+            <h2 class="command-center-title">AI &amp; ML Detection Management</h2>
+          </div>
+          <p class="command-center-subtitle">Inspect active inference model, view precision/recall, configure thresholds, and execute rollbacks.</p>
+        </div>
+        <button id="openModelRollbackBtn" class="play-btn" type="button" style="background: #DC2626;">Model Rollback</button>
+      </div>
+
+      <!-- Active Model Hero -->
+      <section class="panel admin-table-panel">
+        <div class="section-title">
+          <div><p class="eyebrow">ACTIVE INFERENCE ENGINE</p><h2 id="superMlModelName">SecureFPS Random Forest Anti-Cheat v2.0</h2></div>
+          <span class="badge badge-cyan" id="superMlActiveVersionBadge" style="font-size: 12px; padding: 6px 12px;">v2.0-rf Active</span>
+        </div>
+        <div class="stats-grid" style="margin-top: 10px;">
+          <article class="stat-card">
+            <span>Accuracy</span>
+            <strong id="mlMetricAccuracy" style="color: #059669;">98.4%</strong>
+            <small>Validation dataset</small>
+          </article>
+          <article class="stat-card">
+            <span>Precision</span>
+            <strong id="mlMetricPrecision" style="color: #059669;">97.9%</strong>
+            <small>Cheater positive rate</small>
+          </article>
+          <article class="stat-card">
+            <span>Recall</span>
+            <strong id="mlMetricRecall" style="color: #2563EB;">98.1%</strong>
+            <small>Detection coverage</small>
+          </article>
+          <article class="stat-card">
+            <span>F1-Score</span>
+            <strong id="mlMetricF1" style="color: #7C3AED;">0.980</strong>
+            <small>Harmonic mean</small>
+          </article>
+        </div>
+      </section>
+
+      <!-- Model Catalog & Version History -->
+      <section class="panel admin-table-panel" style="margin-top: 20px;">
+        <div class="section-title">
+          <div><p class="eyebrow">VERSION CATALOG</p><h2>Approved Detection Models</h2></div>
+        </div>
+        <div class="admin-table-wrap">
+          <table>
+            <thead>
+              <tr><th>Version</th><th>Algorithm</th><th>Accuracy</th><th>Precision / Recall</th><th>False Positives</th><th>Status</th><th>Action</th></tr>
+            </thead>
+            <tbody id="superMlCatalogTableBody">
+              <tr><td colspan="7" class="loading-cell">Loading model catalog…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <!-- SUPER SECTION D: RISK ENGINE CONFIGURATION -->
+    <section class="admin-section" id="admin-super-risk" data-admin-view="super_risk" role="tabpanel">
+      <div class="command-center-header">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="admin-tier-badge level-2">EXECUTIVE ROOT</span>
+            <h2 class="command-center-title">Risk Engine Configuration</h2>
+          </div>
+          <p class="command-center-subtitle">Calibrate category boundaries, feature weights, and test detection rules with the Interactive Simulator.</p>
+        </div>
+        <button id="saveRiskConfigBtn" class="play-btn" type="button">Save Risk Configuration</button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
+        <!-- Threshold Settings -->
+        <section class="panel admin-table-panel">
+          <div class="section-title"><div><p class="eyebrow">RISK BOUNDARIES</p><h2>Category Thresholds</h2></div></div>
+          <div style="display: flex; flex-direction: column; gap: 14px; padding: 10px 0;">
+            <div>
+              <label for="riskLowThreshold" style="font-weight: 600; font-size: 12px; color: #166534;">🟢 Low Risk Cutoff (0 to Low)</label>
+              <input type="number" id="riskLowThreshold" class="admin-modal-input" value="35" min="10" max="50">
+            </div>
+            <div>
+              <label for="riskMedThreshold" style="font-weight: 600; font-size: 12px; color: #D97706;">🟡 Medium Risk Cutoff (Low to Med)</label>
+              <input type="number" id="riskMedThreshold" class="admin-modal-input" value="65" min="40" max="75">
+            </div>
+            <div>
+              <label for="riskHighThreshold" style="font-weight: 600; font-size: 12px; color: #EA580C;">🟠 High Risk Cutoff (Med to High)</label>
+              <input type="number" id="riskHighThreshold" class="admin-modal-input" value="85" min="65" max="90">
+            </div>
+            <div>
+              <label for="riskCritThreshold" style="font-weight: 600; font-size: 12px; color: #DC2626;">🔴 Critical Risk Cutoff (High to Critical)</label>
+              <input type="number" id="riskCritThreshold" class="admin-modal-input" value="95" min="85" max="100">
+            </div>
+          </div>
+        </section>
+
+        <!-- Interactive Risk Simulator (Dry-Run Tester) -->
+        <section class="panel admin-table-panel">
+          <div class="section-title">
+            <div><p class="eyebrow">PRE-FLIGHT SIMULATOR</p><h2>Interactive Rule Tester</h2></div>
+            <button id="runSimulationBtn" class="ghost-btn" type="button">Simulate Rule</button>
+          </div>
+          <p style="font-size: 12px; color: #475569; margin: 0 0 12px;">Test input values against the configured scoring formula without altering live data:</p>
+          <div class="simulator-box">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div>
+                <label style="font-size: 11px; font-weight: 600;">Aim Jitter (Variance):</label>
+                <input type="number" step="0.01" id="simAimJitter" class="admin-modal-input" value="0.02" style="font-size: 12px;">
+              </div>
+              <div>
+                <label style="font-size: 11px; font-weight: 600;">Reaction Time (ms):</label>
+                <input type="number" id="simReactionMs" class="admin-modal-input" value="120" style="font-size: 12px;">
+              </div>
+              <div>
+                <label style="font-size: 11px; font-weight: 600;">Accuracy (0.0 - 1.0):</label>
+                <input type="number" step="0.05" id="simAccuracy" class="admin-modal-input" value="0.75" style="font-size: 12px;">
+              </div>
+              <div>
+                <label style="font-size: 11px; font-weight: 600;">Speed Multiplier:</label>
+                <input type="number" step="0.05" id="simSpeed" class="admin-modal-input" value="1.25" style="font-size: 12px;">
+              </div>
+            </div>
+            <div id="simResultBox" style="margin-top: 14px; background: #FFFFFF; border: 1px solid #DDD6FE; border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <small style="color: #64748B; font-weight: 600; text-transform: uppercase;">Simulated Score</small>
+                <div style="font-size: 20px; font-weight: 800; color: #4C1D95;" id="simScoreVal">—</div>
+              </div>
+              <div>
+                <small style="color: #64748B; font-weight: 600; text-transform: uppercase;">Verdict</small>
+                <div style="font-size: 13px; font-weight: 700;" id="simVerdictVal">Ready to simulate</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- SUPER SECTION E: GLOBAL SECURITY COMMAND -->
+    <section class="admin-section" id="admin-super-command" data-admin-view="super_command" role="tabpanel">
+      <div class="command-center-header">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="admin-tier-badge level-2">EXECUTIVE ROOT</span>
+            <h2 class="command-center-title">Global Security Command</h2>
+          </div>
+          <p class="command-center-subtitle">Real-time threat monitoring, critical alerts, and Emergency Platform Lockdown controls.</p>
+        </div>
+        <button id="toggleLockdownBtn" class="play-btn" type="button" style="background: #DC2626;">🚨 Engage Platform Lockdown</button>
+      </div>
+
+      <div id="superLockdownNoticeBox" class="lockdown-alert-card" style="display: none;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <span style="font-size: 32px;">🚨</span>
+          <div>
+            <strong style="color: #991B1B; font-size: 15px;">EMERGENCY PLATFORM LOCKDOWN ENGAGED</strong>
+            <p id="lockdownReasonText" style="margin: 4px 0 0; color: #B91C1C; font-size: 12px;">All matchmaking and external sessions are currently quarantined.</p>
+          </div>
+        </div>
+        <button id="disengageLockdownBtn" class="play-btn" type="button" style="background: #10B981;">Disengage Lockdown</button>
+      </div>
+
+      <section class="panel admin-table-panel">
+        <div class="section-title">
+          <div><p class="eyebrow">CRITICAL INCIDENT AUDIT</p><h2>High Severity Platform Incidents</h2></div>
+        </div>
+        <div class="admin-table-wrap">
+          <table>
+            <thead>
+              <tr><th>Incident Type</th><th>Description</th><th>Timestamp</th><th>Status</th></tr>
+            </thead>
+            <tbody id="superCriticalIncidentsTableBody">
+              <tr><td colspan="4" class="loading-cell">Loading critical incidents…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <!-- SUPER SECTION F: SYSTEM CONTROL CENTER -->
+    <section class="admin-section" id="admin-super-control" data-admin-view="super_control" role="tabpanel">
+      <div class="command-center-header">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="admin-tier-badge level-2">EXECUTIVE ROOT</span>
+            <h2 class="command-center-title">System Control Center</h2>
+          </div>
+          <p class="command-center-subtitle">Live backend resources, database health, API latency, and ML inference performance metrics.</p>
+        </div>
+        <button id="refreshSystemMetricsBtn" class="ghost-btn" type="button" style="color: #FFF; border-color: rgba(255,255,255,0.3);">↻ Refresh Metrics</button>
+      </div>
+
+      <div class="stats-grid" style="margin-bottom: 20px;">
+        <article class="stat-card">
+          <span>Server Uptime</span>
+          <strong id="metricServerUptime">—</strong>
+          <small id="metricPythonRuntime">Python 3.12 WSGI</small>
+        </article>
+        <article class="stat-card">
+          <span>Database Cluster</span>
+          <strong id="metricDbStatus" style="color: #059669;">CONNECTED</strong>
+          <small id="metricDbLatency">2.4ms ping latency</small>
+        </article>
+        <article class="stat-card">
+          <span>API Latency (P95)</span>
+          <strong id="metricApiLatency">38 ms</strong>
+          <small id="metricApiThroughput">24.5 req / sec</small>
+        </article>
+        <article class="stat-card">
+          <span>ML Inference Time</span>
+          <strong id="metricMlInference">3.8 ms</strong>
+          <small>Random Forest queue: 0</small>
+        </article>
+      </div>
+    </section>
+
+    <!-- SUPER SECTION G: BACKUP & RECOVERY -->
+    <section class="admin-section" id="admin-super-backups" data-admin-view="super_backups" role="tabpanel">
+      <div class="command-center-header">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="admin-tier-badge level-2">EXECUTIVE ROOT</span>
+            <h2 class="command-center-title">Backup &amp; Disaster Recovery</h2>
+          </div>
+          <p class="command-center-subtitle">Manage immutable recovery points, retention schedules, and create on-demand cluster snapshots.</p>
+        </div>
+        <button id="createBackupSnapshotBtn" class="play-btn" type="button" style="background: #10B981;">+ Create On-Demand Snapshot</button>
+      </div>
+
+      <section class="panel admin-table-panel">
+        <div class="section-title">
+          <div><p class="eyebrow">RECOVERY CATALOG</p><h2>Verified System Snapshots</h2></div>
+        </div>
+        <div class="admin-table-wrap">
+          <table>
+            <thead>
+              <tr><th>Snapshot ID</th><th>Scope</th><th>Size</th><th>Documents</th><th>Checksum</th><th>Status</th><th>Created</th></tr>
+            </thead>
+            <tbody id="superBackupsTableBody">
+              <tr><td colspan="7" class="loading-cell">Loading system backups…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <!-- SUPER SECTION H: PLATFORM CONFIGURATION -->
+    <section class="admin-section" id="admin-super-config" data-admin-view="super_config" role="tabpanel">
+      <div class="command-center-header">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="admin-tier-badge level-2">EXECUTIVE ROOT</span>
+            <h2 class="command-center-title">Platform Configuration</h2>
+          </div>
+          <p class="command-center-subtitle">Session security timeouts, brute-force lockout thresholds, and maintenance mode toggling.</p>
+        </div>
+        <button id="savePlatformConfigBtn" class="play-btn" type="button">Save Platform Settings</button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
+        <section class="panel admin-table-panel">
+          <div class="section-title"><div><p class="eyebrow">SECURITY POLICIES</p><h2>Session &amp; Auth Limits</h2></div></div>
+          <div style="display: flex; flex-direction: column; gap: 14px; padding: 10px 0;">
+            <div>
+              <label for="cfgSessionTimeout" style="font-weight: 600; font-size: 12px;">Session Timeout (Minutes):</label>
+              <input type="number" id="cfgSessionTimeout" class="admin-modal-input" value="60">
+            </div>
+            <div>
+              <label for="cfgMaxLoginAttempts" style="font-weight: 600; font-size: 12px;">Max Failed Login Attempts:</label>
+              <input type="number" id="cfgMaxLoginAttempts" class="admin-modal-input" value="5">
+            </div>
+            <div>
+              <label for="cfgLockoutDuration" style="font-weight: 600; font-size: 12px;">Lockout Duration (Minutes):</label>
+              <input type="number" id="cfgLockoutDuration" class="admin-modal-input" value="15">
+            </div>
+          </div>
+        </section>
+
+        <section class="panel admin-table-panel">
+          <div class="section-title"><div><p class="eyebrow">OPERATIONAL CONTROLS</p><h2>Maintenance Mode</h2></div></div>
+          <div style="padding: 10px 0;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; font-weight: 700; color: #1E1B4B;">
+              <input type="checkbox" id="cfgMaintenanceModeCb" style="width: 18px; height: 18px;">
+              Enable Maintenance Mode (Restricts player logins)
+            </label>
+            <div style="margin-top: 14px;">
+              <label for="cfgMaintenanceMsg" style="font-weight: 600; font-size: 12px;">Maintenance Banner Message:</label>
+              <input type="text" id="cfgMaintenanceMsg" class="admin-modal-input" value="SecureFPS Platform is undergoing routine maintenance.">
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- SUPER ADMIN MODAL: PROVISION NORMAL ADMIN -->
+    <dialog id="createAdminModal" class="admin-action-modal">
+      <form method="dialog" class="admin-modal-card" novalidate id="createAdminForm">
+        <h3>Provision Normal Administrator (Level 1)</h3>
+        <p class="muted">Creates an operational administrator account with mandatory MFA enrollment.</p>
+        <div class="modal-form-group">
+          <label for="newAdminName">Full Name <span class="required-star">*</span></label>
+          <input type="text" id="newAdminName" class="admin-modal-input" placeholder="e.g. Moderator Alice" required>
+        </div>
+        <div class="modal-form-group">
+          <label for="newAdminEmail">Admin Email <span class="required-star">*</span></label>
+          <input type="email" id="newAdminEmail" class="admin-modal-input" placeholder="alice@securefps.io" required>
+        </div>
+        <div class="modal-form-group">
+          <label for="newAdminPassword">Initial Password <span class="required-star">*</span> (min 8 chars)</label>
+          <input type="password" id="newAdminPassword" class="admin-modal-input" placeholder="Strong password" required>
+        </div>
+        <div id="createAdminFeedback" class="modal-err-msg" style="margin-top: 8px;" hidden></div>
+        <div class="modal-actions" style="margin-top: 18px;">
+          <button type="button" class="ghost-btn" id="cancelCreateAdminBtn">Cancel</button>
+          <button type="submit" class="play-btn" id="submitCreateAdminBtn">Create Account</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- SUPER ADMIN MODAL: RE-AUTHENTICATION & LOCKDOWN -->
+    <dialog id="superLockdownModal" class="admin-action-modal">
+      <form method="dialog" class="admin-modal-card" novalidate id="lockdownConfirmForm">
+        <h3 style="color: #DC2626;">🚨 Confirm Emergency Platform Lockdown</h3>
+        <p class="muted">Lockdown terminates non-essential multiplayer sessions and prevents new player logins. Requires re-authentication.</p>
+        <div class="modal-form-group">
+          <label for="lockdownReasonInput">Reason for Emergency Action <span class="required-star">*</span> (min 10 chars)</label>
+          <textarea id="lockdownReasonInput" class="admin-modal-textarea" rows="2" placeholder="e.g. Critical zero-day vulnerability detected under active investigation." required></textarea>
+        </div>
+        <div class="modal-form-group">
+          <label for="lockdownPasswordInput">Super Admin Password <span class="required-star">*</span></label>
+          <input type="password" id="lockdownPasswordInput" class="admin-modal-input" placeholder="Verify your password" required>
+        </div>
+        <div id="lockdownFeedback" class="modal-err-msg" style="margin-top: 8px;" hidden></div>
+        <div class="modal-actions" style="margin-top: 18px;">
+          <button type="button" class="ghost-btn" id="cancelLockdownModalBtn">Cancel</button>
+          <button type="submit" class="play-btn" style="background: #DC2626;">Confirm Lockdown</button>
+        </div>
+      </form>
+    </dialog>
 
     <!-- PLAYER PROFILE & MATCH HISTORY MODAL -->
     <dialog id="playerMatchesModal" class="admin-action-modal player-matches-dialog">

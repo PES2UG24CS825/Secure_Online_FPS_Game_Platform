@@ -7,6 +7,11 @@ import { loadAdminOverview } from './admin/admin_overview.js';
 import { initPlayersSection, loadPlayersTable } from './admin/admin_players.js';
 import { initSecuritySection, loadBanAppeals, loadAntiCheatDecisions, loadAuditLogTable, loadRecentLoginsTable } from './admin/admin_security.js';
 import { initSupportSection, loadSupportTickets } from './admin/admin_support.js';
+import {
+  initSuperAdminModules, loadSuperAdmins, loadRolesPermissions, loadMlModelsCatalog,
+  loadRiskConfig, loadSecurityCommand, loadSystemControlMetrics, loadSystemBackups,
+  loadPlatformConfig, loadThreatMonitoring, loadReportsAnalytics
+} from './admin/admin_super.js';
 
 let activeSection = 'overview';
 
@@ -22,6 +27,7 @@ async function initAdminApp() {
   initPlayersSection();
   initSecuritySection();
   initSupportSection();
+  initSuperAdminModules();
 
   // Connect Primary Real-Time SSE Stream with Fallback Polling
   connectAdminLiveEvents();
@@ -74,6 +80,14 @@ function updatePageTitle(section) {
       title.textContent = 'Security & Ban Appeals';
       if (sub) sub.textContent = 'Review player ban appeals, audit enforcement logs, and logins.';
       break;
+    case 'threats':
+      title.textContent = 'Threat Monitoring';
+      if (sub) sub.textContent = 'Active threats, suspicious logins, and repeated player violations.';
+      break;
+    case 'analytics':
+      title.textContent = 'Reports & Platform Analytics';
+      if (sub) sub.textContent = 'Sanction trends, detection accuracy, and false-positive statistics.';
+      break;
     case 'gameplay':
       title.textContent = 'Game & ML Anti-Cheat';
       if (sub) sub.textContent = 'Model inference performance, top telemetry features, and match logs.';
@@ -81,6 +95,38 @@ function updatePageTitle(section) {
     case 'support':
       title.textContent = 'Customer Support';
       if (sub) sub.textContent = 'Answer player tickets, view attachments, and use reply macros.';
+      break;
+    case 'super_admins':
+      title.textContent = '👑 Administrator Management';
+      if (sub) sub.textContent = 'Provision Normal Admins, edit profiles, revoke sessions, and manage credentials.';
+      break;
+    case 'super_roles':
+      title.textContent = '👑 Role & Permission Management';
+      if (sub) sub.textContent = 'Centralized permission matrix and route-level authorization control.';
+      break;
+    case 'super_ml':
+      title.textContent = '👑 AI & ML Detection Management';
+      if (sub) sub.textContent = 'Model accuracy, precision, recall, threshold tuning, and instant rollback.';
+      break;
+    case 'super_risk':
+      title.textContent = '👑 Risk Engine Configuration';
+      if (sub) sub.textContent = 'Category boundaries, automated enforcement rules, and Interactive Simulator.';
+      break;
+    case 'super_command':
+      title.textContent = '👑 Global Security Command';
+      if (sub) sub.textContent = 'Real-time platform threat overview and Emergency Lockdown controls.';
+      break;
+    case 'super_control':
+      title.textContent = '👑 System Control Center';
+      if (sub) sub.textContent = 'Runtime metrics, database cluster health, API throughput, and latency.';
+      break;
+    case 'super_backups':
+      title.textContent = '👑 Backup & Disaster Recovery';
+      if (sub) sub.textContent = 'Verified recovery points, rolling retention, and on-demand snapshots.';
+      break;
+    case 'super_config':
+      title.textContent = '👑 Platform Configuration';
+      if (sub) sub.textContent = 'Authentication limits, session timeouts, and platform maintenance mode.';
       break;
   }
 }
@@ -134,11 +180,41 @@ async function refreshCurrentSection(force = false) {
     case 'security':
       await Promise.all([loadBanAppeals(), loadAuditLogTable(), loadRecentLoginsTable()]);
       break;
+    case 'threats':
+      await loadThreatMonitoring();
+      break;
+    case 'analytics':
+      await loadReportsAnalytics();
+      break;
     case 'gameplay':
       await loadAntiCheatDecisions();
       break;
     case 'support':
       await loadSupportTickets();
+      break;
+    case 'super_admins':
+      await loadSuperAdmins();
+      break;
+    case 'super_roles':
+      await loadRolesPermissions();
+      break;
+    case 'super_ml':
+      await loadMlModelsCatalog();
+      break;
+    case 'super_risk':
+      await loadRiskConfig();
+      break;
+    case 'super_command':
+      await loadSecurityCommand();
+      break;
+    case 'super_control':
+      await loadSystemControlMetrics();
+      break;
+    case 'super_backups':
+      await loadSystemBackups();
+      break;
+    case 'super_config':
+      await loadPlatformConfig();
       break;
   }
 }
