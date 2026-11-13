@@ -110,9 +110,32 @@ async function loadRewards() {
     store.innerHTML = (data.store || []).map((item) => {
       const hasItem = owned.has(item.id);
       const equipped = data.equipped_item === item.id;
-      const label = equipped ? "Equipped" : hasItem ? "Equip perk" : `Unlock · ${item.price} coins`;
+      const cat = item.category || "perk";
+      const catLabel = cat === "avatar" ? "OPERATOR SKIN" : cat === "banner" ? "SCENE BANNER" : cat === "weapon" ? "WEAPON SKIN" : "COMBAT PERK";
+      const equipVerb = cat === "avatar" ? "Equip Skin" : cat === "banner" ? "Equip Banner" : "Equip Perk";
+      const label = equipped ? "Equipped ✓" : hasItem ? equipVerb : `Unlock · ${item.price} Coins`;
       const action = hasItem ? "equip" : "buy";
-      return `<article class="reward-item"><strong aria-hidden="true">${featureEscape(item.icon)}</strong><h3>${featureEscape(item.name)}</h3><p>${featureEscape(item.description)}</p><span class="reward-price">${hasItem ? "Unlocked" : `${item.price} coins`}</span><button class="play-btn" type="button" data-reward-action="${action}" data-item-id="${featureEscape(item.id)}" ${equipped ? "disabled" : ""}>${label}</button></article>`;
+      
+      let previewHtml = "";
+      if (cat === "avatar" && item.preview) {
+        previewHtml = `<div class="reward-preview-box avatar-preview-box"><img src="${featureEscape(item.preview)}" alt="${featureEscape(item.name)}" class="reward-preview-img avatar-img"><span class="reward-type-tag">${catLabel}</span></div>`;
+      } else if (cat === "banner" && item.preview) {
+        previewHtml = `<div class="reward-preview-box banner-preview-box" style="background-image: linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.45)), url('${featureEscape(item.preview)}')"><span class="reward-type-tag">${catLabel}</span></div>`;
+      } else {
+        previewHtml = `<div class="reward-preview-box perk-preview-box"><span class="reward-icon-huge">${featureEscape(item.icon)}</span><span class="reward-type-tag">${catLabel}</span></div>`;
+      }
+
+      return `<article class="reward-item ${equipped ? 'equipped-card' : ''} ${hasItem ? 'unlocked-card' : ''}">
+        ${previewHtml}
+        <div class="reward-item-body">
+          <h3>${featureEscape(item.name)}</h3>
+          <p>${featureEscape(item.description)}</p>
+          <div class="reward-item-footer">
+            <span class="reward-price ${hasItem ? 'price-unlocked' : ''}">${hasItem ? "Unlocked" : `🪙 ${item.price} Coins`}</span>
+            <button class="play-btn ${equipped ? 'equipped-btn' : ''}" type="button" data-reward-action="${action}" data-item-id="${featureEscape(item.id)}" ${equipped ? "disabled" : ""}>${label}</button>
+          </div>
+        </div>
+      </article>`;
     }).join("") || '<div class="empty">No store items are available.</div>';
 
     const history = document.getElementById("rewardHistory");
@@ -203,14 +226,29 @@ document.getElementById("rewardStore")?.addEventListener("click", async (event) 
   if (!button) return;
   button.disabled = true;
   try {
-    await api(`/player/rewards/${button.dataset.rewardAction === "buy" ? "purchase" : "equip"}`, {
+    const res = await api(`/player/rewards/${button.dataset.rewardAction === "buy" ? "purchase" : "equip"}`, {
       method: "POST",
       body: JSON.stringify({ item_id: button.dataset.itemId })
     });
+    if (res.avatar && typeof currentAppearance !== 'undefined') {
+      currentAppearance.avatar = res.avatar;
+      currentAppearance.avatar_image = null;
+      if (typeof renderPlayerAppearance === 'function') renderPlayerAppearance();
+    }
+    if (res.banner && typeof currentAppearance !== 'undefined') {
+      currentAppearance.banner = res.banner;
+      currentAppearance.banner_image = null;
+      if (typeof renderPlayerAppearance === 'function') renderPlayerAppearance();
+    }
     await loadRewards();
+    if (window.showAppAlert) {
+      window.showAppAlert(res.message || "Equipment updated!", { title: "Tactical Armory", tone: "success" });
+    }
   } catch (error) {
     button.disabled = false;
-    window.showAppAlert(error.message, { title: "Reward store", tone: "warning" });
+    if (window.showAppAlert) {
+      window.showAppAlert(error.message, { title: "Tactical Armory", tone: "warning" });
+    }
   }
 });
 

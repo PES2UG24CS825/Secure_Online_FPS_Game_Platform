@@ -72,13 +72,118 @@ ACHIEVEMENTS = [
 ]
 
 REWARD_STORE = {
-    "guardian_badge": {"name": "Guardian badge", "description": "A shield badge for your player profile.", "price": 100, "icon": "⬡"},
-    "marksman_badge": {"name": "Marksman badge", "description": "A reticle badge for your player profile.", "price": 180, "icon": "◎"},
-    "elite_badge": {"name": "Elite sentinel badge", "description": "A premium SecureFPS profile badge.", "price": 300, "icon": "✦"},
-    "tactical_comp": {"name": "Recoil Compensator", "description": "High-efficiency muzzle brake reducing weapon climb.", "price": 150, "icon": "🎯"},
-    "combat_booster": {"name": "+25% XP Combat Protocol", "description": "Combat protocol booster granting +25% bonus XP on match victory.", "price": 120, "icon": "⚡"},
-    "stealth_camo": {"name": "Night-Stalker Operator Camo", "description": "Matte-black stealth ballistic weave tactical uniform.", "price": 250, "icon": "🥷"},
-    "extended_mag": {"name": "Tactical Extended Mags", "description": "High-capacity combat magazine upgrade (+5 rounds reserve).", "price": 200, "icon": "📦"},
+    # 1. Operator Skins & Character Avatars (Equippable)
+    "skin_neon_valkyrie": {
+        "name": "Neon Valkyrie Skin",
+        "description": "High-tech purple cyber-operative avatar with glowing violet HUD visor.",
+        "price": 180,
+        "icon": "⚡",
+        "category": "avatar",
+        "avatar_key": "chibi-female-1",
+        "preview": "public/avatars/chibi-female-1.png",
+    },
+    "skin_cyber_ninja": {
+        "name": "Cyber Ninja Spec-Ops",
+        "description": "Covert tactical infiltrator avatar wrapped in reinforced carbon-violet weave.",
+        "price": 160,
+        "icon": "🥷",
+        "category": "avatar",
+        "avatar_key": "chibi-male-1",
+        "preview": "public/avatars/chibi-male-1.png",
+    },
+    "skin_phantom_ghost": {
+        "name": "Phantom Recon Operative",
+        "description": "Elite long-range marksman avatar with night-vision optics and ballistic shroud.",
+        "price": 200,
+        "icon": "🔮",
+        "category": "avatar",
+        "avatar_key": "chibi-female-2",
+        "preview": "public/avatars/chibi-female-2.png",
+    },
+    "skin_tactical_vanguard": {
+        "name": "Tactical Vanguard",
+        "description": "Frontline combat specialist avatar equipped with heavy purple alloy plate carrier.",
+        "price": 150,
+        "icon": "🛡️",
+        "category": "avatar",
+        "avatar_key": "chibi-male-2",
+        "preview": "public/avatars/chibi-male-2.png",
+    },
+
+    # 2. Profile Scene Banners (Equippable)
+    "banner_sakura_neon": {
+        "name": "Sakura Neon Cyber Banner",
+        "description": "Vibrant cyberpunk district scene bathed in neon violet & magenta rain.",
+        "price": 140,
+        "icon": "🌆",
+        "category": "banner",
+        "banner_key": "neon",
+        "preview": "public/backgrounds/sakura-neon.jpg",
+    },
+    "banner_cosmic_cherry": {
+        "name": "Cosmic Blossom Banner",
+        "description": "Ethereal violet blossom sanctuary beneath a celestial purple moon.",
+        "price": 160,
+        "icon": "🌸",
+        "category": "banner",
+        "banner_key": "sakura",
+        "preview": "public/backgrounds/cosmic-cherry-blossom.jpg",
+    },
+    "banner_sakura_dawn": {
+        "name": "Purple Dawn Skyline Banner",
+        "description": "Tactical panoramic sunrise over misty purple peaks and high-tech radar arrays.",
+        "price": 120,
+        "icon": "🌄",
+        "category": "banner",
+        "banner_key": "dawn",
+        "preview": "public/backgrounds/sakura-dawn.jpg",
+    },
+    "banner_sakura_frontline": {
+        "name": "Frontline Combat Zone Banner",
+        "description": "Forward operational perimeter fortified under electric twilight skies.",
+        "price": 100,
+        "icon": "⚔️",
+        "category": "banner",
+        "banner_key": "frontline",
+        "preview": "public/backgrounds/sakura-frontline.jpg",
+    },
+
+    # 3. Weapon Skins & Combat Perks
+    "camo_purple_damascus": {
+        "name": "Purple Damascus Camo",
+        "description": "Folded-steel weapon skin treated with vibrant electric purple iridescent waves.",
+        "price": 220,
+        "icon": "✨",
+        "category": "weapon",
+        "camo_key": "purple_damascus",
+    },
+    "tactical_comp": {
+        "name": "Recoil Compensator",
+        "description": "High-efficiency muzzle brake reducing vertical recoil by 15%.",
+        "price": 150,
+        "icon": "🎯",
+        "category": "perk",
+    },
+    "combat_booster": {
+        "name": "+25% XP Combat Protocol",
+        "description": "Combat protocol booster granting +25% bonus XP on match victory.",
+        "price": 120,
+        "icon": "⚡",
+        "category": "perk",
+    },
+    "extended_mag": {
+        "name": "Tactical Extended Mags",
+        "description": "High-capacity PMAG magazines (+5 capacity) for all primary weapons.",
+        "price": 180,
+        "icon": "📦",
+        "category": "perk",
+    },
+
+    # Preserved legacy IDs
+    "guardian_badge": {"name": "Guardian badge", "description": "A shield badge for your player profile.", "price": 100, "icon": "⬡", "category": "badge"},
+    "marksman_badge": {"name": "Marksman badge", "description": "A reticle badge for your player profile.", "price": 180, "icon": "◎", "category": "badge"},
+    "elite_badge": {"name": "Elite sentinel badge", "description": "A premium SecureFPS profile badge.", "price": 300, "icon": "✦", "category": "badge"},
+    "stealth_camo": {"name": "Night-Stalker Operator Camo", "description": "Matte-black stealth ballistic weave tactical uniform.", "price": 250, "icon": "🥷", "category": "perk"},
 }
 
 UPLOADS_DIR = Path(__file__).resolve().parents[1] / "uploads"
@@ -712,17 +817,32 @@ def equip_reward_item():
         return jsonify({"message": "Authentication required."}), 401
     item_id = (request.get_json(silent=True) or {}).get("item_id")
     if item_id is not None and (not isinstance(item_id, str) or item_id not in REWARD_STORE):
-        return jsonify({"message": "That badge is not available."}), 404
+        return jsonify({"message": "That store item is not available."}), 404
     user_oid = ObjectId(user_id)
     query = {"_id": user_oid}
     update = {"$unset": {"rewards.equipped_item": ""}}
+    applied_avatar = None
+    applied_banner = None
     if item_id:
+        item = REWARD_STORE[item_id]
         query["rewards.owned_items"] = item_id
-        update = {"$set": {"rewards.equipped_item": item_id}}
+        update_set = {"rewards.equipped_item": item_id}
+        if item.get("category") == "avatar" and item.get("avatar_key"):
+            update_set["profile_customization.avatar"] = item["avatar_key"]
+            applied_avatar = item["avatar_key"]
+        elif item.get("category") == "banner" and item.get("banner_key"):
+            update_set["profile_customization.banner"] = item["banner_key"]
+            applied_banner = item["banner_key"]
+        update = {"$set": update_set}
     result = users.update_one(query, update)
     if not result.matched_count:
-        return jsonify({"message": "Purchase this badge before equipping it."}), 409
-    return jsonify({"message": "Profile badge updated.", "equipped_item": item_id})
+        return jsonify({"message": "Purchase this item before equipping it."}), 409
+    return jsonify({
+        "message": "Equipment updated successfully.",
+        "equipped_item": item_id,
+        "avatar": applied_avatar,
+        "banner": applied_banner
+    })
 
 
 @player_bp.route("/support/tickets", methods=["GET", "POST"])

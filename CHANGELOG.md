@@ -163,6 +163,18 @@ Ran `python -m pytest backend/tests`:
 | **J4. Details Modal vs Match Card Statistics Parity** | `backend/routes/player_routes.py` | Replaced `.limit(200)` manual iteration in `get_match_detail(session_id)` with authoritative `game_telemetry.count_documents` queries for `enemy_killed`, `player_death`, `weapon_fire`, and `enemy_hit`, guaranteeing identical stats between match cards and the detailed drilldown modal. |
 | **J5. Distinct Game Hub Character Artwork** | `frontend/js/player.js`, `frontend/player.html` | Preserved unique character mascots on Game Hub cards (CyberStrike 3D with female cyber operator `chibi-female-1.png` and FPS Microgame with tactical operator `chibi-male-1.png`) by preventing user profile avatar updates from overwriting game card artwork. |
 
+---
+
+## Section K: Equippable Operator Skins, Profile Banners & Purple Aesthetics
+
+| Issue / Requirement | Files & Components Changed | Verification Method |
+| :--- | :--- | :--- |
+| **K1. Equippable Operator Skins & Avatars in Store** | `backend/routes/player_routes.py` (lines 74–130, 810–845) | Added real equippable operator skins (`skin_neon_valkyrie`, `skin_cyber_ninja`, `skin_phantom_ghost`, `skin_tactical_vanguard`). In `equip_reward_item()`, equipping an avatar skin updates `profile_customization.avatar` directly in the database. Verified with test suite. |
+| **K2. Equippable Profile Scene Banners in Store** | `backend/routes/player_routes.py`, `frontend/js/player-features.js` | Added scene banners (`banner_sakura_neon`, `banner_cosmic_cherry`, `banner_sakura_dawn`, `banner_sakura_frontline`). Equipping a banner updates `profile_customization.banner` and immediately changes the live page background scene. |
+| **K3. Live Store Preview Cards & Real-Time Equipping** | `frontend/js/player-features.js`, `frontend/player.html`, `frontend/css/player.css` | Rendered preview thumbnail boxes for avatars and banners, type badges (`OPERATOR SKIN`, `SCENE BANNER`, `WEAPON SKIN`, `COMBAT PERK`), unlocked state badges, and dynamic "Equip Skin" / "Equip Banner" buttons that instantly update the dashboard appearance without page reload. |
+| **K4. Rich Royal Purple Aesthetics Across Dashboard** | `frontend/css/player.css` | Implemented electric royal purple theme (`#7C3AED`, `#6D28D9`, `#8B5CF6`): sidebar active navigation link features an electric purple gradient (`linear-gradient(135deg, #7C3AED, #6D28D9)`) with purple glow, hover links use soft lavender (`#F3E8FF`), and stat balance cards feature purple top borders and text. Verified in `combat_hit_registration.test.js`. |
+
+
 
 
 
