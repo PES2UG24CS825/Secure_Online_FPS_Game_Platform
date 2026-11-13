@@ -306,6 +306,49 @@
         </div>
       </div>
 
+      <!-- Player Honour Score & Account Security Controls Panel -->
+      <div class="modal-controls-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:14px; margin-top:16px;">
+        <!-- Card 1: Honour Score Management -->
+        <div class="admin-subpanel" style="background:#FAF5FF; border:1px solid #DDD6FE; border-radius:12px; padding:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:16px;">🎯</span>
+              <h4 style="margin:0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; color:#5B21B6; font-weight:700;">Honour Score</h4>
+            </div>
+            <span id="modalHonourRankBadge" class="badge" style="background:#7C3AED; color:#fff; font-weight:700; font-size:11px;">100 / 100</span>
+          </div>
+          <p style="margin:0 0 10px; font-size:11px; color:#4B5563;">Adjust player fair-play score or reward positive sportsmanship:</p>
+          <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">
+            <button type="button" id="btnHonourPlus5" class="play-btn" style="min-width:auto; height:28px; padding:0 10px; font-size:11px; background:#10B981;">+5 Boost</button>
+            <button type="button" id="btnHonourPlus10" class="play-btn" style="min-width:auto; height:28px; padding:0 10px; font-size:11px; background:#059669;">+10 Commend</button>
+            <button type="button" id="btnHonourMinus10" class="play-btn" style="min-width:auto; height:28px; padding:0 10px; font-size:11px; background:#EF4444;">-10 Penalty</button>
+            <button type="button" id="btnHonourReset" class="ghost-btn" style="min-width:auto; height:28px; padding:0 10px; font-size:11px; color:#6D28D9; border-color:#C4B5FD;">Reset 100</button>
+          </div>
+          <div id="modalHonourFeedback" style="font-size:11px; font-weight:600; min-height:16px; color:#059669;"></div>
+        </div>
+
+        <!-- Card 2: Account Security Controls -->
+        <div class="admin-subpanel" style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:16px;">🔐</span>
+              <h4 style="margin:0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; color:#1E293B; font-weight:700;">Account Security</h4>
+            </div>
+            <div style="display:flex; gap:6px;">
+              <span id="modalMfaStatusBadge" class="badge" style="background:#EDE9FE; color:#5B21B6; font-size:10px;">MFA: Active</span>
+              <span id="modalAccountStateBadge" class="badge" style="background:#DCFCE7; color:#15803D; font-size:10px;">Active</span>
+            </div>
+          </div>
+          <p style="margin:0 0 10px; font-size:11px; color:#4B5563;">Manage authenticator, active sessions, and credential security:</p>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button type="button" id="btnResetMfa" class="play-btn" style="min-width:auto; height:28px; padding:0 10px; font-size:11px; background:#6366F1;">Reset MFA / 2FA</button>
+            <button type="button" id="btnRevokeSessions" class="ghost-btn" style="min-width:auto; height:28px; padding:0 10px; font-size:11px; color:#B45309; border-color:#FDE68A; background:#FEF3C7;">Revoke Sessions</button>
+            <button type="button" id="btnForcePassReset" class="ghost-btn" style="min-width:auto; height:28px; padding:0 10px; font-size:11px; color:#4338CA; border-color:#C7D2FE;">Force Pass Reset</button>
+          </div>
+          <div id="modalSecurityFeedback" style="font-size:11px; font-weight:600; min-height:16px; margin-top:4px; color:#059669;"></div>
+        </div>
+      </div>
+
       <!-- Player Match History Table -->
       <div style="margin-top:20px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">

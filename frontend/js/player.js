@@ -526,11 +526,39 @@ async function loadPlayerDashboard() {
         <article class="security-card"><div class="security-card-label">Latest login IP</div><div class="security-card-value">${playerText(history[0]?.ip_address || "Not recorded")}</div><div class="security-card-meta">Address observed by the server</div></article>
         ${warnings.length ? `<section class="security-history security-warnings"><h3>Security warnings</h3><p class="page-description">A moderator reviewed gameplay activity on your account.</p>${warnings.map((warning) => `<article class="security-warning"><strong>${playerText(playerDate(warning.created_at))}</strong><p>${playerText(warning.note)}</p></article>`).join("")}</section>` : ""}
         <section class="security-history">
-          <h3>Recognized Device &amp; Session Integrity</h3>
-          <p class="page-description" style="color:#334155; font-weight:500;">Hardware fingerprinting ensures your account is accessed exclusively from approved, verified devices.</p>
-          <div style="background: linear-gradient(135deg, #FAF5FF, #F3E8FF); border: 2px solid #7C3AED; border-radius: 12px; padding: 16px; margin: 12px 0 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 8px;">
+            <div>
+              <h3 style="margin: 0; font-size: 15px; color: #4C1D95;">Recognized Device &amp; Session Integrity</h3>
+              <p class="page-description" style="color:#334155; font-weight:500; margin: 4px 0 0;">Hardware fingerprinting ensures your account is accessed exclusively from approved, verified devices.</p>
+            </div>
+            <!-- Cursor Move / Hover History Widget -->
+            <div class="has-hover-tooltip" tabindex="0" style="position: relative; display: inline-flex;">
+              <button type="button" class="play-btn" style="height: 32px; padding: 0 14px; font-size: 11px; background: #6D28D9; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px;">
+                <span>🕒</span> Sign-in History (Hover)
+              </button>
+              <div class="hover-stat-popover" style="min-width: 320px; white-space: normal; padding: 12px; transform: translateX(-80%); border-radius: 10px; z-index: 999;">
+                <span class="popover-title" style="margin-bottom: 8px; display: block; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 4px;">Verified Sign-in History (Cursor Hover)</span>
+                <div style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                  ${history.slice(0, 6).map(h => `
+                    <div style="border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px;">
+                      <div style="display: flex; justify-content: space-between; font-size: 11px;">
+                        <strong style="color: #E9D5FF !important;">${playerText(h.browser || "Google Chrome")} (${playerText(h.os || "Windows 11")})</strong>
+                        <span style="color: #A5B4FC; font-size: 10px;">${playerText(playerDate(h.timestamp || h.created_at))}</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; font-size: 10px; color: #CBD5E1; margin-top: 2px;">
+                        <code>${playerText(h.ip_address || "127.0.0.1")}</code>
+                        <span style="color: ${h.success === false ? '#F87171' : '#34D399'}; font-weight: 700;">${h.success === false ? '✕ Failed' : '✓ Verified'}</span>
+                      </div>
+                    </div>
+                  `).join('') || '<div style="font-size:11px; color:#A5B4FC;">No sign-in records.</div>'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="background: linear-gradient(135deg, #FAF5FF, #F3E8FF); border: 2px solid #7C3AED; border-radius: 12px; padding: 14px 16px; margin: 10px 0 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
             <div style="display: flex; align-items: center; gap: 14px;">
-              <span style="font-size: 32px;">💻</span>
+              <span style="font-size: 28px;">💻</span>
               <div>
                 <div style="display: flex; align-items: center; gap: 8px;">
                   <strong style="color: #4C1D95; font-size: 14px;">This Recognized Device (${playerText(currentEntry.browser || "Google Chrome")} on ${playerText(currentEntry.os || "Windows 11")})</strong>
@@ -545,25 +573,36 @@ async function loadPlayerDashboard() {
               🛡️ Verified Session
             </span>
           </div>
+
           ${otherDeviceEntries.length > 0 ? `
-            <div class="admin-table-wrap">
-              <table>
-                <thead>
-                  <tr><th>IP address</th><th>Browser & Device</th><th>Signed in</th><th>Authentication</th><th>Result</th></tr>
-                </thead>
-                <tbody>${ipRows}</tbody>
-              </table>
-            </div>` : `
-            <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 12px; padding: 18px; display: flex; align-items: center; gap: 12px;">
-              <span style="font-size: 24px;">🛡️</span>
-              <div>
-                <strong style="color: #166534; font-size: 13px;">No other devices or browsers detected</strong>
-                <p style="margin: 2px 0 0; color: #15803D; font-size: 12px;">All recent successful logins originated exclusively from your recognized primary device (${playerText(currentEntry.browser || "Chrome")} / ${playerText(currentIp)}). No foreign sign-ins recorded.</p>
+            <div style="background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 12px; padding: 12px 16px; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 20px;">⚠️</span>
+                <div>
+                  <strong style="color: #991B1B; font-size: 13px;">Other Device Activity Detected (${otherDeviceEntries.length} foreign session)</strong>
+                  <p style="margin: 2px 0 0; color: #B91C1C; font-size: 11px;">A sign-in was recorded from a different browser or machine: ${playerText(otherDeviceEntries[0].browser || "Unknown")} (${playerText(otherDeviceEntries[0].ip_address || "")})</p>
+                </div>
+              </div>
+              <button id="revokeOtherDevicesBtn" class="play-btn" style="height: 30px; padding: 0 12px; font-size: 11px; background: #DC2626;">Revoke Foreign Sessions</button>
+            </div>
+          ` : `
+            <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 18px;">🛡️</span>
+              <div style="font-size: 12px; color: #15803D;">
+                <strong>Primary device verified:</strong> All sign-ins originate from your recognized workstation (${playerText(currentEntry.browser || "Chrome")} / ${playerText(currentIp)}). No foreign devices.
               </div>
             </div>
           `}
         </section>
-        <section class="security-history"><h3>Active sign-in locations</h3><div class="admin-table-wrap"><table><thead><tr><th>IP address</th><th>Device</th><th>Last activity</th></tr></thead><tbody>${activeSessions.map((item) => `<tr><td><code>${playerText(item.ip_address || "127.0.0.1 (Localhost)")}</code></td><td>${playerText(item.device || "Unknown device")}</td><td>${playerText(playerDate(item.last_activity))}</td></tr>`).join("") || '<tr><td colspan="3">No active session records.</td></tr>'}</tbody></table></div></section>`;
+        <section class="security-history" style="margin-top:14px;">
+          <h3 style="font-size:14px; margin-bottom:8px;">Active Sign-in Status</h3>
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#F8FAFC; border:1px solid #E2E8F0; padding:10px 14px; border-radius:10px;">
+            <span style="font-size:16px;">🟢</span>
+            <div style="font-size:12px; color:#334155;">
+              Active session on <strong>${playerText(currentEntry.browser || "Chrome")}</strong> (<code>${playerText(currentIp)}</code>) • Session ID: <code>${activeSessions[0]?.session_id ? playerText(activeSessions[0].session_id.substring(0,8)) : 'sess_active'}</code>
+            </div>
+          </div>
+        </section>`;
     }
     if (securityStatus && !securityData) securityStatus.innerHTML = '<div class="match-empty"><strong>Account security unavailable</strong><span>The security service could not be reached.</span></div>';
 

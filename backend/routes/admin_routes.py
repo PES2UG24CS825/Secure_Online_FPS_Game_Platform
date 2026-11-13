@@ -470,18 +470,26 @@ def get_player_details(player_id):
     recent_matches = []
     for s in p_sessions[:10]:
         sid = s.get("session_id", str(s["_id"]))
-        s_kills = game_telemetry.count_documents({"user_id": pid, "session_id": sid, "event_type": "enemy_killed"})
-        s_deaths = game_telemetry.count_documents({"user_id": pid, "session_id": sid, "event_type": "player_death"})
+        s_kills = s.get("kills")
+        if s_kills is None:
+            s_kills = game_telemetry.count_documents({"user_id": pid, "session_id": sid, "event_type": "enemy_killed"})
+        s_deaths = s.get("deaths")
+        if s_deaths is None:
+            s_deaths = game_telemetry.count_documents({"user_id": pid, "session_id": sid, "event_type": "player_death"})
         s_ana = game_events.find_one({"session_id": sid, "analysis_type": "game_session"}) or {}
+        s_kdr = s.get("kd") or s.get("kdr") or round(s_kills / max(s_deaths, 1), 2)
+        s_risk = s.get("risk_score")
+        if s_risk is None:
+            s_risk = s_ana.get("risk_score")
         recent_matches.append({
             "session_id": sid,
             "game": s.get("game", "CyberStrike 3D"),
             "started_at": format_iso(s.get("started_at")),
             "kills": s_kills,
             "deaths": s_deaths,
-            "kdr": round(s_kills / max(s_deaths, 1), 2),
+            "kdr": s_kdr,
             "result": s.get("winner", "Completed"),
-            "risk_score": s_ana.get("risk_score"),
+            "risk_score": s_risk,
             "status": s.get("status")
         })
 
@@ -936,6 +944,197 @@ def purge_player(player_id):
 
 
 # =========================================================================
+# PLAYER HONOUR SCORE & ACCOUNT SECURITY MANAGEMENT CONTROLS
+# =========================================================================
+
+@admin_bp.post("/players/<player_id>/honour")
+def adjust_player_honour(player_id):
+    """
+    Adjust player honour score (+5, -10, or reset).
+    Accessible to Admin and Super Admin.
+    """
+    admin = current_admin()
+    try:
+        pid = ObjectId(player_id)
+    except Exception:
+        return jsonify({"message": "Invalid player ID format."}), 400
+
+    target = users.find_one({"_id": pid})
+    if not target:
+        return jsonify({"message": "Player not found."}), 404
+
+    data = request.get_json(silent=True) or {}
+    prev_score = target.get("honour_score", 100)
+
+    if "new_score" in data:
+        try:
+            new_score = int(data["new_score"])
+        except (ValueError, TypeError):
+            return jsonify({"message": "Invalid new_score value."}), 400
+        delta = new_score - prev_score
+    elif "delta" in data:
+        try:
+            delta = int(data["delta"])
+        except (ValueError, TypeError):
+            return jsonify({"message": "Invalid delta value."}), 400
+        new_score = prev_score + delta
+    else:
+        return jsonify({"message": "Either 'delta' or 'new_score' is required."}), 400
+
+    new_score = max(0, min(100, new_score))
+    reason = (data.get("reason") or "Manual administrator honour adjustment").strip()
+
+    users.update_one({"_id": pid}, {"$set": {"honour_score": new_score}})
+
+    honour_history.insert_one({
+        "user_id": pid,
+        "player_id": str(pid),
+        "previous_score": prev_score,
+        "new_score": new_score,
+        "points_delta": delta,
+        "reason": reason,
+        "admin_email": admin.get("email"),
+        "timestamp": datetime.utcnow(),
+        "is_automatic": False
+    })
+
+    log_admin_action(
+        admin["_id"],
+        admin["email"],
+        pid,
+        "adjust_honour_score",
+        details={
+            "previous_score": prev_score,
+            "new_score": new_score,
+            "delta": delta,
+            "reason": reason,
+            "target_email": target.get("email")
+        }
+    )
+
+    return jsonify({
+        "success": True,
+        "message": f"Player honour score updated to {new_score}.",
+        "honour_score": new_score,
+        "previous_score": prev_score,
+        "delta": delta
+    })
+
+
+@admin_bp.post("/players/<player_id>/reset-mfa")
+def reset_player_mfa(player_id):
+    """
+    Reset player's MFA/2FA secret so they can re-enroll if locked out.
+    """
+    admin = current_admin()
+    try:
+        pid = ObjectId(player_id)
+    except Exception:
+        return jsonify({"message": "Invalid player ID format."}), 400
+
+    target = users.find_one({"_id": pid})
+    if not target:
+        return jsonify({"message": "Player not found."}), 404
+
+    users.update_one(
+        {"_id": pid},
+        {"$set": {"mfa_enabled": False}, "$unset": {"mfa_secret": "", "totp_secret": ""}}
+    )
+
+    log_admin_action(
+        admin["_id"],
+        admin["email"],
+        pid,
+        "reset_player_mfa",
+        details={
+            "target_email": target.get("email"),
+            "target_name": target.get("name"),
+            "ip": request.remote_addr
+        }
+    )
+
+    return jsonify({
+        "success": True,
+        "message": f"MFA has been successfully reset for {target.get('name')}. Player can re-enroll during next login."
+    })
+
+
+@admin_bp.post("/players/<player_id>/revoke-sessions")
+def revoke_player_sessions(player_id):
+    """
+    Revoke all active sessions for player (kick unauthorized devices).
+    """
+    admin = current_admin()
+    try:
+        pid = ObjectId(player_id)
+    except Exception:
+        return jsonify({"message": "Invalid player ID format."}), 400
+
+    target = users.find_one({"_id": pid})
+    if not target:
+        return jsonify({"message": "Player not found."}), 404
+
+    res = sessions_db.update_many(
+        {"user_id": pid, "is_active": True},
+        {"$set": {"is_active": False, "revoked_at": datetime.utcnow()}}
+    )
+
+    log_admin_action(
+        admin["_id"],
+        admin["email"],
+        pid,
+        "revoke_player_sessions",
+        details={
+            "target_email": target.get("email"),
+            "sessions_revoked": res.modified_count,
+            "ip": request.remote_addr
+        }
+    )
+
+    return jsonify({
+        "success": True,
+        "message": f"Successfully revoked {res.modified_count} active sessions for {target.get('name')}."
+    })
+
+
+@admin_bp.post("/players/<player_id>/force-password-reset")
+def force_player_password_reset(player_id):
+    """
+    Flag player account to require a password reset on next sign-in.
+    """
+    admin = current_admin()
+    try:
+        pid = ObjectId(player_id)
+    except Exception:
+        return jsonify({"message": "Invalid player ID format."}), 400
+
+    target = users.find_one({"_id": pid})
+    if not target:
+        return jsonify({"message": "Player not found."}), 404
+
+    users.update_one(
+        {"_id": pid},
+        {"$set": {"force_password_reset": True}}
+    )
+
+    log_admin_action(
+        admin["_id"],
+        admin["email"],
+        pid,
+        "force_password_reset",
+        details={
+            "target_email": target.get("email"),
+            "ip": request.remote_addr
+        }
+    )
+
+    return jsonify({
+        "success": True,
+        "message": f"Password reset flagged for {target.get('name')}."
+    })
+
+
+# =========================================================================
 # BAN APPEALS QUEUE (Item 4)
 # =========================================================================
 
@@ -1232,16 +1431,20 @@ def list_recent_logins():
 
     query = {}
     if role_filter == "player":
+        genuine_players = list(users.find({"role": "player", "account_status": {"$ne": "deleted"}}, {"_id": 1, "email": 1}))
+        player_ids = [u["_id"] for u in genuine_players] + [str(u["_id"]) for u in genuine_players]
+        player_emails = [u.get("email", "").lower() for u in genuine_players if u.get("email")]
         query = {
-            "$and": [
-                {"user_id": {"$nin": admin_ids}},
-                {"identifier": {"$nin": admin_emails}}
+            "$or": [
+                {"user_id": {"$in": player_ids}},
+                {"identifier": {"$in": player_emails}}
             ]
         }
     elif role_filter == "admin":
+        admin_ids_str = admin_ids + [str(aid) for aid in admin_ids]
         query = {
             "$or": [
-                {"user_id": {"$in": admin_ids}},
+                {"user_id": {"$in": admin_ids_str}},
                 {"identifier": {"$in": admin_emails}}
             ]
         }

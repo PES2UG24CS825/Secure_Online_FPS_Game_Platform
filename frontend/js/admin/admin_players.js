@@ -48,7 +48,94 @@ export async function initPlayersSection() {
   if (closeBtn && modal) closeBtn.addEventListener('click', () => modal.close());
   if (closeFooterBtn && modal) closeFooterBtn.addEventListener('click', () => modal.close());
 
+  // Player Honour Score & Account Security Quick Controls
+  const btnHonourPlus5 = document.getElementById('btnHonourPlus5');
+  if (btnHonourPlus5) btnHonourPlus5.addEventListener('click', () => sendPlayerHonourAdjustment(5, undefined, 'Admin fair-play boost (+5 Honour)'));
+
+  const btnHonourPlus10 = document.getElementById('btnHonourPlus10');
+  if (btnHonourPlus10) btnHonourPlus10.addEventListener('click', () => sendPlayerHonourAdjustment(10, undefined, 'Admin exemplary commendation (+10 Honour)'));
+
+  const btnHonourMinus10 = document.getElementById('btnHonourMinus10');
+  if (btnHonourMinus10) btnHonourMinus10.addEventListener('click', () => sendPlayerHonourAdjustment(-10, undefined, 'Admin sportsmanship penalty (-10 Honour)'));
+
+  const btnHonourReset = document.getElementById('btnHonourReset');
+  if (btnHonourReset) btnHonourReset.addEventListener('click', () => sendPlayerHonourAdjustment(undefined, 100, 'Admin full honour restoration'));
+
+  const btnResetMfa = document.getElementById('btnResetMfa');
+  if (btnResetMfa) btnResetMfa.addEventListener('click', () => {
+    if (confirm('Are you sure you want to reset MFA for this player? They will need to set up their authenticator again on next sign-in.')) {
+      sendPlayerSecurityAction('reset-mfa', 'MFA has been successfully reset.');
+    }
+  });
+
+  const btnRevokeSessions = document.getElementById('btnRevokeSessions');
+  if (btnRevokeSessions) btnRevokeSessions.addEventListener('click', () => {
+    if (confirm('Are you sure you want to revoke all active sessions for this player?')) {
+      sendPlayerSecurityAction('revoke-sessions', 'All active sessions revoked.');
+    }
+  });
+
+  const btnForcePassReset = document.getElementById('btnForcePassReset');
+  if (btnForcePassReset) btnForcePassReset.addEventListener('click', () => {
+    if (confirm('Force this player to reset their password on next sign-in?')) {
+      sendPlayerSecurityAction('force-password-reset', 'Password reset flagged.');
+    }
+  });
+
   await loadPlayersTable();
+}
+
+let activePlayerModalId = null;
+
+async function sendPlayerHonourAdjustment(delta, newScore, reason) {
+  if (!activePlayerModalId) return;
+  const fb = document.getElementById('modalHonourFeedback');
+  if (fb) { fb.textContent = 'Updating honour score…'; fb.style.color = '#7C3AED'; }
+  try {
+    const payload = {};
+    if (newScore !== undefined) payload.new_score = newScore;
+    else payload.delta = delta;
+    if (reason) payload.reason = reason;
+
+    const resp = await fetch(`/api/admin/players/${activePlayerModalId}/honour`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': 'securefps-csrf' },
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.message || 'Honour update failed');
+
+    const honourEl = document.getElementById('modalHonourScore');
+    const badgeEl = document.getElementById('modalHonourRankBadge');
+    if (honourEl) honourEl.textContent = data.honour_score;
+    if (badgeEl) badgeEl.textContent = `${data.honour_score} / 100`;
+    if (fb) { fb.textContent = `✓ ${data.message}`; fb.style.color = '#059669'; }
+    loadPlayersTable();
+  } catch (err) {
+    if (fb) { fb.textContent = `✕ ${err.message}`; fb.style.color = '#DC2626'; }
+  }
+}
+
+async function sendPlayerSecurityAction(endpoint, successText) {
+  if (!activePlayerModalId) return;
+  const fb = document.getElementById('modalSecurityFeedback');
+  if (fb) { fb.textContent = 'Processing security operation…'; fb.style.color = '#7C3AED'; }
+  try {
+    const resp = await fetch(`/api/admin/players/${activePlayerModalId}/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': 'securefps-csrf' }
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.message || 'Security operation failed');
+    if (fb) { fb.textContent = `✓ ${data.message || successText}`; fb.style.color = '#059669'; }
+    if (endpoint === 'reset-mfa') {
+      const mfaBadge = document.getElementById('modalMfaStatusBadge');
+      if (mfaBadge) { mfaBadge.textContent = 'MFA: Disabled'; mfaBadge.style.background = '#FEE2E2'; mfaBadge.style.color = '#B91C1C'; }
+    }
+    loadPlayersTable();
+  } catch (err) {
+    if (fb) { fb.textContent = `✕ ${err.message}`; fb.style.color = '#DC2626'; }
+  }
 }
 
 export async function loadPlayersTable() {
@@ -280,12 +367,19 @@ export async function openPlayerMatchesModal(id, name, email) {
   const modal = document.getElementById('playerMatchesModal');
   if (!modal) return;
 
+  activePlayerModalId = id;
+
   const nameEl = document.getElementById('modalPlayerName');
   const emailEl = document.getElementById('modalPlayerEmail');
   const avatarEl = document.getElementById('modalPlayerAvatar');
   if (nameEl) nameEl.textContent = name || 'Player';
   if (emailEl) emailEl.textContent = email || '';
   if (avatarEl) avatarEl.textContent = (name || 'P').charAt(0).toUpperCase();
+
+  const fbHonour = document.getElementById('modalHonourFeedback');
+  const fbSec = document.getElementById('modalSecurityFeedback');
+  if (fbHonour) fbHonour.textContent = '';
+  if (fbSec) fbSec.textContent = '';
 
   const tbody = document.getElementById('modalMatchesTableBody');
   if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">Loading combat sessions…</td></tr>';
@@ -306,14 +400,34 @@ export async function openPlayerMatchesModal(id, name, email) {
     const totalD = document.getElementById('modalTotalDeaths');
     const kdrEl = document.getElementById('modalCareerKdr');
     const honourEl = document.getElementById('modalHonourScore');
+    const honourRankBadge = document.getElementById('modalHonourRankBadge');
     const riskEl = document.getElementById('modalRiskScore');
     const badgeEl = document.getElementById('modalMatchCountBadge');
+    const mfaBadge = document.getElementById('modalMfaStatusBadge');
+    const standingBadge = document.getElementById('modalAccountStateBadge');
 
     if (totalM) totalM.textContent = stats.total_matches ?? 0;
     if (totalK) totalK.textContent = stats.kills ?? 0;
     if (totalD) totalD.textContent = stats.deaths ?? 0;
     if (kdrEl) kdrEl.textContent = stats.kdr ?? '0.00';
-    if (honourEl) honourEl.textContent = data.account_info?.honour_score ?? 100;
+    
+    const hScore = data.account_info?.honour_score ?? 100;
+    if (honourEl) honourEl.textContent = hScore;
+    if (honourRankBadge) honourRankBadge.textContent = `${hScore} / 100`;
+
+    if (mfaBadge) {
+      const isMfa = data.account_info?.mfa_enabled;
+      mfaBadge.textContent = isMfa ? 'MFA: Enabled' : 'MFA: Disabled';
+      mfaBadge.style.background = isMfa ? '#EDE9FE' : '#FEE2E2';
+      mfaBadge.style.color = isMfa ? '#5B21B6' : '#B91C1C';
+    }
+
+    if (standingBadge) {
+      const status = data.account_info?.account_status || 'active';
+      standingBadge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+      standingBadge.style.background = status === 'active' ? '#DCFCE7' : '#FEE2E2';
+      standingBadge.style.color = status === 'active' ? '#15803D' : '#B91C1C';
+    }
 
     const riskVal = stats.risk_score != null ? `${stats.risk_score} (${stats.risk_category || 'Normal'})` : 'Normal';
     if (riskEl) riskEl.textContent = riskVal;
