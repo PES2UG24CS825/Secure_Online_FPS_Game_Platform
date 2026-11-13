@@ -1,28 +1,84 @@
 import os
 import mimetypes
 import re
+import secrets
+import threading
+import time
+import logging
 from pathlib import Path
 from datetime import datetime, timezone
 
 import pyotp
 from flask import Flask, jsonify, redirect, request, send_from_directory, session
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 from database.db import sessions_db, test_connection, users
 from routes.auth_routes import auth_bp
 from routes.game_routes import game_bp
 from routes.player_routes import player_bp
 from routes.admin_routes import admin_bp
 from services.auth import hash_password, validate_password
+from extensions import limiter
+
+logger = logging.getLogger("securefps")
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
 FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
 app = Flask(__name__, static_folder=None)
-app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-only-change-this-secret")
+
+# Configurable ProxyFix for Reverse Proxy Deployment
+num_proxies = int(os.getenv("NUM_PROXIES", os.getenv("PROXIES_COUNT", "0")))
+if num_proxies > 0:
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app,
+        x_for=num_proxies,
+        x_proto=num_proxies,
+        x_host=num_proxies,
+        x_prefix=num_proxies
+    )
+
+# Environment and Security Startup Validation
+APP_ENV = os.getenv("APP_ENV", "production").strip().lower()
+IS_LOCAL_DEV = (
+    os.getenv("SECUREFPS_LOCAL_DEV", "").strip().lower() in {"1", "true", "yes"}
+    or APP_ENV in {"development", "dev", "local", "test"}
+)
+
+FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "").strip()
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip()
+ADMIN_MFA_SECRET = os.getenv("ADMIN_MFA_SECRET", "").strip()
+
+if not IS_LOCAL_DEV:
+    if not FLASK_SECRET_KEY or FLASK_SECRET_KEY in {"dev-only-change-this-secret", "secret", "change-me"}:
+        raise RuntimeError(
+            "Startup refused: FLASK_SECRET_KEY is missing or using an insecure default. "
+            "Set FLASK_SECRET_KEY in environment or enable SECUREFPS_LOCAL_DEV=true for local dev."
+        )
+    if not ADMIN_PASSWORD or ADMIN_PASSWORD in {"Admin@12345", "password", "admin"}:
+        raise RuntimeError(
+            "Startup refused: ADMIN_PASSWORD is missing or using an insecure default."
+        )
+    if not ADMIN_MFA_SECRET or ADMIN_MFA_SECRET in {"JBSWY3DPEHPK3PXP"}:
+        raise RuntimeError(
+            "Startup refused: ADMIN_MFA_SECRET is missing or using an insecure default."
+        )
+
+app.config["SECRET_KEY"] = FLASK_SECRET_KEY or "dev-only-change-this-secret"
 AUTH_SESSION_IDLE_TIMEOUT_SECONDS = int(os.getenv("AUTH_SESSION_IDLE_TIMEOUT_SECONDS", "3600"))
+
+is_production_mode = not IS_LOCAL_DEV
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=False,  # Set True when deployed behind HTTPS
+    SESSION_COOKIE_SECURE=is_production_mode or (os.getenv("SESSION_COOKIE_SECURE", "0").lower() in {"1", "true"}),
 )
+
+if os.getenv("PYTEST_CURRENT_TEST") or app.config.get("TESTING") or os.getenv("RATELIMIT_ENABLED", "1").lower() in {"0", "false"}:
+    app.config["RATELIMIT_ENABLED"] = False
+
+# Initialize Rate Limiter
+limiter.init_app(app)
 
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "").strip()
 cors_origins = [
@@ -44,17 +100,29 @@ CORS(
 )
 
 app.register_blueprint(auth_bp)
-app.register_blueprint(game_bp)
-app.register_blueprint(player_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(player_bp)
+app.register_blueprint(game_bp)
 
 
 def network_server_settings(environ=None):
     env = environ if environ is not None else os.environ
     truthy = {"1", "true", "yes", "on"}
     port = int(env.get("FLASK_PORT", "5000"))
-    debug_requested = env.get("FLASK_DEBUG", "1").strip().lower() in truthy
-    host = env.get("FLASK_HOST", "0.0.0.0").strip() or "0.0.0.0"
+    is_prod = (
+        env.get("APP_ENV") == "production"
+        or env.get("FLASK_ENV") == "production"
+        or env.get("SECUREFPS_LOCAL_DEV", "").lower() in {"0", "false", "no"}
+    )
+    default_host = "127.0.0.1" if is_prod else "0.0.0.0"
+    default_debug = False if is_prod else True
+
+    if "FLASK_DEBUG" in env:
+        debug_requested = env.get("FLASK_DEBUG", "0").strip().lower() in truthy
+    else:
+        debug_requested = default_debug
+
+    host = env.get("FLASK_HOST", default_host).strip() or default_host
     return host, port, debug_requested
 
 
@@ -94,6 +162,16 @@ def frontend_file(filename):
         if (FRONTEND_DIR / alt_name).is_file() and not (FRONTEND_DIR / filename).is_file():
             return redirect(f"/{alt_name}")
 
+    # Support /frontend/player.html, /frontend/login.html, etc. by redirecting to root page
+    if filename.startswith("frontend/"):
+        alt_name = filename[len("frontend/"):]
+        if (FRONTEND_DIR / alt_name).is_file():
+            return redirect(f"/{alt_name}")
+
+    # Support .htm -> .html redirects (e.g., player.htm -> player.html)
+    if filename.endswith(".htm") and (FRONTEND_DIR / (filename + "l")).is_file():
+        return redirect(f"/{filename}l")
+
     served_filename = filename
     content_filename = filename
     content_encoding = None
@@ -121,17 +199,32 @@ def frontend_file(filename):
         ".wasm": "application/wasm",
         ".data": "application/octet-stream",
         ".js": "application/javascript",
+        ".glb": "model/gltf-binary",
+        ".gltf": "model/gltf+json",
     }.get(suffix) or mimetypes.guess_type(content_filename)[0]
     if content_type:
         response.headers["Content-Type"] = content_type
     if content_encoding:
         response.headers["Content-Encoding"] = content_encoding
         response.vary.add("Accept-Encoding")
-    if filename.startswith("public/games/three-fps/") or filename.endswith(".js") or filename.endswith(".html"):
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
+
+    # Authoritative Static File Caching Policy
+    # Long-cache heavy 3D models, wasm/data, audio, and vendor libraries (1 day)
+    if suffix in {".glb", ".gltf", ".wasm", ".data", ".png", ".jpg", ".jpeg", ".svg", ".ico", ".woff", ".woff2", ".mp3", ".wav"}:
+        response.headers["Cache-Control"] = "public, max-age=86400, stale-while-revalidate=604800"
+    elif "libs/" in filename:
+        response.headers["Cache-Control"] = "public, max-age=86400"
+    elif suffix in {".css", ".js"}:
+        response.headers["Cache-Control"] = "public, max-age=300, must-revalidate"
+    elif suffix in {".html"}:
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
     return response
+
+
+# In-memory short-TTL session validation cache & throttled activity writer
+_auth_cache = {}
+_auth_cache_lock = threading.Lock()
+_last_activity_writes = {}
 
 
 @app.before_request
@@ -157,49 +250,109 @@ def validate_auth_session():
     if not user_id:
         return None
 
+    now = time.monotonic()
+    cache_key = (str(user_id), str(record_id))
+
+    # Fast path: in-memory cache check (TTL: 25 seconds)
+    with _auth_cache_lock:
+        cached = _auth_cache.get(cache_key)
+        if cached and (now - cached["time"] < 25.0):
+            if not cached["valid"]:
+                session.clear()
+                return jsonify({"message": cached["message"]}), cached["status_code"]
+            # Throttled last_activity write (at most once every 45s)
+            last_write = _last_activity_writes.get(cache_key, 0)
+            if now - last_write >= 45.0:
+                _last_activity_writes[cache_key] = now
+                try:
+                    from bson import ObjectId
+                    sessions_db.update_one(
+                        {"_id": ObjectId(record_id), "is_active": True},
+                        {"$set": {"last_activity": datetime.now(timezone.utc)}},
+                    )
+                except Exception:
+                    pass
+            return None
+
     from bson import ObjectId
     try:
         account = users.find_one(
             {"_id": ObjectId(user_id)},
-            {"account_status": 1, "revoked": 1},
+            {"account_status": 1, "revoked": 1, "active_auth_session_id": 1},
         )
-        if account and account.get("account_status") == "suspended":
+        # Allow banned/suspended players to access status, profile, and appeal endpoints
+        appeal_allowed_endpoints = {
+            "/api/player/profile",
+            "/api/player/account-status",
+            "/api/player/appeal",
+            "/api/player/notifications",
+        }
+        is_appeal_route = request.path in appeal_allowed_endpoints
+
+        if account and account.get("account_status") == "suspended" and not is_appeal_route:
+            with _auth_cache_lock:
+                _auth_cache[cache_key] = {"valid": False, "message": "This account has been suspended.", "status_code": 403, "time": now}
             session.clear()
             return jsonify({"message": "This account has been suspended."}), 403
-        if account and (account.get("revoked") is True or account.get("account_status") == "banned"):
+
+        if account and (account.get("revoked") is True or account.get("account_status") == "banned") and not is_appeal_route:
+            with _auth_cache_lock:
+                _auth_cache[cache_key] = {"valid": False, "message": "This account is permanently banned.", "status_code": 403, "time": now}
             session.clear()
             return jsonify({"message": "This account is permanently banned."}), 403
+
         active_record = sessions_db.find_one(
             {"_id": ObjectId(record_id), "user_id": ObjectId(user_id), "is_active": True},
             {"_id": 1},
         ) if record_id else None
-        owns_active_lock = bool(record_id) and bool(users.find_one(
-            {"_id": ObjectId(user_id), "active_auth_session_id": record_id},
-            {"_id": 1},
-        ))
+
+        owns_active_lock = bool(record_id) and account.get("active_auth_session_id") == record_id
         active = bool(active_record and owns_active_lock)
     except Exception:
         active = False
 
-    if not active:
+    if not active and not is_appeal_route:
+        with _auth_cache_lock:
+            _auth_cache[cache_key] = {"valid": False, "message": "Your sign-in session has ended. Please sign in again.", "status_code": 401, "time": now}
         session.clear()
         return jsonify({"message": "Your sign-in session has ended. Please sign in again."}), 401
-    sessions_db.update_one(
-        {"_id": ObjectId(record_id), "is_active": True},
-        {"$set": {"last_activity": datetime.now(timezone.utc)}},
-    )
+
+    with _auth_cache_lock:
+        _auth_cache[cache_key] = {"valid": True, "time": now}
+
+    # Throttled write to DB
+    last_write = _last_activity_writes.get(cache_key, 0)
+    if now - last_write >= 45.0:
+        _last_activity_writes[cache_key] = now
+        try:
+            sessions_db.update_one(
+                {"_id": ObjectId(record_id), "is_active": True},
+                {"$set": {"last_activity": datetime.now(timezone.utc)}},
+            )
+        except Exception:
+            pass
+
     return None
 
 
 def ensure_default_admin():
+    if not IS_LOCAL_DEV:
+        # Never create default admin in production
+        return
+
     email = os.getenv("ADMIN_EMAIL", "admin1@gmail.com").strip().lower()
-    password = os.getenv("ADMIN_PASSWORD", "Admin@12345")
-    mfa_secret = os.getenv("ADMIN_MFA_SECRET", "JBSWY3DPEHPK3PXP").strip()
+    password = os.getenv("ADMIN_PASSWORD")
+    mfa_secret = os.getenv("ADMIN_MFA_SECRET")
+
+    generated = False
+    if not password:
+        password = os.getenv("ADMIN_PASSWORD", "Admin@12345")
+    if not mfa_secret:
+        mfa_secret = os.getenv("ADMIN_MFA_SECRET", "JBSWY3DPEHPK3PXP").strip()
 
     if not validate_password(password):
         raise ValueError("ADMIN_PASSWORD does not satisfy the configured password policy")
 
-    # Validate that the configured MFA secret can be used by the login flow.
     pyotp.TOTP(mfa_secret)
 
     try:
@@ -214,20 +367,19 @@ def ensure_default_admin():
                     "mfa_enabled": True,
                     "created_at": datetime.now(timezone.utc)
                 },
-                # The configured administrator email is the authority for
-                # the admin role. Repair older accounts created as players.
                 "$set": {"role": "admin"}
             },
             upsert=True
         )
+        if result.upserted_id:
+            logger.info("[SecureFPS] Default admin account created: %s", email)
+            if generated:
+                logger.info("[SecureFPS] Dev Admin Creds -> Email: %s | Password: %s | MFA Secret: %s", email, password, mfa_secret)
+        else:
+            logger.info("[SecureFPS] Configured administrator account ready: %s", email)
     except Exception as exc:
-        print("[SecureFPS] Could not ensure the default admin account:", exc)
-        return
+        logger.error("[SecureFPS] Could not ensure the default admin account: %s", exc)
 
-    if result.upserted_id:
-        print("[SecureFPS] Default admin account created:", email)
-    else:
-        print("[SecureFPS] Configured administrator account ready:", email)
 
 @app.get("/api/health")
 def health():
@@ -238,8 +390,27 @@ def health():
         "database_name": os.getenv("MONGO_DB", os.getenv("DB_NAME", "secure_fps")),
     }, (200 if connected else 503)
 
+
+# Uploads Directory and WebP Media Serving
+UPLOADS_DIR = Path(__file__).resolve().parent / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+(UPLOADS_DIR / "avatars").mkdir(exist_ok=True)
+(UPLOADS_DIR / "banners").mkdir(exist_ok=True)
+
+
+@app.get("/api/media/<category>/<filename>")
+def serve_media(category, filename):
+    if category not in {"avatars", "banners"}:
+        return jsonify({"message": "Invalid media category."}), 404
+    if not re.match(r"^[a-zA-Z0-9_\-]+\.webp$", filename):
+        return jsonify({"message": "Invalid filename format."}), 400
+    cat_dir = UPLOADS_DIR / category
+    if not (cat_dir / filename).exists():
+        return jsonify({"message": "Media file not found."}), 404
+    return send_from_directory(cat_dir, filename, mimetype="image/webp")
+
+
 if __name__ == "__main__":
-    # Development defaults are documented credentials; override them in deployment.
     ensure_default_admin()
     flask_host, flask_port, debug_enabled = network_server_settings()
     app.run(

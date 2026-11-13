@@ -153,6 +153,19 @@ function connectPlayerLiveEvents() {
   };
 }
 
+window.addEventListener("pagehide", () => {
+  if (playerLiveEvents) {
+    playerLiveEvents.close();
+    playerLiveEvents = null;
+  }
+});
+
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted && !playerLiveEvents) {
+    connectPlayerLiveEvents();
+  }
+});
+
 function matchCard(match) {
   const value = (field) => match[field] == null ? "—" : Number(match[field]);
   const state = String(match.status || "unknown").toLowerCase();
@@ -165,8 +178,8 @@ function matchCard(match) {
     : match.analysis_error ? `<p class="match-analysis-note">Analysis could not finish: ${playerText(match.analysis_error)}</p>`
     : state === "active" ? '<p class="match-analysis-note">Risk review starts when this match is completed.</p>'
     : '<p class="match-analysis-note">Risk review is pending for this match.</p>';
-  return `<article class="match-card">
-    <div class="match-card-head"><div><span class="match-card-kicker">${escapeHtml(match.game || "CyberStrike 3D")}${match.demo_test ? ` · ${playerText(match.hacker_profile || "hacker demo")}` : ""}</span><h3>Match ${playerText(match.match_id || "—")}</h3><div class="match-card-date">${playerText(playerDate(match.date))}</div></div><span class="badge ${badge}">${playerText(state === "terminated_banned" ? "PERMANENTLY BANNED" : state)}</span></div>
+  return `<article class="match-card" data-session-id="${escapeHtml(match.session_id || match.id || match.match_id)}">
+    <div class="match-card-head"><div><span class="match-card-kicker">${escapeHtml(match.game || "CyberStrike 3D")}${match.demo_test ? ` · ${playerText(match.hacker_profile || "hacker demo")}` : ""}</span><h3>Match ${playerText(match.match_id || "—")}</h3><div class="match-card-date">${playerText(playerDate(match.date))}</div></div><div style="display:flex; align-items:center; gap:8px;"><button type="button" class="match-drilldown-btn ghost-btn" data-session-id="${escapeHtml(match.session_id || match.id || match.match_id)}" style="background:transparent; border:1px solid var(--player-border,#38bdf8); border-radius:4px; padding:3px 8px; color:var(--player-blue,#38bdf8); cursor:pointer; font-size:11px;">Details</button><span class="badge ${badge}">${playerText(state === "terminated_banned" ? "PERMANENTLY BANNED" : state)}</span></div></div>
     <div class="match-stat-grid"><div class="match-stat"><span>Kills</span><strong>${value("kills")}</strong></div><div class="match-stat"><span>Deaths</span><strong>${value("deaths")}</strong></div><div class="match-stat"><span>K/D</span><strong>${match.kd == null ? "—" : Number(match.kd).toFixed(2)}</strong></div><div class="match-stat"><span>Duration</span><strong>${duration}</strong></div><div class="match-stat"><span>Accuracy</span><strong>${accuracy}</strong></div><div class="match-stat"><span>Analysis</span><strong>${playerText(analysisStatus)}</strong></div></div>
     <div class="match-risk"><span>Security risk score</span><strong>${playerText(playerRisk(match.risk_score))} ${match.risk_category ? `<span class="badge ${match.risk_category === 'Normal' ? 'good' : match.risk_category === 'Monitoring' ? 'warn' : 'bad'}">${escapeHtml(match.risk_category)}</span>` : ''}</strong></div>
     <p class="match-analysis-note"><strong>ML Models:</strong> RF: ${escapeHtml(match.random_forest || 'normal')} · IF: ${escapeHtml(match.isolation_forest || 'anomaly')} | <strong>Analysis ID:</strong> ${escapeHtml(match.analysis_id || 'N/A')}</p>
@@ -388,7 +401,7 @@ async function loadPlayerDashboard() {
     const recentRows = document.getElementById("overviewRecentRows");
     if (recentRows) recentRows.innerHTML = !matchesData
       ? '<tr><td colspan="7">Match history unavailable.</td></tr>'
-      : completedMatches.slice(0, 3).map((match) => `<tr><td><strong>${playerText(match.match_id || "—")}</strong></td><td>${playerText(overviewDate(match.date))}</td><td>${match.kills ?? "—"} / ${match.deaths ?? "—"}</td><td>${match.accuracy == null ? "—" : `${Number(match.accuracy).toFixed(0)}%`}</td><td>${match.headshot_ratio == null ? "—" : `${(Number(match.headshot_ratio) * 100).toFixed(0)}%`}</td><td>${overviewRiskBadge(match)}</td><td><a href="#matches" data-section="matches">Details</a></td></tr>`).join("") || '<tr><td colspan="7">No completed matches yet. <a href="#games" data-section="games">Play now</a></td></tr>';
+      : completedMatches.slice(0, 3).map((match) => `<tr data-session-id="${playerText(match.session_id || match.id || match.match_id)}"><td><strong>${playerText(match.match_id || "—")}</strong></td><td>${playerText(overviewDate(match.date))}</td><td>${match.kills ?? "—"} / ${match.deaths ?? "—"}</td><td>${match.accuracy == null ? "—" : `${Number(match.accuracy).toFixed(0)}%`}</td><td>${match.headshot_ratio == null ? "—" : `${(Number(match.headshot_ratio) * 100).toFixed(0)}%`}</td><td>${overviewRiskBadge(match)}</td><td><button type="button" class="match-drilldown-btn ghost-btn" data-session-id="${playerText(match.session_id || match.id || match.match_id)}" style="background:transparent; border:none; color:var(--player-blue,#38bdf8); cursor:pointer; font-weight:600;">Details</button></td></tr>`).join("") || '<tr><td colspan="7">No completed matches yet. <a href="#games" data-section="games">Play now</a></td></tr>';
     const returnedFromGame = sessionStorage.getItem("securefps_game_completed") === "1";
     if (returnedFromGame) {
       sessionStorage.removeItem("securefps_game_completed");
@@ -410,6 +423,25 @@ async function loadPlayerDashboard() {
       sessionStorage.removeItem("securefps_abandon_notice");
       window.showAppToast?.(abandonNotice, "warning");
     }
+
+    // Banned & Suspended overlay check (Items 4, 14)
+    const effectiveStatus = profileData?.account_status || securityData?.account_status || "active";
+    const bannedOverlay = document.getElementById("bannedScreenOverlay");
+    if (bannedOverlay) {
+      if (effectiveStatus === "banned" || effectiveStatus === "suspended") {
+        bannedOverlay.hidden = false;
+        const reasonText = document.getElementById("bannedReasonText");
+        if (reasonText) {
+          reasonText.textContent = profileData?.ban_reason || securityData?.ban_reason || "Account restricted due to fair-play security violation.";
+        }
+        loadBanAppealStatus();
+      } else {
+        bannedOverlay.hidden = true;
+      }
+    }
+
+    // Notification center data load
+    loadNotifications();
 
     const securityStatus = document.getElementById("securityStatus");
     if (securityStatus && securityData) {
@@ -439,13 +471,15 @@ async function loadPlayerDashboard() {
     if (!appearanceDirty) {
       const savedAvatar = profileData?.profile_customization?.avatar;
       const savedBanner = profileData?.profile_customization?.banner;
+      const customAvatar = profileData?.profile_customization?.avatar_url || profileData?.profile_customization?.avatar_image || null;
+      const customBanner = profileData?.profile_customization?.banner_url || profileData?.profile_customization?.banner_image || null;
       currentAppearance = {
         avatar: avatarPortraits[savedAvatar] ? savedAvatar : "chibi-female-2",
         banner: bannerScenes.has(savedBanner)
           ? savedBanner
-          : savedBanner === "custom" && profileData?.profile_customization?.banner_image ? "custom" : "frontline",
-        avatar_image: profileData?.profile_customization?.avatar_image || null,
-        banner_image: profileData?.profile_customization?.banner_image || null
+          : customBanner ? "custom" : "frontline",
+        avatar_image: customAvatar,
+        banner_image: customBanner
       };
     }
     const profileBanner = document.getElementById("profileBanner");
@@ -642,9 +676,6 @@ if (cyberstrikeBtn) cyberstrikeBtn.addEventListener("click", () => {
   window.location.href = "public/games/three-fps/index.html";
 });
 
-loadPlayerDashboard();
-playerRefreshTimer = setInterval(loadPlayerDashboard, 15000);
-
 // =========================================================================
 // ACCOUNT SECURITY INTERACTIVE CONTROLS
 // =========================================================================
@@ -747,3 +778,345 @@ if (revokeOtherSessionsBtn) {
     }
   });
 }
+
+// =========================================================================
+// BAN APPEAL SYSTEM (Items 4, 14)
+// =========================================================================
+
+async function loadBanAppealStatus() {
+  const statusBox = document.getElementById("banAppealStatusBox");
+  const form = document.getElementById("banAppealForm");
+  if (!statusBox || !form) return;
+
+  try {
+    const res = await api("/player/appeal");
+    if (res?.appeal) {
+      statusBox.hidden = false;
+      const app = res.appeal;
+      const badgeColor = app.status === "approved" ? "#10b981" : app.status === "rejected" ? "#ef4444" : "#f59e0b";
+      statusBox.innerHTML = `
+        <div style="font-size: 13px; line-height: 1.5;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>Appeal Review State:</strong>
+            <span style="display:inline-block; padding: 2px 8px; border-radius: 4px; background: ${badgeColor}; color: #fff; font-weight: 700; text-transform: uppercase; font-size: 11px;">${escapeHtml(app.status)}</span>
+          </div>
+          <p style="margin: 6px 0 0 0; color: var(--player-muted, #94a3b8);">Submitted on: ${escapeHtml(overviewDate(app.created_at))}</p>
+          <p style="margin: 4px 0 0 0;"><strong>Your Statement:</strong> ${escapeHtml(app.reason)}</p>
+          ${app.admin_note ? `<div style="margin-top: 8px; padding: 8px 12px; background: rgba(0,0,0,0.1); border-left: 3px solid #38bdf8; border-radius: 4px;"><strong>Admin Response:</strong> ${escapeHtml(app.admin_note)}</div>` : ''}
+        </div>
+      `;
+      form.hidden = true;
+    } else {
+      statusBox.hidden = true;
+      form.hidden = false;
+    }
+  } catch (err) {
+    statusBox.hidden = true;
+    form.hidden = false;
+  }
+}
+
+const banAppealForm = document.getElementById("banAppealForm");
+if (banAppealForm) {
+  banAppealForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const reasonInput = document.getElementById("banAppealReason");
+    const msg = document.getElementById("banAppealMsg");
+    const reason = reasonInput?.value?.trim() || "";
+
+    if (reason.length < 10) {
+      if (msg) {
+        msg.hidden = false;
+        msg.style.color = "#ef4444";
+        msg.textContent = "Please provide at least 10 characters explaining your appeal.";
+      }
+      return;
+    }
+
+    try {
+      const res = await api("/player/appeal", {
+        method: "POST",
+        body: JSON.stringify({ reason })
+      });
+      if (msg) {
+        msg.hidden = false;
+        msg.style.color = "#10b981";
+        msg.textContent = res.message || "Appeal submitted for security administrator review.";
+      }
+      banAppealForm.reset();
+      loadBanAppealStatus();
+    } catch (err) {
+      if (msg) {
+        msg.hidden = false;
+        msg.style.color = "#ef4444";
+        msg.textContent = err.message || "Could not submit appeal.";
+      }
+    }
+  });
+}
+
+// =========================================================================
+// NOTIFICATION CENTER (Item 14)
+// =========================================================================
+
+async function loadNotifications() {
+  const badge = document.getElementById("notifBadge");
+  const list = document.getElementById("notifList");
+  try {
+    const res = await api("/player/notifications?limit=15");
+    const notifs = res?.notifications || [];
+    const unreadCount = Number(res?.unread_count || 0);
+
+    if (badge) {
+      if (unreadCount > 0) {
+        badge.textContent = String(unreadCount);
+        badge.hidden = false;
+      } else {
+        badge.hidden = true;
+      }
+    }
+
+    if (list) {
+      if (!notifs.length) {
+        list.innerHTML = '<div style="padding: 16px; text-align: center; color: var(--player-muted, #94a3b8); font-size: 12px;">No notifications.</div>';
+      } else {
+        list.innerHTML = notifs.map(n => `
+          <div class="notif-item ${n.read ? '' : 'unread'}" data-notif-id="${escapeHtml(n.id)}">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <strong style="font-size:12px;">${escapeHtml(n.title)}</strong>
+              <small style="font-size:10px; color:var(--player-muted, #94a3b8);">${escapeHtml(overviewDate(n.created_at))}</small>
+            </div>
+            <div style="font-size:12px; line-height:1.4;">${escapeHtml(n.message)}</div>
+          </div>
+        `).join("");
+      }
+    }
+  } catch (err) {
+    // Non-blocking
+  }
+}
+
+const notifBellBtn = document.getElementById("notificationBellBtn");
+const notifDrawer = document.getElementById("notifDrawer");
+const markNotifsReadBtn = document.getElementById("markNotifsReadBtn");
+
+if (notifBellBtn && notifDrawer) {
+  notifBellBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isHidden = notifDrawer.style.display === "none" || notifDrawer.hidden;
+    notifDrawer.style.display = isHidden ? "block" : "none";
+    notifDrawer.hidden = !isHidden;
+    notifBellBtn.setAttribute("aria-expanded", String(isHidden));
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!notifDrawer.contains(e.target) && !notifBellBtn.contains(e.target)) {
+      notifDrawer.style.display = "none";
+      notifDrawer.hidden = true;
+      notifBellBtn.setAttribute("aria-expanded", "false");
+    }
+  });
+}
+
+if (markNotifsReadBtn) {
+  markNotifsReadBtn.addEventListener("click", async () => {
+    try {
+      await api("/player/notifications/read", {
+        method: "POST",
+        body: JSON.stringify({ mark_all: true })
+      });
+      loadNotifications();
+    } catch (err) {
+      console.warn("Could not mark notifications read", err);
+    }
+  });
+}
+
+// =========================================================================
+// MATCH DETAIL DRILL-DOWN (Item 14)
+// =========================================================================
+
+async function openMatchDetail(sessionId) {
+  const modal = document.getElementById("matchDetailModal");
+  const title = document.getElementById("modalMatchTitle");
+  const content = document.getElementById("matchDetailContent");
+  if (!modal || !content) return;
+
+  if (title) title.textContent = `Match Detail: ${sessionId || "Drill-Down"}`;
+  content.innerHTML = '<div class="skeleton-box" style="height:120px;"></div>';
+  if (typeof modal.showModal === "function") {
+    modal.showModal();
+  } else {
+    modal.setAttribute("open", "");
+  }
+
+  try {
+    const data = await api(`/player/matches/${encodeURIComponent(sessionId)}`);
+    const feats = data.features || {};
+    const timeline = data.timeline || [];
+
+    content.innerHTML = `
+      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px;">
+        <div class="feat-stat-box"><strong>${escapeHtml(data.kills)} / ${escapeHtml(data.deaths)}</strong><small>Kills / Deaths</small></div>
+        <div class="feat-stat-box"><strong>${escapeHtml(data.kdr)}</strong><small>K/D Ratio</small></div>
+        <div class="feat-stat-box"><strong>${data.accuracy != null ? Number(data.accuracy).toFixed(1) + '%' : '—'}</strong><small>Accuracy</small></div>
+        <div class="feat-stat-box"><strong>${data.duration_seconds != null ? data.duration_seconds + 's' : '—'}</strong><small>Duration</small></div>
+      </div>
+
+      <h4 style="margin: 14px 0 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--player-muted, #94a3b8);">Anti-Cheat Telemetry Feature Analysis</h4>
+      <div class="match-features-grid">
+        <div class="feat-stat-box"><strong>${feats.reaction_time_median != null ? Number(feats.reaction_time_median).toFixed(3) + 's' : '—'}</strong><small>Median Reaction</small></div>
+        <div class="feat-stat-box"><strong>${feats.reaction_time_min != null ? Number(feats.reaction_time_min).toFixed(3) + 's' : '—'}</strong><small>Min Reaction</small></div>
+        <div class="feat-stat-box"><strong>${feats.aim_speed_mean != null ? Number(feats.aim_speed_mean).toFixed(1) + '°/s' : '—'}</strong><small>Mean Aim Speed</small></div>
+        <div class="feat-stat-box"><strong>${feats.aim_speed_max != null ? Number(feats.aim_speed_max).toFixed(1) + '°/s' : '—'}</strong><small>Max Aim Speed</small></div>
+        <div class="feat-stat-box"><strong>${feats.flick_rate != null ? Number(feats.flick_rate).toFixed(2) : '—'}</strong><small>Flick Rate</small></div>
+        <div class="feat-stat-box"><strong>${feats.headshot_ratio != null ? (Number(feats.headshot_ratio) * 100).toFixed(0) + '%' : '—'}</strong><small>Headshot %</small></div>
+      </div>
+
+      <h4 style="margin: 14px 0 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--player-muted, #94a3b8);">Match Combat Timeline</h4>
+      <div style="max-height: 160px; overflow-y: auto; border: 1px solid var(--player-border, #334155); border-radius: 6px; padding: 8px; background: rgba(0,0,0,0.1);">
+        ${timeline.length ? timeline.map(ev => `
+          <div style="display:flex; justify-content:space-between; font-size: 12px; padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <span>${ev.type === 'kill' ? '🎯 Eliminated ' + escapeHtml(ev.enemy_id) + ' (' + escapeHtml(ev.body_part) + ')' : '💀 Defeated by ' + escapeHtml(ev.killer_id)}</span>
+            <small style="color:var(--player-muted, #94a3b8);">${ev.time ? Number(ev.time).toFixed(1) + 's' : ''}</small>
+          </div>
+        `).join('') : '<div style="font-size:12px; color:var(--player-muted, #94a3b8); text-align:center; padding: 8px;">No kill/death combat events recorded.</div>'}
+      </div>
+    `;
+  } catch (err) {
+    content.innerHTML = `<div style="color:#ef4444; padding:12px;">Could not load match details: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+const closeMatchDetailBtn = document.getElementById("closeMatchDetailBtn");
+const matchDetailModal = document.getElementById("matchDetailModal");
+if (closeMatchDetailBtn && matchDetailModal) {
+  closeMatchDetailBtn.addEventListener("click", () => {
+    if (typeof matchDetailModal.close === "function") matchDetailModal.close();
+    else matchDetailModal.removeAttribute("open");
+  });
+  matchDetailModal.addEventListener("click", (e) => {
+    if (e.target === matchDetailModal) {
+      if (typeof matchDetailModal.close === "function") matchDetailModal.close();
+      else matchDetailModal.removeAttribute("open");
+    }
+  });
+}
+
+document.addEventListener("click", (e) => {
+  const drillBtn = e.target.closest(".match-drilldown-btn");
+  if (drillBtn) {
+    e.preventDefault();
+    const sid = drillBtn.dataset.sessionId;
+    if (sid) openMatchDetail(sid);
+  }
+});
+
+// =========================================================================
+// GDPR DATA EXPORT & SELF-SERVICE DELETION (Item 14)
+// =========================================================================
+
+const exportPlayerDataBtn = document.getElementById("exportPlayerDataBtn");
+if (exportPlayerDataBtn) {
+  exportPlayerDataBtn.addEventListener("click", () => {
+    window.location.href = `${window.API_BASE}/player/export-data`;
+  });
+}
+
+const selfDeleteAccountBtn = document.getElementById("selfDeleteAccountBtn");
+if (selfDeleteAccountBtn) {
+  selfDeleteAccountBtn.addEventListener("click", async () => {
+    const feedback = document.getElementById("gdprFeedbackMsg");
+    const password = prompt(
+      "PERMANENT ACCOUNT DELETION CONFIRMATION\n\n" +
+      "This will revoke all active sessions and permanently anonymize your personal account data.\n" +
+      "Matches and security audit history are retained in anonymized format.\n\n" +
+      "To proceed, please enter your password:"
+    );
+    if (!password) return;
+
+    try {
+      const res = await api("/player/account/delete", {
+        method: "POST",
+        body: JSON.stringify({ password })
+      });
+      if (feedback) {
+        feedback.hidden = false;
+        feedback.style.color = "#10b981";
+        feedback.textContent = res.message || "Account deleted. Logging out...";
+      }
+      alert(res.message || "Account successfully deleted.");
+      setTimeout(() => {
+        window.location.href = "login.html";
+      }, 1000);
+    } catch (err) {
+      if (feedback) {
+        feedback.hidden = false;
+        feedback.style.color = "#ef4444";
+        feedback.textContent = err.message || "Could not delete account.";
+      }
+      alert(err.message || "Account deletion failed.");
+    }
+  });
+}
+
+// =========================================================================
+// GAME HUB QUICK-LAUNCH (Item 14)
+// =========================================================================
+
+document.querySelectorAll(".quick-launch-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const mode = btn.dataset.mode || "freeroam";
+    sessionStorage.setItem("securefps_match_before_game", latestPlayerMatchId);
+    const sideNameEl = document.getElementById("sideName");
+    if (sideNameEl && sideNameEl.textContent) {
+      sessionStorage.setItem("securefps_player_name", sideNameEl.textContent.trim());
+    }
+    window.location.href = `public/games/three-fps/index.html?mode=${encodeURIComponent(mode)}`;
+  });
+});
+
+// =========================================================================
+// VISIBILITY-AWARE POLLING (Item 13)
+// =========================================================================
+
+function initPlayerPolling() {
+  if (playerRefreshTimer) clearInterval(playerRefreshTimer);
+
+  const startPolling = () => {
+    if (!playerRefreshTimer) {
+      playerRefreshTimer = setInterval(() => {
+        if (!document.hidden) {
+          loadPlayerDashboard();
+        }
+      }, 15000);
+    }
+  };
+
+  const stopPolling = () => {
+    if (playerRefreshTimer) {
+      clearInterval(playerRefreshTimer);
+      playerRefreshTimer = null;
+    }
+  };
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      stopPolling();
+    } else {
+      loadPlayerDashboard();
+      startPolling();
+    }
+  });
+
+  window.addEventListener("focus", () => {
+    if (!document.hidden) {
+      loadPlayerDashboard();
+    }
+  });
+
+  startPolling();
+}
+
+loadPlayerDashboard();
+initPlayerPolling();

@@ -1,22 +1,25 @@
 /**
  * SecureFPS: TacticalOperator.js
  * Professional Realistic Adult FPS 3D Tactical Operator Engine
- * Built strictly according to the CyberStrike 3D Character Design Specification:
- * - Realistic adult male & female anatomical proportions (1:7.5 - 1:8 ratio).
- * - FAST Tactical Helmet with Wilcox NVG shroud, ARC accessory rails & velcro loop pads.
- * - Ballistic Tactical Goggles with team-tinted reflective lens (Blue/Red).
- * - Black tactical balaclava face covering & communications headset with boom mic.
- * - Female tactical cap with ponytail hair exiting rear aperture.
- * - Heavy-duty Plate Carrier with MOLLE webbing & authentic "CS-3D" velcro chest patch.
- * - Triple magazine pouches on abdomen with tan PMAG 5.56 rifle magazines.
- * - Tactical shoulder radio with flexible whip antenna.
- * - Drop-leg tactical holster on right thigh with holstered sidearm pistol.
- * - Dual magazine pouches on left thigh.
- * - Molded hard-shell tactical knee protection pads with securing straps.
- * - High-top all-terrain combat assault boots.
- * - Reinforced tactical combat gloves with molded composite knuckle armor.
- * - High-detail tactical assault rifle with holographic optic, suppressor & PEQ-15.
- * - Skeletal animation blend tree (Idle, Walk, Run), shooting recoil & death collapse.
+ * 
+ * Features:
+ * - Robust GLB binary validation check with clear diagnostic logging and .gitattributes compliance.
+ * - Defensive bone mapping for valid rigged GLB character models (mixamorig*, Hips, Spine, RightHand, LeftHand, etc.)
+ *   with bone scale compensation for weapon sockets.
+ * - High-fidelity articulated procedural human tactical operator rig:
+ *   - Proportional adult human anatomy (1:7.5 to 1:8 ratio; ~1.82m male, ~1.74m female).
+ *   - Jointed limbs: Pelvis -> Spine -> Chest -> Shoulders -> Elbows -> Hands / Gloves; Hips -> Knees -> Shins -> Boots.
+ *   - Rounded geometries (capsules, cylinders, spheres, beveled boxes).
+ *   - Authentic FAST tactical high-cut helmet with Wilcox NVG shroud & ARC rails (or female tactical cap with ponytail).
+ *   - Ballistic tactical goggles with mirrored team-tinted reflective lens.
+ *   - Heavy-duty MOLLE plate carrier, "CS-3D" velcro patch, triple PMAG pouches, radio with whip antenna,
+ *     drop-leg holster with holstered sidearm, dual thigh pouches, hard-shell knee pads, tactical combat gloves.
+ *   - Team accents applied to goggles, velcro patches, and radio/armor accents (never whole boxes).
+ *   - Authentic two-handed combat weapon hold: right hand on grip, left hand supporting handguard.
+ *   - Dynamic weapon recoil kick, muzzle flash point light + starburst sprite, and brass shell casing ejection!
+ *   - Procedural locomotion engine: walk/run/idle/crouch cycle, strafe tilt, hip bob, aim pitch & yaw, hit flinch, and death collapse.
+ *   - Multi-weapon support (carbine, smg, sniper, pistol) matching server weapon keys.
+ *   - Shared character factory utilized identically by both BotManager and MultiplayerClient RemotePlayer.
  */
 
 class TacticalOperator {
@@ -26,8 +29,62 @@ class TacticalOperator {
     loadingPromise: null
   };
 
+  static modelStatus = "INITIALIZING";
+  static isFallbackActive = true;
+  static instances = [];
+
+  static currentWeaponCalibration = {
+    posX: 0.02,
+    posY: 0.05,
+    posZ: -0.06,
+    rotX: -Math.PI / 2 + 0.15,
+    rotY: 0,
+    rotZ: 0.1
+  };
+
+  static applyWeaponCalibration(values) {
+    Object.assign(TacticalOperator.currentWeaponCalibration, values);
+    TacticalOperator.instances.forEach(op => {
+      if (op && op.weaponGroup && (!op.weaponSocket || !op.weaponSocket.isBone)) {
+        op.weaponGroup.position.set(
+          TacticalOperator.currentWeaponCalibration.posX,
+          TacticalOperator.currentWeaponCalibration.posY,
+          TacticalOperator.currentWeaponCalibration.posZ
+        );
+        op.weaponGroup.rotation.set(
+          TacticalOperator.currentWeaponCalibration.rotX,
+          TacticalOperator.currentWeaponCalibration.rotY,
+          TacticalOperator.currentWeaponCalibration.rotZ
+        );
+      }
+    });
+  }
+
+  static updateDevOverlayStatus() {
+    if (typeof document === 'undefined') return;
+    const statusText = document.getElementById('hud-model-status');
+    const noticeBanner = document.getElementById('dev-model-notice-banner');
+    if (TacticalOperator.isFallbackActive) {
+      if (statusText) {
+        statusText.textContent = "PROCEDURAL RIG (CORRUPTED GLB)";
+        statusText.style.color = "#ef4444";
+      }
+      if (noticeBanner) {
+        noticeBanner.style.display = "block";
+      }
+    } else {
+      if (statusText) {
+        statusText.textContent = "RIGGED GLB 3D RIG";
+        statusText.style.color = "#10b981";
+      }
+      if (noticeBanner) {
+        noticeBanner.style.display = "none";
+      }
+    }
+  }
+
   /**
-   * Preloads realistic rigged adult operator GLB models
+   * Preloads realistic rigged adult operator GLB models with strict binary validation.
    */
   static async loadAssets() {
     if (TacticalOperator.models.loadingPromise) {
@@ -36,7 +93,10 @@ class TacticalOperator {
 
     TacticalOperator.models.loadingPromise = (async () => {
       if (typeof THREE === "undefined" || typeof THREE.GLTFLoader === "undefined") {
-        console.log("[TacticalOperator] Using high-fidelity procedural adult tactical operator rigs.");
+        console.log("[TacticalOperator] GLTFLoader not present. Activating procedural adult tactical operator rigs.");
+        TacticalOperator.modelStatus = "FALLBACK_PROCEDURAL";
+        TacticalOperator.isFallbackActive = true;
+        TacticalOperator.updateDevOverlayStatus();
         return;
       }
 
@@ -45,21 +105,66 @@ class TacticalOperator {
       async function tryLoadModel(url) {
         try {
           const resp = await fetch(url);
-          if (!resp.ok) return null;
+          if (!resp.ok) {
+            console.warn(`[TacticalOperator] Failed to fetch 3D model '${url}': HTTP status ${resp.status}`);
+            return null;
+          }
           const buffer = await resp.arrayBuffer();
-          if (!buffer || buffer.byteLength < 20) return null;
+          if (!buffer || buffer.byteLength < 24) {
+            console.warn(`[TacticalOperator] Corrupted 3D model buffer in '${url}': Buffer empty or truncated (<24 bytes).`);
+            return null;
+          }
 
           const view = new DataView(buffer);
-          // Valid GLB header: magic 0x46546C67 ("glTF") and Chunk 0 type 0x4E4F534A ("JSON")
+          // Valid GLB header: magic 0x46546C67 ("glTF" in ASCII little-endian)
           const magic = view.getUint32(0, true);
-          if (magic !== 0x46546C67) return null;
+          if (magic !== 0x46546C67) {
+            console.warn(
+              `[TacticalOperator] Corrupted GLB Header in '${url}': Expected magic 'glTF' (0x46546C67), found 0x${magic.toString(16)}. ` +
+              `The file was corrupted during transfer or checked out in text mode. Falling back to high-fidelity procedural rig.`
+            );
+            return null;
+          }
+
+          // Check for UTF-8 replacement byte sequence (0xEF 0xBF 0xBD / \ufffd) in header chunks
+          const checkLen = Math.min(256, buffer.byteLength);
+          const bytes = new Uint8Array(buffer, 0, checkLen);
+          let hasUtf8Corruption = false;
+          for (let i = 0; i < bytes.length - 2; i++) {
+            if (bytes[i] === 0xef && bytes[i + 1] === 0xbf && bytes[i + 2] === 0xbd) {
+              hasUtf8Corruption = true;
+              break;
+            }
+          }
+
+          if (hasUtf8Corruption) {
+            console.warn(
+              `[TacticalOperator] Corrupted GLB asset '${url}': Detected UTF-8 replacement bytes (EF BF BD). ` +
+              `This file was corrupted by a text-mode git filter or text editor copy. See README and .gitattributes. ` +
+              `Falling back to high-fidelity procedural anatomical tactical operator rig.`
+            );
+            return null;
+          }
+
           const chunk0Type = view.getUint32(16, true);
-          if (chunk0Type !== 0x4E4F534A) return null;
+          if (chunk0Type !== 0x4E4F534A) { // "JSON" in ASCII little-endian
+            console.error(`[TacticalOperator] Invalid GLB Chunk 0 in '${url}': Expected JSON chunk type.`);
+            return null;
+          }
 
           return await new Promise((res) => {
-            loader.parse(buffer, "", (gltf) => res(gltf), () => res(null));
+            loader.parse(
+              buffer,
+              "",
+              (gltf) => res(gltf),
+              (err) => {
+                console.error(`[TacticalOperator] GLTF parse error in '${url}':`, err);
+                res(null);
+              }
+            );
           });
-        } catch (_) {
+        } catch (err) {
+          console.error(`[TacticalOperator] Exception while loading '${url}':`, err);
           return null;
         }
       }
@@ -73,10 +178,16 @@ class TacticalOperator {
       TacticalOperator.models.female = female;
 
       if (soldier || female) {
-        console.log("[TacticalOperator] Preloaded rigged adult tactical operator GLB character models.");
+        TacticalOperator.modelStatus = "RIGGED_GLB";
+        TacticalOperator.isFallbackActive = false;
+        console.log("[TacticalOperator] Successfully loaded rigged adult tactical operator GLB models.");
       } else {
-        console.log("[TacticalOperator] Using high-fidelity procedural adult tactical operator rigs.");
+        TacticalOperator.modelStatus = "FALLBACK_PROCEDURAL";
+        TacticalOperator.isFallbackActive = true;
+        console.warn("[TacticalOperator] Rigged GLBs unavailable or corrupted (EF BF BD). Using high-fidelity procedural anatomical operator rigs.");
       }
+
+      TacticalOperator.updateDevOverlayStatus();
     })();
 
     return TacticalOperator.models.loadingPromise;
@@ -95,25 +206,86 @@ class TacticalOperator {
     this.health = 100;
     this.isDead = false;
     this.deathTimer = 0;
+    this.hitFlinchTimer = 0;
 
-    // Animation & Mixer State
+    // Animation & Procedural Rig State
     this.mixer = null;
     this.actions = {};
     this.currentAction = 'idle';
+    this.walkCycle = Math.random() * Math.PI * 2;
+    this.idleCycle = Math.random() * Math.PI * 2;
+    this.isCrouching = false;
+    this.currentPitch = 0;
+    this.currentSpeed = 0;
 
-    // Root Group & Meshes
-    this.root = new THREE.Group();
-    this.modelRoot = null;
+    // Weapon & Effects State
+    this.currentWeaponKey = 'carbine';
     this.weaponGroup = null;
+    this.weaponSocket = null;
+    this.muzzlePoint = new THREE.Vector3(0, 0, -0.65);
+    this.muzzleLight = null;
+    this.muzzleSprite = null;
+    this.muzzleTimer = 0;
+    this.weaponRecoilOffset = 0;
+    this.weaponRecoilPitch = 0;
+    this.activeShells = [];
+
+    // Rig Articulation Node References
+    this.pelvisGroup = null;
+    this.spineGroup = null;
+    this.chestGroup = null;
+    this.neckGroup = null;
+    this.headGroup = null;
+    this.rShoulderGroup = null;
+    this.lShoulderGroup = null;
+    this.rElbowGroup = null;
+    this.lElbowGroup = null;
+    this.rHandGroup = null;
+    this.lHandGroup = null;
+    this.rHipGroup = null;
+    this.lHipGroup = null;
+    this.rKneeGroup = null;
+    this.lKneeGroup = null;
+
+    // Root Group & Hitboxes
+    this.root = new THREE.Group();
+    this.root.userData.operator = this;
+    this.modelRoot = null;
     this.headMesh = null;
     this.bodyMesh = null;
     this.healthBarFill = null;
+    this.healthBarGroup = null;
     this.nameTagSprite = null;
 
     this.initMaterials();
     this.buildCharacter();
     this.root.position.copy(this.initialPosition);
-    this.scene.add(this.root);
+    if (this.scene) {
+      this.scene.add(this.root);
+    }
+    TacticalOperator.instances.push(this);
+  }
+
+  get bot() {
+    return this._bot;
+  }
+
+  set bot(val) {
+    this._bot = val;
+    if (this.root) this.root.userData.bot = val;
+    if (this.headMesh) this.headMesh.userData.bot = val;
+    if (this.bodyMesh) this.bodyMesh.userData.bot = val;
+  }
+
+  get remotePlayer() {
+    return this._remotePlayer;
+  }
+
+  set remotePlayer(val) {
+    this._remotePlayer = val;
+    if (this.root) this.root.userData.remotePlayer = val;
+    if (this.headMesh) this.headMesh.userData.remotePlayer = val;
+    if (this.bodyMesh) this.bodyMesh.userData.remotePlayer = val;
   }
 
   initMaterials() {
@@ -122,7 +294,7 @@ class TacticalOperator {
     this.accentColor = new THREE.Color(accentHex);
 
     this.materials = {
-      // Dark tactical uniform ripstop fabric
+      // Dark tactical uniform ripstop fabric (charcoal-navy for blue, charcoal-maroon for red)
       uniform: new THREE.MeshStandardMaterial({
         color: isBlue ? 0x181e26 : 0x221a1f,
         roughness: 0.75,
@@ -132,7 +304,7 @@ class TacticalOperator {
       femalePants: new THREE.MeshStandardMaterial({
         color: 0x4f4333,
         roughness: 0.75,
-        metalness: 0.1
+        metalness: 0.10
       }),
       // Plate carrier fabric (tan/coyote or dark charcoal)
       plateCarrier: new THREE.MeshStandardMaterial({
@@ -140,13 +312,13 @@ class TacticalOperator {
         roughness: 0.65,
         metalness: 0.15
       }),
-      // Matte tactical polymer (helmet, knee pads, holster, radio body, accessories)
+      // Matte tactical polymer (helmet, knee pads, holster, radio, boots)
       gearPolymer: new THREE.MeshStandardMaterial({
         color: 0x16181d,
-        roughness: 0.35,
-        metalness: 0.45
+        roughness: 0.40,
+        metalness: 0.40
       }),
-      // Ballistic Goggle Lens (mirrored reflective tint)
+      // Ballistic Goggle Lens (mirrored reflective tint matching team color)
       goggleLens: new THREE.MeshStandardMaterial({
         color: accentHex,
         roughness: 0.1,
@@ -154,11 +326,11 @@ class TacticalOperator {
         transparent: true,
         opacity: 0.85
       }),
-      // Team identification glowing accent
+      // Team identification glowing accent (used only for small patches & lenses)
       teamAccent: new THREE.MeshBasicMaterial({
         color: accentHex
       }),
-      // Gunmetal metal for weapon & rails
+      // Gunmetal metal for weapon receivers, barrels & rails
       metal: new THREE.MeshStandardMaterial({
         color: 0x1c212a,
         roughness: 0.35,
@@ -170,25 +342,39 @@ class TacticalOperator {
         roughness: 0.6,
         metalness: 0.2
       }),
-      // Natural adult human skin
+      // Adult human skin tone
       skin: new THREE.MeshStandardMaterial({
-        color: 0xc8967b,
-        roughness: 0.6
+        color: this.isFemale ? 0xd4a58a : 0xc8967b,
+        roughness: 0.65,
+        metalness: 0.05
       }),
-      // Dark hair
+      // Balaclava dark fabric
+      balaclava: new THREE.MeshStandardMaterial({
+        color: 0x14161a,
+        roughness: 0.85,
+        metalness: 0.05
+      }),
+      // Dark tactical hair
       hair: new THREE.MeshStandardMaterial({
-        color: 0x261d18,
-        roughness: 0.8
+        color: 0x221a16,
+        roughness: 0.85
+      }),
+      // Brass for ejected shell casings
+      brass: new THREE.MeshStandardMaterial({
+        color: 0xd4af37,
+        roughness: 0.25,
+        metalness: 0.90
       })
     };
 
     // Authentic CS-3D Velcro Chest Patch
     if (typeof TextureGenerator !== 'undefined' && typeof TextureGenerator.createPatchTexture === 'function') {
-      const patchTex = TextureGenerator.createPatchTexture(this.team, 'CS-3D');
-      this.materials.patch = new THREE.MeshBasicMaterial({
-        map: patchTex,
-        transparent: true
-      });
+      try {
+        const patchTex = TextureGenerator.createPatchTexture(this.team, 'CS-3D');
+        this.materials.patch = new THREE.MeshBasicMaterial({ map: patchTex, transparent: true });
+      } catch (_) {
+        this.materials.patch = this.materials.teamAccent;
+      }
     } else {
       this.materials.patch = this.materials.teamAccent;
     }
@@ -209,7 +395,7 @@ class TacticalOperator {
     // Attach Hitboxes for Raycasting Combat
     this.buildHitboxes();
 
-    // Attach Callsign Nameplate & Floating Health Bar
+    // Attach Overhead Nameplate & Floating Health Bar
     this.buildOverheadHUD();
   }
 
@@ -230,27 +416,49 @@ class TacticalOperator {
     return found;
   }
 
+  findBoneRegex(pattern) {
+    if (!this.modelRoot) return null;
+    let found = null;
+    this.modelRoot.traverse((bone) => {
+      if (bone.isBone && !found && pattern.test(bone.name)) {
+        found = bone;
+      }
+    });
+    return found;
+  }
+
   buildRiggedGLBModel(sourceGltf) {
-    // Clone rigged skeletal mesh using Three.js SkeletonUtils
     this.modelRoot = THREE.SkeletonUtils.clone(sourceGltf.scene);
 
-    // Standardize human adult height (~1.82m male, ~1.74m female)
-    const scale = this.isFemale ? 0.95 : 1.0;
+    // Compute bounding box and normalize height to ~1.8m (1.74m female, 1.82m male)
+    const bbox = new THREE.Box3().setFromObject(this.modelRoot);
+    const size = new THREE.Vector3();
+    bbox.getSize(size);
+
+    // Detect if armature was exported in centimeters (scale 0.01)
+    const isCmScale = size.y > 40;
+    const rawHeight = isCmScale ? size.y * 0.01 : size.y;
+    const targetHeight = this.isFemale ? 1.74 : 1.82;
+    const scale = (targetHeight / Math.max(0.1, rawHeight)) * (isCmScale ? 0.01 : 1.0);
     this.modelRoot.scale.set(scale, scale, scale);
 
-    // Enable shadows and configure tactical team materials
-    const isBlue = this.team === 'blue';
-    const uniformColor = isBlue ? new THREE.Color(0x181e26) : new THREE.Color(0x28181c);
+    // Recompute bbox after scaling and place feet exactly at y = 0
+    bbox.setFromObject(this.modelRoot);
+    this.modelRoot.position.y = -bbox.min.y;
 
+    // Orient model so facing direction aligns with -Z (forward vector)
+    this.modelRoot.rotation.y = Math.PI;
+
+    // Enable shadows and set textures to sRGB (preserving authored materials, no flat-color lerp)
     this.modelRoot.traverse((child) => {
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
-
-        if (child.material) {
-          child.material = child.material.clone();
-          if (child.material.color) {
-            child.material.color.lerp(uniformColor, 0.45);
+        if (child.material && child.material.map) {
+          if (typeof THREE.SRGBColorSpace !== 'undefined') {
+            child.material.map.colorSpace = THREE.SRGBColorSpace;
+          } else if (typeof THREE.sRGBEncoding !== 'undefined') {
+            child.material.map.encoding = THREE.sRGBEncoding;
           }
         }
       }
@@ -258,25 +466,33 @@ class TacticalOperator {
 
     this.root.add(this.modelRoot);
 
-    // Setup Animation Mixer and map animations
+    // Rigged animation clips with regex mapping and crossFade
     if (sourceGltf.animations && sourceGltf.animations.length > 0) {
       this.mixer = new THREE.AnimationMixer(this.modelRoot);
-
-      const findClip = (keywords) => {
-        for (const kw of keywords) {
-          const found = sourceGltf.animations.find(a => a.name.toLowerCase().includes(kw));
-          if (found) return found;
-        }
-        return sourceGltf.animations[0];
+      const findClip = (pattern) => {
+        return sourceGltf.animations.find(a => pattern.test(a.name)) || null;
       };
 
-      const idleClip = findClip(['idle']);
-      const walkClip = findClip(['walk', 'jog']);
-      const runClip = findClip(['run', 'sprint']);
+      const idleClip = findClip(/idle/i);
+      const walkClip = findClip(/walk|jog/i);
+      const runClip = findClip(/run|sprint/i);
+      const fireClip = findClip(/fire|shoot|attack/i);
+      const reloadClip = findClip(/reload/i);
+      const hitClip = findClip(/hit|damage|flinch/i);
+      const deathClip = findClip(/death|die/i);
 
       if (idleClip) this.actions.idle = this.mixer.clipAction(idleClip);
       if (walkClip) this.actions.walk = this.mixer.clipAction(walkClip);
       if (runClip) this.actions.run = this.mixer.clipAction(runClip);
+      if (fireClip) this.actions.fire = this.mixer.clipAction(fireClip);
+      if (reloadClip) this.actions.reload = this.mixer.clipAction(reloadClip);
+      if (hitClip) this.actions.hit = this.mixer.clipAction(hitClip);
+      if (deathClip) {
+        const deathAct = this.mixer.clipAction(deathClip);
+        deathAct.setLoop(THREE.LoopOnce);
+        deathAct.clampWhenFinished = true;
+        this.actions.death = deathAct;
+      }
 
       if (this.actions.idle) {
         this.actions.idle.play();
@@ -284,22 +500,34 @@ class TacticalOperator {
       }
     }
 
-    // Attach authentic tactical equipment to rigged skeleton
     this.attachGearToRiggedBones();
   }
 
   attachGearToRiggedBones() {
-    const headBone = this.findBone(['head']);
-    const spine2Bone = this.findBone(['spine2', 'spine1']);
-    const spine1Bone = this.findBone(['spine1', 'spine']);
-    const rightHandBone = this.findBone(['righthand', 'hand_r', 'hand.r']);
-    const leftHandBone = this.findBone(['lefthand', 'hand_l', 'hand.l']);
-    const rightUpLegBone = this.findBone(['rightupleg', 'thigh_r', 'thigh.r']);
-    const leftUpLegBone = this.findBone(['leftupleg', 'thigh_l', 'thigh.l']);
-    const rightLegBone = this.findBone(['rightleg', 'shin_r', 'calf_r']);
-    const leftLegBone = this.findBone(['leftleg', 'shin_l', 'calf_l']);
+    // Defensive bone lookup matching mixamorig, standard names, and regex patterns
+    const headBone = this.findBoneRegex(/mixamorig.*head|head|neck/i) || this.findBone(['head', 'neck']);
+    const spine2Bone = this.findBoneRegex(/mixamorig.*spine[12]|spine[12]|chest|upper.*body/i) || this.findBone(['chest', 'spine2']);
+    const spine1Bone = this.findBoneRegex(/mixamorig.*spine$|spine$|spine0|abdomen/i) || this.findBone(['spine', 'abdomen']);
+    const rightHandBone = this.findBoneRegex(/mixamorig.*righthand|right.*hand|hand.*r|weapon.*socket/i) || this.findBone(['righthand', 'hand_r']);
+    const leftHandBone = this.findBoneRegex(/mixamorig.*lefthand|left.*hand|hand.*l/i) || this.findBone(['lefthand', 'hand_l']);
+    const leftArmBone = this.findBoneRegex(/mixamorig.*leftarm|left.*arm|arm.*l|shoulder.*l/i) || this.findBone(['leftarm', 'arm_l']);
+    const rightUpLegBone = this.findBoneRegex(/mixamorig.*rightupleg|right.*upleg|thigh.*r/i) || this.findBone(['rightupleg', 'thigh_r']);
+    const leftUpLegBone = this.findBoneRegex(/mixamorig.*leftupleg|left.*upleg|thigh.*l/i) || this.findBone(['leftupleg', 'thigh_l']);
+    const rightLegBone = this.findBoneRegex(/mixamorig.*rightleg|right.*leg|shin.*r|calf.*r/i) || this.findBone(['rightleg', 'shin_r']);
+    const leftLegBone = this.findBoneRegex(/mixamorig.*leftleg|left.*leg|shin.*l|calf.*l/i) || this.findBone(['leftleg', 'shin_l']);
 
-    // 1. Head Equipment (FAST Helmet / Goggles / Headset / Balaclava OR Cap / Ponytail)
+    this.headBone = headBone;
+    this.spineBone = spine2Bone;
+
+    // Team Armband on Left Upper Arm (Team identity without 45% whole-body flat color lerp)
+    if (leftArmBone) {
+      const armbandGeo = new THREE.CylinderGeometry(0.062, 0.058, 0.07, 12);
+      const armband = new THREE.Mesh(armbandGeo, this.materials.teamAccent);
+      armband.position.set(0, -0.08, 0);
+      leftArmBone.add(armband);
+    }
+
+    // Head Equipment
     const headGear = this.isFemale ? this.buildFemaleHeadGear() : this.buildMaleHeadGear();
     if (headBone) {
       headGear.position.set(0, 0.04, 0);
@@ -309,7 +537,7 @@ class TacticalOperator {
       this.root.add(headGear);
     }
 
-    // 2. Chest Equipment (Plate Carrier, CS-3D Patch, Radio & Antenna)
+    // Plate Carrier
     const plateCarrier = this.buildPlateCarrierGear();
     if (spine2Bone) {
       plateCarrier.position.set(0, -0.05, 0.02);
@@ -319,7 +547,7 @@ class TacticalOperator {
       this.root.add(plateCarrier);
     }
 
-    // 3. Abdomen Equipment (Triple Magazine Pouches with tan PMAGs)
+    // Mag Pouches
     const magPouches = this.buildTripleMagPouches();
     if (spine1Bone) {
       magPouches.position.set(0, 0.02, 0.14);
@@ -329,74 +557,334 @@ class TacticalOperator {
       this.root.add(magPouches);
     }
 
-    // 4. Right Thigh (Drop-Leg Holster & Sidearm Pistol)
+    // Drop-leg Holster
     const holster = this.buildDropLegHolster();
     if (rightUpLegBone) {
-      holster.position.set(0.12, -0.16, 0.02);
+      holster.position.set(0.12, -0.14, 0.02);
       rightUpLegBone.add(holster);
     } else {
       holster.position.set(0.18, 0.65, 0);
       this.root.add(holster);
     }
 
-    // 5. Left Thigh (Dual Magazine Pouches)
+    // Dual Thigh Pouches
     const thighPouches = this.buildDualThighPouches();
     if (leftUpLegBone) {
-      thighPouches.position.set(-0.11, -0.14, 0.02);
+      thighPouches.position.set(-0.12, -0.14, 0.02);
       leftUpLegBone.add(thighPouches);
     } else {
       thighPouches.position.set(-0.18, 0.65, 0);
       this.root.add(thighPouches);
     }
 
-    // 6. Knees (Hard-Shell Tactical Knee Protection Pads)
-    const rightKnee = this.buildKneePad();
+    // Knee Protection Pads
+    const rKnee = this.buildKneePad();
     if (rightLegBone) {
-      rightKnee.position.set(0, 0.05, 0.07);
-      rightLegBone.add(rightKnee);
+      rKnee.position.set(0, 0.05, 0.07);
+      rightLegBone.add(rKnee);
     } else {
-      rightKnee.position.set(0.12, 0.45, 0.08);
-      this.root.add(rightKnee);
+      rKnee.position.set(0.12, 0.45, 0.08);
+      this.root.add(rKnee);
     }
 
-    const leftKnee = this.buildKneePad();
+    const lKnee = this.buildKneePad();
     if (leftLegBone) {
-      leftKnee.position.set(0, 0.05, 0.07);
-      leftLegBone.add(leftKnee);
+      lKnee.position.set(0, 0.05, 0.07);
+      leftLegBone.add(lKnee);
     } else {
-      leftKnee.position.set(-0.12, 0.45, 0.08);
-      this.root.add(leftKnee);
+      lKnee.position.set(-0.12, 0.45, 0.08);
+      this.root.add(lKnee);
     }
 
-    // 7. Tactical Combat Gloves
-    const rGlove = this.buildTacticalGlove(false);
+    // Weapon Socket in Right Hand with Scale Compensation and Calibrated Transforms
+    const weaponGroup = this.buildWeaponModel(this.currentWeaponKey);
+    this.weaponGroup = weaponGroup;
+    const cal = TacticalOperator.currentWeaponCalibration;
     if (rightHandBone) {
-      rGlove.position.set(0, 0, 0);
-      rightHandBone.add(rGlove);
+      // Compensate for bone local scale so weapon stays proportional
+      const boneScale = rightHandBone.scale;
+      weaponGroup.scale.set(1.0 / (boneScale.x || 1), 1.0 / (boneScale.y || 1), 1.0 / (boneScale.z || 1));
+      weaponGroup.position.set(cal.posX, cal.posY, cal.posZ);
+      weaponGroup.rotation.set(cal.rotX, cal.rotY, cal.rotZ);
+      rightHandBone.add(weaponGroup);
+      this.weaponSocket = rightHandBone;
+    } else {
+      weaponGroup.position.set(0.22, 1.15, 0.22);
+      this.root.add(weaponGroup);
+      this.weaponSocket = this.root;
     }
+  }
+
+  /**
+   * Rebuilds the procedural anatomical human tactical operator rig.
+   * Articulated joint hierarchy:
+   *   Pelvis (Root, y ~ 0.94m)
+   *     ├── Spine -> Chest -> Neck -> Head
+   *     ├── Shoulders -> Upper Arms -> Elbows -> Forearms -> Hands / Gloves -> Weapon
+   *     └── Hips -> Upper Legs / Thighs -> Knees -> Lower Legs / Shins -> Boots
+   */
+  buildProceduralAnatomicalModel() {
+    this.modelRoot = new THREE.Group();
+    const scale = this.isFemale ? 0.96 : 1.0;
+    this.modelRoot.scale.set(scale, scale, scale);
+
+    const { uniform, femalePants, gearPolymer, balaclava } = this.materials;
+    const pantsMat = this.isFemale ? femalePants : uniform;
+
+    // 1. Pelvis / Hips Root Group (Center of gravity at ~0.94m)
+    this.pelvisGroup = new THREE.Group();
+    this.pelvisGroup.position.set(0, 0.94, 0);
+
+    // Tactical combat belt with molded buckle
+    const beltGeo = new THREE.CylinderGeometry(0.19, 0.18, 0.12, 12);
+    const belt = new THREE.Mesh(beltGeo, gearPolymer);
+    belt.castShadow = true;
+    this.pelvisGroup.add(belt);
+
+    const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.02), this.materials.metal);
+    buckle.position.set(0, 0, 0.19);
+    this.pelvisGroup.add(buckle);
+
+    // 2. Spine & Torso Group (Pivots from Pelvis)
+    this.spineGroup = new THREE.Group();
+    this.spineGroup.position.set(0, 0.06, 0);
+    this.pelvisGroup.add(this.spineGroup);
+
+    // Abdomen / Lower Torso
+    const lowerTorsoGeo = new THREE.CylinderGeometry(0.18, 0.17, 0.16, 12);
+    const lowerTorso = new THREE.Mesh(lowerTorsoGeo, uniform);
+    lowerTorso.position.set(0, 0.08, 0);
+    lowerTorso.castShadow = true;
+    this.spineGroup.add(lowerTorso);
+
+    // Chest Group (Upper Torso)
+    this.chestGroup = new THREE.Group();
+    this.chestGroup.position.set(0, 0.20, 0);
+    this.spineGroup.add(this.chestGroup);
+
+    // Upper Torso Mesh
+    const chestGeo = new THREE.CylinderGeometry(0.20, 0.18, 0.24, 12);
+    const chest = new THREE.Mesh(chestGeo, uniform);
+    chest.position.set(0, 0.12, 0);
+    chest.castShadow = true;
+    this.chestGroup.add(chest);
+
+    // Plate Carrier Gear
+    const plateCarrier = this.buildPlateCarrierGear();
+    plateCarrier.position.set(0, 0.12, 0);
+    this.chestGroup.add(plateCarrier);
+
+    // Triple Magazine Pouches on Abdomen
+    const magPouches = this.buildTripleMagPouches();
+    magPouches.position.set(0, -0.02, 0.15);
+    this.chestGroup.add(magPouches);
+
+    // 3. Neck & Head Group (Pivots from Chest)
+    this.neckGroup = new THREE.Group();
+    this.neckGroup.position.set(0, 0.26, 0);
+    this.chestGroup.add(this.neckGroup);
+
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.075, 0.10, 10), balaclava);
+    neck.position.set(0, 0.05, 0);
+    this.neckGroup.add(neck);
+
+    this.headGroup = new THREE.Group();
+    this.headGroup.position.set(0, 0.12, 0);
+    this.neckGroup.add(this.headGroup);
+
+    // Head base (balaclava / skin)
+    const headBase = new THREE.Mesh(new THREE.SphereGeometry(0.125, 14, 14), balaclava);
+    headBase.position.set(0, 0.04, 0);
+    headBase.castShadow = true;
+    this.headGroup.add(headBase);
+
+    // Headgear (FAST Helmet / Goggles / Comms Headset OR Female Cap + Ponytail)
+    const headGear = this.isFemale ? this.buildFemaleHeadGear() : this.buildMaleHeadGear();
+    headGear.position.set(0, 0.04, 0);
+    this.headGroup.add(headGear);
+
+    // 4. Arms & Two-Handed Weapon Hold
+    // Right Shoulder Joint
+    this.rShoulderGroup = new THREE.Group();
+    this.rShoulderGroup.position.set(0.22, 0.22, 0.02);
+    this.chestGroup.add(this.rShoulderGroup);
+
+    const rDeltoid = new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 8), uniform);
+    this.rShoulderGroup.add(rDeltoid);
+
+    const rUpperArmGeo = new THREE.CylinderGeometry(0.052, 0.046, 0.24, 10);
+    const rUpperArm = new THREE.Mesh(rUpperArmGeo, uniform);
+    rUpperArm.position.set(0, -0.12, 0);
+    rUpperArm.castShadow = true;
+    this.rShoulderGroup.add(rUpperArm);
+
+    // Right Elbow Joint
+    this.rElbowGroup = new THREE.Group();
+    this.rElbowGroup.position.set(0, -0.24, 0);
+    this.rShoulderGroup.add(this.rElbowGroup);
+
+    const rForearmGeo = new THREE.CylinderGeometry(0.046, 0.040, 0.22, 10);
+    const rForearm = new THREE.Mesh(rForearmGeo, uniform);
+    rForearm.position.set(0, -0.11, 0);
+    rForearm.castShadow = true;
+    this.rElbowGroup.add(rForearm);
+
+    // Right Hand / Tactical Glove & Weapon Grip Socket
+    this.rHandGroup = new THREE.Group();
+    this.rHandGroup.position.set(0, -0.22, 0);
+    this.rElbowGroup.add(this.rHandGroup);
+
+    const rGlove = this.buildTacticalGlove(false);
+    this.rHandGroup.add(rGlove);
+
+    // Left Shoulder Joint
+    this.lShoulderGroup = new THREE.Group();
+    this.lShoulderGroup.position.set(-0.22, 0.22, 0.02);
+    this.chestGroup.add(this.lShoulderGroup);
+
+    const lDeltoid = new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 8), uniform);
+    this.lShoulderGroup.add(lDeltoid);
+
+    const lUpperArmGeo = new THREE.CylinderGeometry(0.052, 0.046, 0.24, 10);
+    const lUpperArm = new THREE.Mesh(lUpperArmGeo, uniform);
+    lUpperArm.position.set(0, -0.12, 0);
+    lUpperArm.castShadow = true;
+    this.lShoulderGroup.add(lUpperArm);
+
+    // Left Elbow Joint
+    this.lElbowGroup = new THREE.Group();
+    this.lElbowGroup.position.set(0, -0.24, 0);
+    this.lShoulderGroup.add(this.lElbowGroup);
+
+    const lForearmGeo = new THREE.CylinderGeometry(0.046, 0.040, 0.22, 10);
+    const lForearm = new THREE.Mesh(lForearmGeo, uniform);
+    lForearm.position.set(0, -0.11, 0);
+    lForearm.castShadow = true;
+    this.lElbowGroup.add(lForearm);
+
+    // Left Hand / Tactical Glove (Supporting handguard)
+    this.lHandGroup = new THREE.Group();
+    this.lHandGroup.position.set(0, -0.22, 0);
+    this.lElbowGroup.add(this.lHandGroup);
 
     const lGlove = this.buildTacticalGlove(true);
-    if (leftHandBone) {
-      lGlove.position.set(0, 0, 0);
-      leftHandBone.add(lGlove);
-    }
+    this.lHandGroup.add(lGlove);
 
-    // 8. Custom Tactical Assault Rifle (Equipped in Right Hand)
-    const rifle = this.buildRealisticAssaultRifle();
-    this.weaponGroup = rifle;
-    if (rightHandBone) {
-      rifle.position.set(0.04, 0.08, -0.06);
-      rifle.rotation.set(-Math.PI / 2, 0, Math.PI / 2);
-      rightHandBone.add(rifle);
-    } else {
-      rifle.position.set(0.25, 1.15, 0.25);
-      this.root.add(rifle);
-    }
+    // Orient arms into realistic two-handed ready/firing stance
+    this.rShoulderGroup.rotation.set(-0.65, -0.15, 0.12);
+    this.rElbowGroup.rotation.set(-0.60, 0.0, -0.10);
+    this.rHandGroup.rotation.set(0.15, 0.25, 0);
+
+    this.lShoulderGroup.rotation.set(-0.85, 0.45, -0.25);
+    this.lElbowGroup.rotation.set(-0.95, 0.0, 0.20);
+    this.lHandGroup.rotation.set(0.20, -0.30, 0.35);
+
+    // Attach Weapon in Right Hand Socket
+    this.weaponSocket = this.rHandGroup;
+    this.weaponGroup = this.buildWeaponModel(this.currentWeaponKey);
+    this.weaponGroup.position.set(0.02, 0.05, -0.06);
+    this.weaponGroup.rotation.set(-Math.PI / 2 + 0.15, 0, 0.1);
+    this.weaponSocket.add(this.weaponGroup);
+
+    // 5. Lower Body (Hips, Thighs, Knees, Shins, Boots)
+    // Right Hip Joint
+    this.rHipGroup = new THREE.Group();
+    this.rHipGroup.position.set(0.12, -0.04, 0);
+    this.pelvisGroup.add(this.rHipGroup);
+
+    const rThighGeo = new THREE.CylinderGeometry(0.078, 0.068, 0.40, 10);
+    const rThigh = new THREE.Mesh(rThighGeo, pantsMat);
+    rThigh.position.set(0, -0.20, 0);
+    rThigh.castShadow = true;
+    this.rHipGroup.add(rThigh);
+
+    const holster = this.buildDropLegHolster();
+    holster.position.set(0.07, -0.16, 0);
+    this.rHipGroup.add(holster);
+
+    // Right Knee Joint
+    this.rKneeGroup = new THREE.Group();
+    this.rKneeGroup.position.set(0, -0.40, 0);
+    this.rHipGroup.add(this.rKneeGroup);
+
+    const rKneePad = this.buildKneePad();
+    rKneePad.position.set(0, 0, 0.065);
+    this.rKneeGroup.add(rKneePad);
+
+    const rShinGeo = new THREE.CylinderGeometry(0.065, 0.055, 0.38, 10);
+    const rShin = new THREE.Mesh(rShinGeo, pantsMat);
+    rShin.position.set(0, -0.19, 0);
+    rShin.castShadow = true;
+    this.rKneeGroup.add(rShin);
+
+    const rBoot = this.buildCombatBoot();
+    rBoot.position.set(0, -0.42, 0.03);
+    this.rKneeGroup.add(rBoot);
+
+    // Left Hip Joint
+    this.lHipGroup = new THREE.Group();
+    this.lHipGroup.position.set(-0.12, -0.04, 0);
+    this.pelvisGroup.add(this.lHipGroup);
+
+    const lThighGeo = new THREE.CylinderGeometry(0.078, 0.068, 0.40, 10);
+    const lThigh = new THREE.Mesh(lThighGeo, pantsMat);
+    lThigh.position.set(0, -0.20, 0);
+    lThigh.castShadow = true;
+    this.lHipGroup.add(lThigh);
+
+    const thighPouches = this.buildDualThighPouches();
+    thighPouches.position.set(-0.07, -0.16, 0);
+    this.lHipGroup.add(thighPouches);
+
+    // Left Knee Joint
+    this.lKneeGroup = new THREE.Group();
+    this.lKneeGroup.position.set(0, -0.40, 0);
+    this.lHipGroup.add(this.lKneeGroup);
+
+    const lKneePad = this.buildKneePad();
+    lKneePad.position.set(0, 0, 0.065);
+    this.lKneeGroup.add(lKneePad);
+
+    const lShinGeo = new THREE.CylinderGeometry(0.065, 0.055, 0.38, 10);
+    const lShin = new THREE.Mesh(lShinGeo, pantsMat);
+    lShin.position.set(0, -0.19, 0);
+    lShin.castShadow = true;
+    this.lKneeGroup.add(lShin);
+
+    const lBoot = this.buildCombatBoot();
+    lBoot.position.set(0, -0.42, 0.03);
+    this.lKneeGroup.add(lBoot);
+
+    this.modelRoot.add(this.pelvisGroup);
+    this.root.add(this.modelRoot);
+  }
+
+  buildCombatBoot() {
+    const group = new THREE.Group();
+    const { gearPolymer } = this.materials;
+
+    // Boot Foot Section (Rounded Box)
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.09, 0.22), gearPolymer);
+    foot.position.set(0, 0.045, 0.02);
+    foot.castShadow = true;
+    group.add(foot);
+
+    // Ankle Collar
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.058, 0.12, 10), gearPolymer);
+    collar.position.set(0, 0.11, -0.01);
+    group.add(collar);
+
+    // Heavy Rubber Tread Lug Sole
+    const sole = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.024, 0.23), this.materials.metal);
+    sole.position.set(0, 0.012, 0.02);
+    group.add(sole);
+
+    return group;
   }
 
   buildMaleHeadGear() {
     const group = new THREE.Group();
-    const { gearPolymer, goggleLens, uniform, teamAccent } = this.materials;
+    const { gearPolymer, goggleLens, teamAccent } = this.materials;
 
     // FAST Tactical High-Cut Helmet Shell
     const helmetShell = new THREE.Mesh(
@@ -407,7 +895,7 @@ class TacticalOperator {
     helmetShell.castShadow = true;
     group.add(helmetShell);
 
-    // Front Wilcox NVG Shroud / Mount Bracket
+    // Front Wilcox NVG Shroud Mount Bracket
     const nvgMount = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.048, 0.016), gearPolymer);
     nvgMount.position.set(0, 0.065, 0.135);
     group.add(nvgMount);
@@ -418,113 +906,86 @@ class TacticalOperator {
     group.add(nvgSocket);
 
     // Side ARC Accessory Rails
-    const leftRail = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.024, 0.11), gearPolymer);
-    leftRail.position.set(-0.132, 0.04, 0.02);
+    const leftRail = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.028, 0.12), gearPolymer);
+    leftRail.position.set(-0.135, 0.04, 0.01);
     group.add(leftRail);
 
-    const rightRail = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.024, 0.11), gearPolymer);
-    rightRail.position.set(0.132, 0.04, 0.02);
+    const rightRail = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.028, 0.12), gearPolymer);
+    rightRail.position.set(0.135, 0.04, 0.01);
     group.add(rightRail);
 
-    // Top & Side Velcro Loop Pads
-    const topVelcro = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.006, 0.09), uniform);
-    topVelcro.position.set(0, 0.138, -0.01);
-    group.add(topVelcro);
-
-    // Tactical Balaclava (Lower Face & Neck Covering)
-    const balaclava = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.11, 0.16, 12), uniform);
-    balaclava.position.set(0, -0.05, 0.01);
-    group.add(balaclava);
-
-    // Ballistic Goggles with Tinted Mirrored Lens
-    const goggleFrame = new THREE.Mesh(new THREE.BoxGeometry(0.165, 0.046, 0.048), gearPolymer);
-    goggleFrame.position.set(0, 0.025, 0.11);
+    // Ballistic Tactical Goggles with Team-Tinted Mirrored Lens
+    const goggleFrame = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.052, 0.038), gearPolymer);
+    goggleFrame.position.set(0, 0.015, 0.125);
     group.add(goggleFrame);
 
-    const goggleLensMesh = new THREE.Mesh(new THREE.BoxGeometry(0.152, 0.038, 0.012), goggleLens);
-    goggleLensMesh.position.set(0, 0.025, 0.135);
-    group.add(goggleLensMesh);
+    const goggleGlass = new THREE.Mesh(new THREE.BoxGeometry(0.155, 0.038, 0.012), goggleLens);
+    goggleGlass.position.set(0, 0.015, 0.142);
+    group.add(goggleGlass);
 
-    // Goggle Retention Strap
-    const strap = new THREE.Mesh(new THREE.CylinderGeometry(0.142, 0.142, 0.022, 16), uniform);
-    strap.position.set(0, 0.025, -0.01);
-    group.add(strap);
+    // Comms Headset with Boom Mic
+    const leftCup = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.028, 10), gearPolymer);
+    leftCup.rotation.z = Math.PI / 2;
+    leftCup.position.set(-0.135, 0.01, -0.01);
+    group.add(leftCup);
 
-    // Communications Headset (Ear Cups & Boom Mic)
-    const leftEarCup = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.062, 0.048), gearPolymer);
-    leftEarCup.position.set(-0.136, 0.01, 0.01);
-    group.add(leftEarCup);
+    const rightCup = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.028, 10), gearPolymer);
+    rightCup.rotation.z = Math.PI / 2;
+    rightCup.position.set(0.135, 0.01, -0.01);
+    group.add(rightCup);
 
-    const rightEarCup = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.062, 0.048), gearPolymer);
-    rightEarCup.position.set(0.136, 0.01, 0.01);
-    group.add(rightEarCup);
+    const boomMic = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.12, 6), gearPolymer);
+    boomMic.position.set(-0.11, -0.03, 0.06);
+    boomMic.rotation.x = Math.PI / 3;
+    group.add(boomMic);
 
-    // Boom Microphone curving toward mouth
-    const micArm = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.12, 6), this.materials.metal);
-    micArm.rotation.set(0.3, 0.2, 0.9);
-    micArm.position.set(-0.08, -0.04, 0.08);
-    group.add(micArm);
-
-    const micHead = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 8), gearPolymer);
-    micHead.position.set(-0.035, -0.05, 0.12);
-    group.add(micHead);
+    // Rear Team Identification Velcro Tab
+    const rearTag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.024, 0.006), teamAccent);
+    rearTag.position.set(0, 0.04, -0.138);
+    group.add(rearTag);
 
     return group;
   }
 
   buildFemaleHeadGear() {
     const group = new THREE.Group();
-    const { gearPolymer, hair, patch } = this.materials;
+    const { uniform, goggleLens, hair, teamAccent, gearPolymer } = this.materials;
 
-    // Tactical Baseball Cap Crown (Worn Bill-Forward)
+    // Tactical Operator Low-Profile Cap
     const capCrown = new THREE.Mesh(
-      new THREE.SphereGeometry(0.130, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.54),
-      gearPolymer
+      new THREE.SphereGeometry(0.132, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.52),
+      uniform
     );
-    capCrown.position.set(0, 0.035, -0.01);
-    capCrown.castShadow = true;
+    capCrown.position.set(0, 0.04, 0);
     group.add(capCrown);
 
-    // Forward Stiff Curved Visor / Brim
-    const brim = new THREE.Mesh(new THREE.BoxGeometry(0.135, 0.012, 0.095), gearPolymer);
-    brim.position.set(0, 0.02, 0.14);
-    brim.rotation.x = -0.15;
-    group.add(brim);
+    // Forward Cap Brim / Visor
+    const capBrim = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.008, 0.09), uniform);
+    capBrim.position.set(0, 0.025, 0.14);
+    capBrim.rotation.x = -0.15;
+    group.add(capBrim);
 
-    // Front Velcro Unit Patch on Cap
-    const capPatch = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.026, 0.006), patch);
-    capPatch.position.set(0, 0.06, 0.12);
-    capPatch.rotation.x = -0.25;
-    group.add(capPatch);
-
-    // Long Ponytail Hair Bundle exiting rear cap opening
-    const ponytail = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.018, 0.32, 8), hair);
-    ponytail.position.set(0, -0.08, -0.16);
-    ponytail.rotation.x = -0.45;
+    // Rear Ponytail Exit Aperture & Styled Hair
+    const ponytail = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.028, 0.28, 8), hair);
+    ponytail.position.set(0, -0.04, -0.18);
+    ponytail.rotation.x = -0.40;
     group.add(ponytail);
 
-    // Over-Ear Communications Headset with Padded Headband
-    const headband = new THREE.Mesh(new THREE.CylinderGeometry(0.134, 0.134, 0.024, 16), gearPolymer);
-    headband.position.set(0, 0.04, -0.01);
-    group.add(headband);
+    // Ballistic Goggles Resting over Crown/Forehead
+    const goggleFrame = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.048, 0.035), gearPolymer);
+    goggleFrame.position.set(0, 0.075, 0.10);
+    goggleFrame.rotation.x = -0.35;
+    group.add(goggleFrame);
 
-    const lEar = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.055, 0.044), gearPolymer);
-    lEar.position.set(-0.132, 0.005, 0.01);
-    group.add(lEar);
+    const goggleGlass = new THREE.Mesh(new THREE.BoxGeometry(0.145, 0.034, 0.010), goggleLens);
+    goggleGlass.position.set(0, 0.075, 0.115);
+    goggleGlass.rotation.x = -0.35;
+    group.add(goggleGlass);
 
-    const rEar = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.055, 0.044), gearPolymer);
-    rEar.position.set(0.132, 0.005, 0.01);
-    group.add(rEar);
-
-    // Boom Microphone
-    const micArm = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.11, 6), this.materials.metal);
-    micArm.rotation.set(0.3, 0.2, 0.9);
-    micArm.position.set(-0.08, -0.04, 0.08);
-    group.add(micArm);
-
-    const micHead = new THREE.Mesh(new THREE.SphereGeometry(0.011, 8, 8), gearPolymer);
-    micHead.position.set(-0.035, -0.05, 0.12);
-    group.add(micHead);
+    // Front Velcro Morale Patch
+    const capPatch = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.026, 0.006), teamAccent);
+    capPatch.position.set(0, 0.065, 0.128);
+    group.add(capPatch);
 
     return group;
   }
@@ -533,31 +994,23 @@ class TacticalOperator {
     const group = new THREE.Group();
     const { plateCarrier, gearPolymer, patch, teamAccent } = this.materials;
 
-    // Armored Torso Plate Carrier Block
-    const vest = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.44, 0.28), plateCarrier);
-    vest.position.set(0, 0, 0);
-    vest.castShadow = true;
-    group.add(vest);
+    // Front Ballistic SAPI Plate Pocket with MOLLE Ribs
+    const frontPlate = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.34, 0.09), plateCarrier);
+    frontPlate.position.set(0, 0.02, 0.10);
+    group.add(frontPlate);
 
-    // Horizontal MOLLE Webbing Strips across chest
-    for (let i = 0; i < 4; i++) {
-      const molle = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.014, 0.008), gearPolymer);
-      molle.position.set(0, 0.10 - i * 0.06, 0.144);
-      group.add(molle);
-    }
-
-    // Authentic Stencil "CS-3D" Velcro Chest Patch
+    // CS-3D Velcro Chest Patch
     const chestPatch = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.075, 0.008), patch);
-    chestPatch.position.set(0, 0.12, 0.148);
+    chestPatch.position.set(0, 0.10, 0.148);
     group.add(chestPatch);
 
     // Shoulder Straps with wire routing
     const lStrap = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.22), plateCarrier);
-    lStrap.position.set(-0.16, 0.20, 0);
+    lStrap.position.set(-0.16, 0.18, 0);
     group.add(lStrap);
 
     const rStrap = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.22), plateCarrier);
-    rStrap.position.set(0.16, 0.20, 0);
+    rStrap.position.set(0.16, 0.18, 0);
     group.add(rStrap);
 
     // Tactical Shoulder Radio (PRC-152) on Left Chest
@@ -565,29 +1018,20 @@ class TacticalOperator {
     radio.position.set(-0.16, 0.08, 0.14);
     group.add(radio);
 
-    // Flexible Whip Radio Antenna extending up over shoulder
+    // Flexible Whip Radio Antenna
     const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.26, 6), gearPolymer);
     antenna.position.set(-0.17, 0.24, 0.12);
     antenna.rotation.z = -0.12;
     group.add(antenna);
 
-    // Side Cummerbund Armor & Buckles
-    const cummerbundL = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.18, 0.26), gearPolymer);
-    cummerbundL.position.set(-0.205, -0.04, 0);
-    group.add(cummerbundL);
-
-    const cummerbundR = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.18, 0.26), gearPolymer);
-    cummerbundR.position.set(0.205, -0.04, 0);
-    group.add(cummerbundR);
-
     // Rear Compact Assault Hydration Pack
-    const backPack = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.32, 0.075), plateCarrier);
-    backPack.position.set(0, 0.04, -0.16);
+    const backPack = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.30, 0.075), plateCarrier);
+    backPack.position.set(0, 0.02, -0.13);
     group.add(backPack);
 
-    // Team Identification Patch on Upper Back
-    const backPatch = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.006), teamAccent);
-    backPatch.position.set(0, 0.14, -0.20);
+    // Team Accent on Upper Back
+    const backPatch = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.035, 0.006), teamAccent);
+    backPatch.position.set(0, 0.12, -0.17);
     group.add(backPatch);
 
     return group;
@@ -597,13 +1041,11 @@ class TacticalOperator {
     const group = new THREE.Group();
     const { plateCarrier, tanPolymer, gearPolymer } = this.materials;
 
-    // Triple Pouch Chassis
     const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.12, 0.042), plateCarrier);
     group.add(chassis);
 
-    // 3 Protruding PMAG 5.56 Magazines with Bungee Retention Pulls
     const offsets = [-0.085, 0, 0.085];
-    offsets.forEach(x => {
+    offsets.forEach((x) => {
       const mag = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.10, 0.048), tanPolymer);
       mag.position.set(x, 0.04, 0.01);
       group.add(mag);
@@ -620,7 +1062,7 @@ class TacticalOperator {
     const group = new THREE.Group();
     const { gearPolymer, metal, uniform } = this.materials;
 
-    // Dual Thigh Leg Straps with Buckles
+    // Dual Thigh Straps
     const upperStrap = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.028, 0.18), uniform);
     upperStrap.position.set(0, 0.06, 0);
     group.add(upperStrap);
@@ -629,12 +1071,12 @@ class TacticalOperator {
     lowerStrap.position.set(0, -0.06, 0);
     group.add(lowerStrap);
 
-    // Rigid Molded Kydex Holster Body
+    // Molded Kydex Holster
     const holsterBody = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.16, 0.065), gearPolymer);
     holsterBody.position.set(0.04, 0, 0);
     group.add(holsterBody);
 
-    // Tactical Sidearm Pistol Holstered Inside
+    // Holstered Sidearm Pistol
     const pistolSlide = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.04, 0.12), metal);
     pistolSlide.position.set(0.04, 0.06, -0.01);
     group.add(pistolSlide);
@@ -651,16 +1093,24 @@ class TacticalOperator {
     const group = new THREE.Group();
     const { plateCarrier, gearPolymer, uniform } = this.materials;
 
-    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.026, 0.17), uniform);
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.03, 0.18), uniform);
     group.add(strap);
 
-    const pouch = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.11, 0.042), plateCarrier);
-    pouch.position.set(-0.035, 0, 0);
-    group.add(pouch);
+    const pouch1 = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.13, 0.05), plateCarrier);
+    pouch1.position.set(-0.035, 0, -0.03);
+    group.add(pouch1);
 
-    const flap = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.035, 0.046), gearPolymer);
-    flap.position.set(-0.035, 0.045, 0);
-    group.add(flap);
+    const pouch2 = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.13, 0.05), plateCarrier);
+    pouch2.position.set(-0.035, 0, 0.03);
+    group.add(pouch2);
+
+    const flap1 = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.035, 0.054), gearPolymer);
+    flap1.position.set(-0.035, 0.065, -0.03);
+    group.add(flap1);
+
+    const flap2 = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.035, 0.054), gearPolymer);
+    flap2.position.set(-0.035, 0.065, 0.03);
+    group.add(flap2);
 
     return group;
   }
@@ -669,24 +1119,17 @@ class TacticalOperator {
     const group = new THREE.Group();
     const { gearPolymer, uniform } = this.materials;
 
-    // Hard-Shell Molded Knee Cap
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.12, 0.05), gearPolymer);
-    cap.position.set(0, 0, 0.02);
-    group.add(cap);
+    const padShell = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.045), gearPolymer);
+    padShell.castShadow = true;
+    group.add(padShell);
 
-    // Center Reinforcement Armor Rib
-    const rib = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.10, 0.06), gearPolymer);
-    rib.position.set(0, 0, 0.025);
-    group.add(rib);
+    const strap1 = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.024, 0.14), uniform);
+    strap1.position.set(0, 0.045, -0.04);
+    group.add(strap1);
 
-    // Dual Elastic Straps behind knee
-    const upperStrap = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, 0.14), uniform);
-    upperStrap.position.set(0, 0.04, -0.04);
-    group.add(upperStrap);
-
-    const lowerStrap = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, 0.14), uniform);
-    lowerStrap.position.set(0, -0.04, -0.04);
-    group.add(lowerStrap);
+    const strap2 = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.024, 0.14), uniform);
+    strap2.position.set(0, -0.045, -0.04);
+    group.add(strap2);
 
     return group;
   }
@@ -695,198 +1138,250 @@ class TacticalOperator {
     const group = new THREE.Group();
     const { gearPolymer, uniform } = this.materials;
 
-    // Glove Hand Body
-    const glove = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.058, 0.082), uniform);
+    const glove = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.09, 0.045), uniform);
     group.add(glove);
 
-    // Molded Composite Hard-Knuckle Armor Guard
-    const knuckleGuard = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.024, 0.032), gearPolymer);
-    knuckleGuard.position.set(0, 0.022, -0.015);
+    const knuckleGuard = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.025, 0.035), gearPolymer);
+    knuckleGuard.position.set(0, 0.025, isLeft ? -0.015 : 0.015);
     group.add(knuckleGuard);
 
-    // Wrist Cinch Strap with Velcro Tab
-    const wristStrap = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.018, 0.024), gearPolymer);
-    wristStrap.position.set(0, 0, 0.035);
-    group.add(wristStrap);
-
     return group;
   }
 
-  buildRealisticAssaultRifle() {
+  /**
+   * Builds high-detail weapon models with proper muzzle points and sockets
+   */
+  buildWeaponModel(weaponKey = 'carbine') {
     const group = new THREE.Group();
-    const { metal, gearPolymer, tanPolymer, goggleLens, teamAccent } = this.materials;
+    const { metal, gearPolymer, tanPolymer, goggleLens } = this.materials;
 
-    // Upper & Lower Receiver
-    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.075, 0.34), metal);
-    group.add(receiver);
+    if (weaponKey === 'smg') {
+      // Vector-9 SMG
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.085, 0.26), metal);
+      group.add(receiver);
 
-    // Top Picatinny Rail
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.014, 0.28), gearPolymer);
-    rail.position.set(0, 0.044, -0.04);
-    group.add(rail);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.14, 8), metal);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.015, -0.19);
+      group.add(barrel);
 
-    // Holographic Reflex Optic (EOTech Style)
-    const opticBase = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.016, 0.085), gearPolymer);
-    opticBase.position.set(0, 0.058, -0.04);
-    group.add(opticBase);
+      const optic = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.05), gearPolymer);
+      optic.position.set(0, 0.06, -0.02);
+      group.add(optic);
 
-    const opticHood = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.042, 0.075), gearPolymer);
-    opticHood.position.set(0, 0.082, -0.04);
-    group.add(opticHood);
+      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.18, 0.036), gearPolymer);
+      mag.position.set(0, -0.08, -0.02);
+      group.add(mag);
 
-    const opticGlass = new THREE.Mesh(new THREE.PlaneGeometry(0.028, 0.028), goggleLens);
-    opticGlass.position.set(0, 0.082, -0.078);
-    group.add(opticGlass);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.10, 0.04), gearPolymer);
+      grip.position.set(0, -0.06, 0.08);
+      grip.rotation.x = 0.35;
+      group.add(grip);
 
-    const opticReticle = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.005, 0.005), teamAccent);
-    opticReticle.position.set(0, 0.082, -0.04);
-    group.add(opticReticle);
+      this.muzzlePoint.set(0, 0.015, -0.27);
 
-    // Forward Handguard & Barrel
-    const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.048, 0.22), gearPolymer);
-    handguard.position.set(0, 0.015, -0.26);
-    group.add(handguard);
+    } else if (weaponKey === 'sniper') {
+      // AWM-50 Sniper Rifle
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.08, 0.42), metal);
+      group.add(receiver);
 
-    // PEQ-15 Laser / IR Box on Top Front Rail
-    const peqBox = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.024, 0.07), tanPolymer);
-    peqBox.position.set(0, 0.048, -0.24);
-    group.add(peqBox);
+      // Fluted heavy barrel
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.014, 0.55, 10), metal);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.015, -0.48);
+      group.add(barrel);
 
-    // Under-barrel Vertical Tactical Foregrip
-    const foregrip = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.08, 8), gearPolymer);
-    foregrip.position.set(0, -0.045, -0.24);
-    group.add(foregrip);
+      // Large High-Magnification Scope
+      const scopeBody = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.020, 0.22, 10), gearPolymer);
+      scopeBody.rotation.x = Math.PI / 2;
+      scopeBody.position.set(0, 0.075, -0.06);
+      group.add(scopeBody);
 
-    // Cylindrical Tactical Barrel Suppressor / Silencer
-    const suppressor = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.22, 12), metal);
-    suppressor.rotation.x = Math.PI / 2;
-    suppressor.position.set(0, 0.015, -0.46);
-    group.add(suppressor);
+      const scopeLens = new THREE.Mesh(new THREE.CircleGeometry(0.018, 12), goggleLens);
+      scopeLens.position.set(0, 0.075, -0.171);
+      group.add(scopeLens);
 
-    // 30-Round Curved Magazine (Tan PMAG) with Textured Base
-    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.16, 0.065), tanPolymer);
-    mag.position.set(0, -0.09, -0.06);
-    mag.rotation.x = -0.22;
-    group.add(mag);
+      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.11, 0.065), tanPolymer);
+      mag.position.set(0, -0.07, -0.06);
+      group.add(mag);
 
-    // Ergonomic Stippled Pistol Grip
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.11, 0.045), gearPolymer);
-    grip.position.set(0, -0.075, 0.10);
-    grip.rotation.x = 0.35;
-    group.add(grip);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.11, 0.042), gearPolymer);
+      grip.position.set(0, -0.08, 0.12);
+      grip.rotation.x = 0.35;
+      group.add(grip);
 
-    // SOPMOD Crane Buttstock
-    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.095, 0.18), tanPolymer);
-    stock.position.set(0, 0.01, 0.24);
-    group.add(stock);
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.11, 0.28), tanPolymer);
+      stock.position.set(0, 0.01, 0.34);
+      group.add(stock);
 
-    group.scale.set(1.05, 1.05, 1.05);
+      this.muzzlePoint.set(0, 0.015, -0.76);
+
+    } else if (weaponKey === 'pistol') {
+      // G-18 Tactical Pistol
+      const slide = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.045, 0.18), metal);
+      group.add(slide);
+
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.11, 0.045), gearPolymer);
+      grip.position.set(0, -0.065, 0.04);
+      grip.rotation.x = 0.32;
+      group.add(grip);
+
+      this.muzzlePoint.set(0, 0.01, -0.10);
+
+    } else {
+      // Default: P-24 Tactical Assault Rifle (Carbine)
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.075, 0.34), metal);
+      group.add(receiver);
+
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.014, 0.28), gearPolymer);
+      rail.position.set(0, 0.044, -0.04);
+      group.add(rail);
+
+      // Holographic Reflex Optic
+      const opticHood = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.042, 0.075), gearPolymer);
+      opticHood.position.set(0, 0.082, -0.04);
+      group.add(opticHood);
+
+      const opticGlass = new THREE.Mesh(new THREE.PlaneGeometry(0.028, 0.028), goggleLens);
+      opticGlass.position.set(0, 0.082, -0.078);
+      group.add(opticGlass);
+
+      // Handguard & Barrel
+      const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.048, 0.22), gearPolymer);
+      handguard.position.set(0, 0.015, -0.26);
+      group.add(handguard);
+
+      const suppressor = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.20, 10), metal);
+      suppressor.rotation.x = Math.PI / 2;
+      suppressor.position.set(0, 0.015, -0.46);
+      group.add(suppressor);
+
+      // Tan PMAG Magazine
+      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.16, 0.065), tanPolymer);
+      mag.position.set(0, -0.09, -0.06);
+      mag.rotation.x = -0.22;
+      group.add(mag);
+
+      // Pistol Grip
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.11, 0.045), gearPolymer);
+      grip.position.set(0, -0.075, 0.10);
+      grip.rotation.x = 0.35;
+      group.add(grip);
+
+      // Buttstock
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.095, 0.18), tanPolymer);
+      stock.position.set(0, 0.01, 0.24);
+      group.add(stock);
+
+      this.muzzlePoint.set(0, 0.015, -0.57);
+    }
+
+    // Attach Muzzle Flash Effects to Weapon Tip
+    const muzzleLight = new THREE.PointLight(0xffaa22, 0, 4.5);
+    muzzleLight.position.copy(this.muzzlePoint);
+    group.add(muzzleLight);
+    this.muzzleLight = muzzleLight;
+
+    // Muzzle Flash Sprite
+    const flashCanvas = document.createElement('canvas');
+    flashCanvas.width = 64;
+    flashCanvas.height = 64;
+    const fctx = flashCanvas.getContext('2d');
+    if (fctx) {
+      const grad = fctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      grad.addColorStop(0, 'rgba(255, 255, 220, 1.0)');
+      grad.addColorStop(0.3, 'rgba(255, 170, 34, 0.85)');
+      grad.addColorStop(0.8, 'rgba(255, 80, 0, 0.3)');
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      fctx.fillStyle = grad;
+      fctx.fillRect(0, 0, 64, 64);
+    }
+    const flashTexture = new THREE.CanvasTexture(flashCanvas);
+    const flashMat = new THREE.SpriteMaterial({ map: flashTexture, transparent: true, blending: THREE.AdditiveBlending });
+    const flashSprite = new THREE.Sprite(flashMat);
+    flashSprite.scale.set(0.45, 0.45, 0.45);
+    flashSprite.position.copy(this.muzzlePoint);
+    flashSprite.visible = false;
+    group.add(flashSprite);
+    this.muzzleSprite = flashSprite;
+
     return group;
   }
 
-  buildProceduralAnatomicalModel() {
-    this.modelRoot = new THREE.Group();
-    const scale = this.isFemale ? 0.95 : 1.0;
-    this.modelRoot.scale.set(scale, scale, scale);
+  setWeapon(weaponKey = 'carbine') {
+    if (this.currentWeaponKey === weaponKey && this.weaponGroup) return;
+    this.currentWeaponKey = weaponKey;
 
-    const { uniform, femalePants, skin } = this.materials;
-    const pantsMat = this.isFemale ? femalePants : uniform;
+    if (this.weaponGroup && this.weaponSocket) {
+      this.weaponSocket.remove(this.weaponGroup);
+      this.weaponGroup = null;
+    }
 
-    // Torso / Combat Shirt
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.48, 0.24), uniform);
-    torso.position.set(0, 1.25, 0);
-    torso.castShadow = true;
-    this.modelRoot.add(torso);
-
-    // Head Base
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), skin);
-    head.position.set(0, 1.66, 0);
-    this.modelRoot.add(head);
-
-    // Arms
-    const armGeo = new THREE.CylinderGeometry(0.055, 0.05, 0.60, 8);
-    const leftArm = new THREE.Mesh(armGeo, uniform);
-    leftArm.position.set(-0.25, 1.25, 0.08);
-    leftArm.rotation.x = 0.4;
-    this.modelRoot.add(leftArm);
-
-    const rightArm = new THREE.Mesh(armGeo, uniform);
-    rightArm.position.set(0.25, 1.25, 0.08);
-    rightArm.rotation.x = 0.4;
-    this.modelRoot.add(rightArm);
-
-    // Legs
-    const legGeo = new THREE.CylinderGeometry(0.075, 0.065, 0.85, 8);
-    const leftLeg = new THREE.Mesh(legGeo, pantsMat);
-    leftLeg.position.set(-0.12, 0.48, 0);
-    this.modelRoot.add(leftLeg);
-
-    const rightLeg = new THREE.Mesh(legGeo, pantsMat);
-    rightLeg.position.set(0.12, 0.48, 0);
-    this.modelRoot.add(rightLeg);
-
-    this.root.add(this.modelRoot);
-
-    // Attach all authentic tactical gear to procedural nodes
-    const headGear = this.isFemale ? this.buildFemaleHeadGear() : this.buildMaleHeadGear();
-    headGear.position.set(0, 1.66, 0);
-    this.modelRoot.add(headGear);
-
-    const plateCarrier = this.buildPlateCarrierGear();
-    plateCarrier.position.set(0, 1.26, 0);
-    this.modelRoot.add(plateCarrier);
-
-    const magPouches = this.buildTripleMagPouches();
-    magPouches.position.set(0, 1.12, 0.14);
-    this.modelRoot.add(magPouches);
-
-    const holster = this.buildDropLegHolster();
-    holster.position.set(0.18, 0.62, 0);
-    this.modelRoot.add(holster);
-
-    const thighPouches = this.buildDualThighPouches();
-    thighPouches.position.set(-0.18, 0.62, 0);
-    this.modelRoot.add(thighPouches);
-
-    const rKnee = this.buildKneePad();
-    rKnee.position.set(0.12, 0.45, 0.08);
-    this.modelRoot.add(rKnee);
-
-    const lKnee = this.buildKneePad();
-    lKnee.position.set(-0.12, 0.45, 0.08);
-    this.modelRoot.add(lKnee);
-
-    const rifle = this.buildRealisticAssaultRifle();
-    rifle.position.set(0.22, 1.15, 0.22);
-    this.weaponGroup = rifle;
-    this.modelRoot.add(rifle);
+    if (this.weaponSocket) {
+      this.weaponGroup = this.buildWeaponModel(weaponKey);
+      const cal = TacticalOperator.currentWeaponCalibration;
+      this.weaponGroup.position.set(cal.posX, cal.posY, cal.posZ);
+      this.weaponGroup.rotation.set(cal.rotX, cal.rotY, cal.rotZ);
+      this.weaponSocket.add(this.weaponGroup);
+    }
   }
 
   buildHitboxes() {
-    const headHitGeo = new THREE.BoxGeometry(0.38, 0.40, 0.38);
+    const headHitGeo = new THREE.BoxGeometry(0.38, 0.38, 0.38);
     const hitMat = new THREE.MeshBasicMaterial({ visible: false, wireframe: true });
 
     this.headMesh = new THREE.Mesh(headHitGeo, hitMat);
-    this.headMesh.position.set(0, 1.68, 0);
-    this.headMesh.userData = { isHead: true, operator: this };
-    this.root.add(this.headMesh);
+    this.headMesh.userData = {
+      isHead: true,
+      isHeadshot: true,
+      isBody: false,
+      operator: this,
+      bot: this.bot,
+      remotePlayer: this.remotePlayer
+    };
+
+    if (this.headBone) {
+      this.headMesh.position.set(0, 0, 0);
+      this.headBone.add(this.headMesh);
+    } else if (this.headGroup) {
+      this.headMesh.position.set(0, 0, 0);
+      this.headGroup.add(this.headMesh);
+    } else {
+      this.headMesh.position.set(0, 1.68, 0);
+      this.root.add(this.headMesh);
+    }
 
     const bodyHitGeo = new THREE.CylinderGeometry(0.36, 0.36, 1.45, 8);
     this.bodyMesh = new THREE.Mesh(bodyHitGeo, hitMat);
-    this.bodyMesh.position.set(0, 0.82, 0);
-    this.bodyMesh.userData = { isHead: false, isBody: true, operator: this };
-    this.root.add(this.bodyMesh);
+    this.bodyMesh.userData = {
+      isHead: false,
+      isHeadshot: false,
+      isBody: true,
+      operator: this,
+      bot: this.bot,
+      remotePlayer: this.remotePlayer
+    };
+
+    if (this.spineBone) {
+      this.bodyMesh.position.set(0, -0.35, 0);
+      this.spineBone.add(this.bodyMesh);
+    } else if (this.pelvisGroup) {
+      this.bodyMesh.position.set(0, -0.12, 0);
+      this.pelvisGroup.add(this.bodyMesh);
+    } else {
+      this.bodyMesh.position.set(0, 0.82, 0);
+      this.root.add(this.bodyMesh);
+    }
   }
 
   buildOverheadHUD() {
-    // 1. Callsign Nameplate Billboard
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 64;
     const ctx = canvas.getContext('2d');
 
     const isBlue = this.team === 'blue';
-    ctx.fillStyle = isBlue ? 'rgba(0, 240, 255, 0.88)' : 'rgba(239, 68, 68, 0.88)';
+    ctx.fillStyle = isBlue ? 'rgba(0, 240, 255, 0.90)' : 'rgba(239, 68, 68, 0.90)';
     ctx.font = 'bold 24px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -901,7 +1396,6 @@ class TacticalOperator {
     this.nameTagSprite.scale.set(1.4, 0.35, 1);
     this.root.add(this.nameTagSprite);
 
-    // 2. Health Bar Billboard
     const hbGroup = new THREE.Group();
     hbGroup.position.set(0, 2.05, 0);
 
@@ -924,57 +1418,252 @@ class TacticalOperator {
   }
 
   triggerShoot() {
-    if (this.weaponGroup) {
-      this.weaponGroup.position.z += 0.04;
-      setTimeout(() => {
-        if (this.weaponGroup) this.weaponGroup.position.z -= 0.04;
-      }, 55);
+    // 1. Weapon Recoil Kick & Muzzle Climb
+    this.weaponRecoilOffset = 0.055;
+    this.weaponRecoilPitch = 0.075;
+
+    // 2. Muzzle Flash Point Light & Sprite
+    if (this.muzzleLight) {
+      this.muzzleLight.intensity = 3.5;
+    }
+    if (this.muzzleSprite) {
+      this.muzzleSprite.visible = true;
+      this.muzzleSprite.rotation.z = Math.random() * Math.PI * 2;
+    }
+    this.muzzleTimer = 0.045; // 45ms flash duration
+
+    // 3. Ejected Brass Shell Casing
+    this.spawnEjectedShell();
+  }
+
+  spawnEjectedShell() {
+    if (!this.root || !this.weaponGroup) return;
+    try {
+      const shellGeo = new THREE.CylinderGeometry(0.007, 0.007, 0.035, 6);
+      const shellMesh = new THREE.Mesh(shellGeo, this.materials.brass);
+
+      // Compute world position near weapon ejection port
+      const spawnPos = new THREE.Vector3(0.06, 0.03, -0.04);
+      this.weaponGroup.localToWorld(spawnPos);
+      shellMesh.position.copy(spawnPos);
+
+      // Random ejection velocity vector (upward and to the right)
+      const vel = new THREE.Vector3(
+        0.8 + Math.random() * 0.8,
+        1.2 + Math.random() * 0.8,
+        (Math.random() - 0.5) * 0.6
+      );
+      vel.applyEuler(this.root.rotation);
+
+      if (this.scene) {
+        this.scene.add(shellMesh);
+        this.activeShells.push({
+          mesh: shellMesh,
+          vel: vel,
+          rotSpeed: (Math.random() - 0.5) * 20,
+          lifetime: 0.35
+        });
+      }
+    } catch (_) {}
+  }
+
+  updateShells(delta) {
+    for (let i = this.activeShells.length - 1; i >= 0; i--) {
+      const shell = this.activeShells[i];
+      shell.lifetime -= delta;
+      if (shell.lifetime <= 0) {
+        if (this.scene) this.scene.remove(shell.mesh);
+        if (shell.mesh.geometry) shell.mesh.geometry.dispose();
+        this.activeShells.splice(i, 1);
+      } else {
+        shell.vel.y -= 9.8 * delta; // Gravity
+        shell.mesh.position.addScaledVector(shell.vel, delta);
+        shell.mesh.rotation.x += shell.rotSpeed * delta;
+        shell.mesh.rotation.z += shell.rotSpeed * delta;
+      }
     }
   }
 
-  updateAnimation(delta, speed = 0, isGrounded = true, camera = null) {
-    if (this.mixer) {
-      this.mixer.update(delta);
+  hitFlinch() {
+    this.hitFlinchTimer = 0.16; // 160ms torso flinch
+  }
+
+  /**
+   * Universal character update: drives skeletal GLB animations or the procedural rig
+   */
+  updateAnimation(delta, speed = 0, isGrounded = true, camera = null, isCrouching = false, pitch = 0) {
+    this.currentSpeed = speed;
+    this.isCrouching = !!isCrouching;
+    this.currentPitch = pitch || 0;
+
+    // Decay muzzle flash
+    if (this.muzzleTimer > 0) {
+      this.muzzleTimer -= delta;
+      if (this.muzzleTimer <= 0) {
+        if (this.muzzleLight) this.muzzleLight.intensity = 0;
+        if (this.muzzleSprite) this.muzzleSprite.visible = false;
+      }
     }
 
-    // Death collapse state
-    if (this.isDead) {
-      if (this.modelRoot) {
-        this.modelRoot.rotation.x = THREE.MathUtils.lerp(this.modelRoot.rotation.x, -Math.PI / 2, delta * 8.0);
-        this.modelRoot.position.y = THREE.MathUtils.lerp(this.modelRoot.position.y, 0.18, delta * 8.0);
+    // Update flying shell casings
+    this.updateShells(delta);
+
+    // Distance-throttled animation update: 1/2 rate >35m, 1/4 rate >65m
+    this.animFrameCount = (this.animFrameCount || 0) + 1;
+    this.accumulatedDelta = (this.accumulatedDelta || 0) + delta;
+    if (camera && this.root) {
+      const dist = camera.position.distanceTo(this.root.position);
+      if (dist > 65 && (this.animFrameCount % 4 !== 0)) {
+        return;
+      } else if (dist > 35 && (this.animFrameCount % 2 !== 0)) {
+        return;
       }
+    }
+    const effectiveDelta = this.accumulatedDelta;
+    this.accumulatedDelta = 0;
+
+    // If GLB skeletal mixer is active:
+    if (this.mixer) {
+      this.mixer.update(effectiveDelta);
+      if (this.isDead) {
+        if (this.modelRoot) {
+          this.modelRoot.rotation.x = THREE.MathUtils.lerp(this.modelRoot.rotation.x, -Math.PI / 2, effectiveDelta * 8.0);
+          this.modelRoot.position.y = THREE.MathUtils.lerp(this.modelRoot.position.y, 0.18, effectiveDelta * 8.0);
+        }
+      } else {
+        // Upper-body aim pitch adjustment
+        if (this.spineBone) {
+          this.spineBone.rotation.x = THREE.MathUtils.lerp(this.spineBone.rotation.x, (pitch || 0) * 0.4, effectiveDelta * 12.0);
+        }
+        if (this.headBone) {
+          this.headBone.rotation.x = THREE.MathUtils.lerp(this.headBone.rotation.x, (pitch || 0) * 0.4, effectiveDelta * 12.0);
+        }
+
+        let targetAction = 'idle';
+        if (speed > 5.2 && this.actions.run) targetAction = 'run';
+        else if (speed > 0.35 && this.actions.walk) targetAction = 'walk';
+
+        if (targetAction !== this.currentAction) {
+          const prev = this.actions[this.currentAction];
+          const next = this.actions[targetAction];
+          if (prev && next) {
+            prev.fadeOut(0.20);
+            next.reset().fadeIn(0.20).play();
+            this.currentAction = targetAction;
+          }
+        }
+      }
+    } else {
+      // High-Fidelity Procedural Animation Engine
+      this.updateProceduralRig(effectiveDelta, speed, isCrouching, pitch);
+    }
+
+    // Billboards face camera
+    if (camera) {
+      if (this.healthBarGroup) this.healthBarGroup.quaternion.copy(camera.quaternion);
+      if (this.nameTagSprite) this.nameTagSprite.quaternion.copy(camera.quaternion);
+    }
+  }
+
+  updateProceduralRig(delta, speed, isCrouching, pitch) {
+    if (!this.pelvisGroup) return;
+
+    // Recoil recovery
+    this.weaponRecoilOffset = THREE.MathUtils.lerp(this.weaponRecoilOffset, 0, delta * 18);
+    this.weaponRecoilPitch = THREE.MathUtils.lerp(this.weaponRecoilPitch, 0, delta * 18);
+
+    if (this.weaponGroup) {
+      this.weaponGroup.position.z = -0.06 - this.weaponRecoilOffset;
+      this.weaponGroup.rotation.x = -Math.PI / 2 + 0.15 - this.weaponRecoilPitch;
+    }
+
+    // 1. Death Animation State
+    if (this.isDead) {
+      this.pelvisGroup.position.y = THREE.MathUtils.lerp(this.pelvisGroup.position.y, 0.16, delta * 7.0);
+      this.pelvisGroup.rotation.x = THREE.MathUtils.lerp(this.pelvisGroup.rotation.x, -Math.PI / 2 + 0.2, delta * 6.0);
+      this.pelvisGroup.rotation.z = THREE.MathUtils.lerp(this.pelvisGroup.rotation.z, 0.35, delta * 5.0);
+      if (this.rKneeGroup) this.rKneeGroup.rotation.x = 1.1;
+      if (this.lKneeGroup) this.lKneeGroup.rotation.x = 0.8;
       if (this.nameTagSprite) this.nameTagSprite.visible = false;
       if (this.healthBarGroup) this.healthBarGroup.visible = false;
       return;
     }
 
-    // Blend between Idle, Walk, and Run based on actual kinematic speed
-    if (this.actions.idle && (this.actions.walk || this.actions.run)) {
-      let targetAction = 'idle';
-      if (speed > 5.5 && this.actions.run) {
-        targetAction = 'run';
-      } else if (speed > 0.35 && this.actions.walk) {
-        targetAction = 'walk';
-      }
+    // 2. Crouch State (Smooth Pelvis Lowering & Knee Bend)
+    const targetPelvisY = isCrouching ? 0.62 : 0.94;
+    this.pelvisGroup.position.y = THREE.MathUtils.lerp(this.pelvisGroup.position.y, targetPelvisY, delta * 10.0);
 
-      if (targetAction !== this.currentAction) {
-        const prev = this.actions[this.currentAction];
-        const next = this.actions[targetAction];
-        if (prev && next) {
-          prev.fadeOut(0.22);
-          next.reset().fadeIn(0.22).play();
-          this.currentAction = targetAction;
-        }
+    // Update Hitbox elevations when crouching vs standing
+    const targetHeadY = isCrouching ? 1.25 : 1.68;
+    const targetBodyY = isCrouching ? 0.60 : 0.82;
+    if (this.headMesh) this.headMesh.position.y = THREE.MathUtils.lerp(this.headMesh.position.y, targetHeadY, delta * 10.0);
+    if (this.bodyMesh) this.bodyMesh.position.y = THREE.MathUtils.lerp(this.bodyMesh.position.y, targetBodyY, delta * 10.0);
+
+    // 3. Aim Pitch (Torso & Head track crosshair elevation)
+    const clampedPitch = Math.max(-0.9, Math.min(0.9, pitch));
+    if (this.spineGroup) {
+      let flinchOffset = 0;
+      if (this.hitFlinchTimer > 0) {
+        this.hitFlinchTimer -= delta;
+        flinchOffset = -0.18;
       }
+      this.spineGroup.rotation.x = clampedPitch * 0.55 + flinchOffset;
+    }
+    if (this.headGroup) {
+      this.headGroup.rotation.x = clampedPitch * 0.45;
     }
 
-    // Ensure overhead billboards face camera
-    if (camera) {
-      if (this.healthBarGroup) {
-        this.healthBarGroup.quaternion.copy(camera.quaternion);
+    // 4. Locomotion Cycle (Walk / Sprint / Idle)
+    if (speed > 0.25) {
+      // Moving: Stride cadence scales with actual speed
+      const freq = speed > 5.0 ? 11.5 : 8.5;
+      this.walkCycle += delta * freq;
+      const stride = isCrouching ? 0.35 : (speed > 5.0 ? 0.75 : 0.52);
+
+      const sinCycle = Math.sin(this.walkCycle);
+      const cosCycle = Math.cos(this.walkCycle);
+
+      // Leg swings at hips
+      if (this.rHipGroup) this.rHipGroup.rotation.x = sinCycle * stride;
+      if (this.lHipGroup) this.lHipGroup.rotation.x = -sinCycle * stride;
+
+      // Knee natural backward flexion
+      if (this.rKneeGroup) {
+        const rKneeFlex = isCrouching ? 0.95 : Math.max(0, -sinCycle * stride * 1.35);
+        this.rKneeGroup.rotation.x = rKneeFlex;
       }
-      if (this.nameTagSprite) {
-        this.nameTagSprite.quaternion.copy(camera.quaternion);
+      if (this.lKneeGroup) {
+        const lKneeFlex = isCrouching ? 0.95 : Math.max(0, sinCycle * stride * 1.35);
+        this.lKneeGroup.rotation.x = lKneeFlex;
+      }
+
+      // Vertical hip bobbing
+      const bobAmount = speed > 5.0 ? 0.04 : 0.025;
+      this.pelvisGroup.position.y += Math.abs(Math.sin(this.walkCycle * 2)) * bobAmount;
+
+      // Subtle torso yaw counter-sway
+      if (this.spineGroup) {
+        this.spineGroup.rotation.y = sinCycle * 0.06;
+      }
+      // Subtle arm bobbing
+      if (this.rShoulderGroup) {
+        this.rShoulderGroup.rotation.x = -0.65 + cosCycle * 0.04;
+      }
+    } else {
+      // Idle: smooth return to neutral posture with subtle natural breathing
+      this.idleCycle += delta * 1.8;
+      const breath = Math.sin(this.idleCycle) * 0.015;
+
+      if (this.rHipGroup) this.rHipGroup.rotation.x = THREE.MathUtils.lerp(this.rHipGroup.rotation.x, isCrouching ? 0.65 : 0, delta * 8.0);
+      if (this.lHipGroup) this.lHipGroup.rotation.x = THREE.MathUtils.lerp(this.lHipGroup.rotation.x, isCrouching ? 0.65 : 0, delta * 8.0);
+      if (this.rKneeGroup) this.rKneeGroup.rotation.x = THREE.MathUtils.lerp(this.rKneeGroup.rotation.x, isCrouching ? 0.90 : 0, delta * 8.0);
+      if (this.lKneeGroup) this.lKneeGroup.rotation.x = THREE.MathUtils.lerp(this.lKneeGroup.rotation.x, isCrouching ? 0.90 : 0, delta * 8.0);
+
+      if (this.chestGroup) {
+        this.chestGroup.scale.set(1 + breath, 1 + breath * 0.8, 1 + breath);
+      }
+      if (this.spineGroup) {
+        this.spineGroup.rotation.y = THREE.MathUtils.lerp(this.spineGroup.rotation.y, 0, delta * 6.0);
       }
     }
   }
@@ -983,8 +1672,8 @@ class TacticalOperator {
     if (this.isDead) return true;
 
     this.health = Math.max(0, this.health - amount);
+    this.hitFlinch();
 
-    // Update floating health bar width
     if (this.healthBarFill && this.healthBarFill.scale) {
       const pct = Math.max(0, this.health / this.maxHealth);
       this.healthBarFill.scale.x = pct;
@@ -1018,9 +1707,13 @@ class TacticalOperator {
     if (this.headMesh) this.headMesh.position.set(0, 1.68, 0);
     if (this.bodyMesh) this.bodyMesh.position.set(0, 0.82, 0);
 
+    if (this.pelvisGroup) {
+      this.pelvisGroup.position.set(0, 0.94, 0);
+      this.pelvisGroup.rotation.set(0, 0, 0);
+    }
     if (this.modelRoot) {
-      this.modelRoot.rotation.x = 0;
-      this.modelRoot.position.y = 0;
+      this.modelRoot.rotation.set(0, 0, 0);
+      this.modelRoot.position.set(0, 0, 0);
     }
 
     if (this.healthBarFill && this.healthBarFill.scale) {
@@ -1043,12 +1736,19 @@ class TacticalOperator {
   }
 
   destroy() {
-    if (this.root && this.scene) {
+    const idx = TacticalOperator.instances.indexOf(this);
+    if (idx !== -1) {
+      TacticalOperator.instances.splice(idx, 1);
+    }
+    if (this.scene && this.root) {
       this.scene.remove(this.root);
     }
-    if (this.mixer) {
-      this.mixer.stopAllAction();
-      this.mixer = null;
+    for (const shell of this.activeShells) {
+      if (this.scene && shell.mesh) this.scene.remove(shell.mesh);
     }
+    this.activeShells = [];
   }
 }
+
+// Expose globally
+window.TacticalOperator = TacticalOperator;

@@ -218,5 +218,38 @@ renderFaq();
 loadRewards();
 loadSupportTickets();
 loadLeaderboard();
-setInterval(loadSupportTickets, 30000);
-window.addEventListener("focus", () => { loadRewards(); loadSupportTickets(); loadLeaderboard(); });
+
+let supportPollTimer = null;
+function startSupportPolling() {
+  if (!supportPollTimer) {
+    supportPollTimer = setInterval(() => {
+      if (!document.hidden) {
+        loadSupportTickets();
+      }
+    }, 30000);
+  }
+}
+function stopSupportPolling() {
+  if (supportPollTimer) {
+    clearInterval(supportPollTimer);
+    supportPollTimer = null;
+  }
+}
+startSupportPolling();
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    stopSupportPolling();
+  } else {
+    loadSupportTickets();
+    loadRewards();
+    startSupportPolling();
+  }
+});
+window.addEventListener("focus", () => {
+  if (!document.hidden) {
+    loadRewards();
+    loadSupportTickets();
+    loadLeaderboard();
+  }
+});

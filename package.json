@@ -1,0 +1,12 @@
+{
+  "name": "secure-online-fps-game-platform",
+  "version": "1.0.0",
+  "description": "Secure Online FPS Game Platform",
+  "scripts": {
+    "validate:glb": "python tools/validate_glb.py",
+    "test:glb": "pytest backend/tests/test_validate_glb.py",
+    "test:multiplayer": "npm --prefix multiplayer-server test",
+    "test:client": "node --test frontend/public/games/three-fps/test/ai_hud_verification.test.js",
+    "test": "npm run test:client && npm run test:multiplayer"
+  }
+}

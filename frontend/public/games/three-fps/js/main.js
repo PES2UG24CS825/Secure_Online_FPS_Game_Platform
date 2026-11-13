@@ -142,6 +142,9 @@ async function initGame() {
     // Attach Window Event Handlers & Pause Navigation
     initWindowEvents(controller, gameMode, telemetry, multiplayer);
 
+    // Initialize Live Dev Weapon Calibration Sliders (F3 overlay)
+    initWeaponCalibrationSliders();
+
     // Kick off 60+ FPS render loop
     requestAnimationFrame(renderLoop);
 
@@ -199,16 +202,11 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
       botManager.stopAllBots();
       if (trainingMgr) trainingMgr.startSimulation();
     } else if (mode === 'solo') {
-      // Solo Deathmatch: exactly 25 eliminations
+      // Free Roam: zero hostile bots, free arena exploration (Task 3d)
       if (trainingMgr) trainingMgr.stopSimulation();
-      botManager.setEnabled(true);
-      if (typeof botManager.resetAllBots === 'function') {
-        botManager.resetAllBots(new THREE.Vector3(0, 1.8, 28));
-      } else {
-        botManager.resumeAllBots();
-      }
-      botManager.setDifficulty('normal');
-      gameMode.targetKills = 25;
+      botManager.setEnabled(false);
+      botManager.stopAllBots();
+      gameMode.targetKills = 0;
     } else if (mode === 'bots') {
       // Bot Combat: 12:00 timer, chosen difficulty
       if (trainingMgr) trainingMgr.stopSimulation();
@@ -344,11 +342,23 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
   const btnStartMatch = document.getElementById('btn-start-match');
   const btnLeaveRoom = document.getElementById('btn-leave-room');
 
-  const savedName = sessionStorage.getItem('securefps_player_name');
-  if (savedName) {
-    if (playerNameInput) playerNameInput.value = savedName;
-    const hudOpName = document.getElementById('hud-operator-name');
-    if (hudOpName) hudOpName.textContent = savedName.toUpperCase();
+  let savedName = sessionStorage.getItem('securefps_player_name');
+  if (!savedName || savedName === 'Ghost_01') {
+    savedName = `Operator_${Math.floor(100 + Math.random() * 900)}`;
+    sessionStorage.setItem('securefps_player_name', savedName);
+  }
+  if (playerNameInput) playerNameInput.value = savedName;
+  const hudOpName = document.getElementById('hud-operator-name');
+  if (hudOpName) hudOpName.textContent = savedName.toUpperCase();
+
+  if (playerNameInput) {
+    playerNameInput.addEventListener('input', () => {
+      const val = playerNameInput.value.trim();
+      if (val) {
+        sessionStorage.setItem('securefps_player_name', val);
+        if (hudOpName) hudOpName.textContent = val.toUpperCase();
+      }
+    });
   }
 
   // Automatically sync session-authenticated profile username & Honour Score
@@ -708,8 +718,8 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
   const showFpsCheck = document.getElementById('setting-show-fps');
   if (showFpsCheck) {
     showFpsCheck.addEventListener('change', () => {
-      const fpsEl = document.getElementById('hud-fps');
-      if (fpsEl) fpsEl.style.display = showFpsCheck.checked ? 'block' : 'none';
+      const cleanFps = document.getElementById('clean-fps-badge');
+      if (cleanFps) cleanFps.style.display = showFpsCheck.checked ? 'block' : 'none';
     });
   }
 
@@ -853,8 +863,8 @@ function loadSavedSettings(controller, camera) {
       if (el) el.checked = !!s.crosshairVisible;
     }
     if (s.showFps !== undefined) {
-      const fpsEl = document.getElementById('hud-fps');
-      if (fpsEl) fpsEl.style.display = s.showFps ? 'block' : 'none';
+      const cleanFps = document.getElementById('clean-fps-badge');
+      if (cleanFps) cleanFps.style.display = s.showFps ? 'block' : 'none';
       const el = document.getElementById('setting-show-fps');
       if (el) el.checked = !!s.showFps;
     }
@@ -1366,49 +1376,61 @@ function updateScoreboardTable(gameMode, multiplayer) {
   const kd = deaths > 0 ? (kills / deaths).toFixed(2) : (kills > 0 ? kills.toFixed(2) : '0.00');
   const score = kills * 100 + (gameMode?.headshots || 0) * 25;
 
+  const isMP = gameMode?.currentMode === 'multiplayer';
+  const localPing = isMP ? (multiplayer?.lastPing ? `${Math.round(multiplayer.lastPing)} ms` : '--') : 'LOCAL (0ms)';
+
   rows.push({
     name: localName,
     isLocal: true,
-    status: 'ACTIVE',
+    status: (gameMode?.playerHealth || 100) > 0 ? 'ACTIVE' : 'RESPAWNING',
     kills: kills,
     deaths: deaths,
     kd: kd,
     score: score,
-    ping: '5 ms'
+    ping: localPing
   });
 
-  // If Bot Mode: Add Active Bots
-  if (gameMode?.currentMode === 'bots' || gameMode?.currentMode === 'solo') {
+  // If Bot Mode: Add Active Bots (Task 3c: real bot metrics)
+  if (gameMode?.currentMode === 'bots') {
     const botManager = window.SecureFPSGame.botManager;
     if (botManager && botManager.bots) {
       botManager.bots.forEach(b => {
         const botDead = b.isDead;
+        const bKills = b.kills || 0;
+        const bDeaths = b.deaths || (botDead ? 1 : 0);
+        const bKd = bDeaths > 0 ? (bKills / bDeaths).toFixed(2) : (bKills > 0 ? bKills.toFixed(2) : '0.00');
+        const bScore = bKills * 100 + (botDead ? 0 : 50);
         rows.push({
           name: b.name,
           isLocal: false,
           status: botDead ? 'ELIMINATED' : (b.state || 'PATROL'),
-          kills: 0,
-          deaths: botDead ? 1 : 0,
-          kd: botDead ? '0.00' : '1.00',
-          score: botDead ? 0 : 50,
+          kills: bKills,
+          deaths: bDeaths,
+          kd: bKd,
+          score: bScore,
           ping: 'BOT'
         });
       });
     }
   }
 
-  // If Multiplayer Mode: Add Remote Players
-  if (gameMode?.currentMode === 'multiplayer' && multiplayer) {
+  // If Multiplayer Mode: Add Remote Players (Task 3c: real multiplayer telemetry)
+  if (isMP && multiplayer && multiplayer.remotePlayers) {
     multiplayer.remotePlayers.forEach(p => {
+      const pKills = p.kills || 0;
+      const pDeaths = p.deaths || 0;
+      const pKd = pDeaths > 0 ? (pKills / pDeaths).toFixed(2) : '0.00';
+      const pScore = p.score || (pKills * 100);
+      const pPing = p.ping !== undefined ? `${Math.round(p.ping)} ms` : (multiplayer.lastPing ? `${Math.round(multiplayer.lastPing)} ms` : '--');
       rows.push({
-        name: p.name,
+        name: p.name || 'Remote Operator',
         isLocal: false,
         status: p.health > 0 ? 'ACTIVE' : 'RESPAWNING',
-        kills: 1,
-        deaths: 1,
-        kd: '1.00',
-        score: 100,
-        ping: '28 ms'
+        kills: pKills,
+        deaths: pDeaths,
+        kd: pKd,
+        score: pScore,
+        ping: pPing
       });
     });
   }
@@ -1542,7 +1564,7 @@ function renderLoop() {
 
   // 4. Update Enemy AI Bots (only active in combat modes and while match is underway)
   if (botManager && controller && !botManager.isStopped) {
-    if (gameMode && !gameMode.isMatchCompleted && (gameMode.currentMode === 'bots' || gameMode.currentMode === 'solo')) {
+    if (gameMode && !gameMode.isMatchCompleted && gameMode.currentMode === 'bots') {
       try {
         botManager.update(
           delta,
@@ -1604,6 +1626,69 @@ function renderLoop() {
       if (!isMenuOpen && camera && scene) {
         hud.checkEnemyUnderCrosshair(camera, scene);
       }
+
+      if (gameMode) {
+        const curMode = gameMode.currentMode || 'bots';
+        let modeTag = 'VS TACTICAL BOTS';
+        let playerCountText = 'ENEMIES: 4';
+        let targetKills = 25;
+        let timeText = '00:00';
+        let pingText = 'LOCAL (0ms)';
+
+        if (curMode === 'solo') {
+          modeTag = 'FREE ROAM';
+          playerCountText = 'FREE EXPLORATION';
+          targetKills = null;
+          const elapsed = Math.floor(gameMode.matchDuration - (gameMode.timeRemaining || 0));
+          const mins = Math.floor(Math.max(0, elapsed) / 60).toString().padStart(2, '0');
+          const secs = (Math.max(0, elapsed) % 60).toString().padStart(2, '0');
+          timeText = `${mins}:${secs}`;
+          pingText = 'LOCAL (0ms)';
+        } else if (curMode === 'bots') {
+          const diffStr = (gameMode.difficulty || 'normal').toUpperCase();
+          modeTag = `BOTS • ${diffStr}`;
+          const botMgr = window.SecureFPSGame?.botManager;
+          const aliveBots = botMgr?.bots ? botMgr.bots.filter(b => !b.isDead).length : 0;
+          const totalBots = botMgr?.bots ? botMgr.bots.length : 4;
+          playerCountText = `ENEMIES LEFT ${aliveBots} / ${totalBots}`;
+          targetKills = 25;
+          const rem = Math.max(0, Math.floor(gameMode.timeRemaining || 0));
+          const mins = Math.floor(rem / 60).toString().padStart(2, '0');
+          const secs = (rem % 60).toString().padStart(2, '0');
+          timeText = `${mins}:${secs}`;
+          pingText = 'LOCAL (0ms)';
+        } else if (curMode === 'multiplayer') {
+          modeTag = 'MULTIPLAYER ARENA';
+          const remotes = multiplayer?.remotePlayers || new Map();
+          let aliveCount = ((gameMode.playerHealth || 100) > 0 ? 1 : 0);
+          remotes.forEach(p => { if (p.health > 0) aliveCount++; });
+          const totalCount = remotes.size + 1;
+          playerCountText = `ALIVE ${aliveCount} / ${totalCount}`;
+          targetKills = gameMode.targetKills || 25;
+          const rem = Math.max(0, Math.floor(gameMode.timeRemaining || 0));
+          const mins = Math.floor(rem / 60).toString().padStart(2, '0');
+          const secs = (rem % 60).toString().padStart(2, '0');
+          timeText = `${mins}:${secs}`;
+          const rtt = Math.round(multiplayer?.lastPing || 0);
+          pingText = rtt > 0 ? `${rtt} ms` : 'LOCAL (0ms)';
+        } else if (curMode === 'training') {
+          modeTag = 'TRAINING COURSE';
+          const trMgr = window.SecureFPSGame?.trainingManager;
+          playerCountText = `TARGETS ${trMgr?.targetsHit || 0} / 20`;
+          targetKills = null;
+          timeText = 'PRACTICE';
+          pingText = 'LOCAL (0ms)';
+        }
+
+        hud.updateMatchHeader({
+          mode: modeTag,
+          playerCountText: playerCountText,
+          kills: gameMode.kills || 0,
+          targetKills: targetKills,
+          timeText: timeText,
+          pingText: pingText
+        });
+      }
     } catch (e) {
       console.warn('[RenderLoop] HUD error:', e);
     }
@@ -1644,4 +1729,58 @@ function showMatchCountdown() {
       overlay.style.display = 'none';
     }
   }, 750);
+}
+
+/**
+ * Initializes the F3 Developer Live Weapon Calibration Sliders
+ */
+function initWeaponCalibrationSliders() {
+  const controls = [
+    { slider: 'slider-wep-pos-x', label: 'val-wep-pos-x', prop: 'posX' },
+    { slider: 'slider-wep-pos-y', label: 'val-wep-pos-y', prop: 'posY' },
+    { slider: 'slider-wep-pos-z', label: 'val-wep-pos-z', prop: 'posZ' },
+    { slider: 'slider-wep-rot-x', label: 'val-wep-rot-x', prop: 'rotX' },
+    { slider: 'slider-wep-rot-y', label: 'val-wep-rot-y', prop: 'rotY' },
+    { slider: 'slider-wep-rot-z', label: 'val-wep-rot-z', prop: 'rotZ' }
+  ];
+
+  controls.forEach(({ slider, label, prop }) => {
+    const inputEl = document.getElementById(slider);
+    const labelEl = document.getElementById(label);
+    if (inputEl) {
+      inputEl.addEventListener('input', () => {
+        const val = parseFloat(inputEl.value);
+        if (labelEl) labelEl.textContent = val.toFixed(3);
+        const update = {};
+        update[prop] = val;
+        if (window.TacticalOperator && typeof window.TacticalOperator.applyWeaponCalibration === 'function') {
+          window.TacticalOperator.applyWeaponCalibration(update);
+        }
+      });
+    }
+  });
+
+  const copyBtn = document.getElementById('dev-copy-weapon-btn');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', () => {
+      if (window.TacticalOperator && window.TacticalOperator.currentWeaponCalibration) {
+        const cal = window.TacticalOperator.currentWeaponCalibration;
+        const formatted = `TacticalOperator.currentWeaponCalibration = ${JSON.stringify(cal, null, 2)};`;
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          navigator.clipboard.writeText(formatted).then(() => {
+            copyBtn.textContent = 'COPIED TO CLIPBOARD!';
+            setTimeout(() => { copyBtn.textContent = 'Copy Calibrated Values'; }, 2000);
+          }).catch(() => {
+            console.log('[DevWeaponCalibration]', formatted);
+            copyBtn.textContent = 'LOGGED TO CONSOLE';
+            setTimeout(() => { copyBtn.textContent = 'Copy Calibrated Values'; }, 2000);
+          });
+        } else {
+          console.log('[DevWeaponCalibration]', formatted);
+          copyBtn.textContent = 'LOGGED TO CONSOLE';
+          setTimeout(() => { copyBtn.textContent = 'Copy Calibrated Values'; }, 2000);
+        }
+      }
+    });
+  }
 }

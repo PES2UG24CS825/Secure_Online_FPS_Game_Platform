@@ -66,8 +66,8 @@ class Controller {
     this.bobIntensity = 0.04;
     this.cameraRoll = 0;
 
-    // Input Debug HUD Elements
-    this.debugVisible = true;
+    // Input Debug HUD Elements (Task 3b: default off)
+    this.debugVisible = false;
     this.dbgHud = document.getElementById('input-debug-hud');
     this.dbgLockBadge = document.getElementById('dbg-lock-badge');
     this.dbgStatPos = document.getElementById('dbg-stat-pos');
@@ -257,8 +257,15 @@ class Controller {
 
   toggleDebugHUD() {
     this.debugVisible = !this.debugVisible;
+    const devElements = document.querySelectorAll('.dev-overlay-element');
+    devElements.forEach(el => {
+      el.style.display = this.debugVisible ? 'block' : 'none';
+    });
     if (this.dbgHud) {
       this.dbgHud.style.display = this.debugVisible ? 'block' : 'none';
+    }
+    if (window.SecureFPSGame) {
+      window.SecureFPSGame.devOverlayEnabled = this.debugVisible;
     }
   }
 

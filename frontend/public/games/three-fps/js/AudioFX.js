@@ -390,6 +390,111 @@ class AudioFX {
     }
   }
 
+  /**
+   * Positional/distance-attenuated gunshot sound for bots and remote players
+   */
+  playPositionalGunshot(weaponType = 'rifle', distance = 0) {
+    if (!this.initialized || !this.ctx || this.isMuted) return;
+    this.resume();
+
+    // Distance attenuation curve (audible up to 55m)
+    const maxDist = 55.0;
+    const normDist = Math.min(1.0, Math.max(0, distance) / maxDist);
+    const volume = Math.max(0.04, Math.pow(1.0 - normDist, 1.8) * 0.85);
+
+    const now = this.ctx.currentTime;
+    const gainNode = this.ctx.createGain();
+    gainNode.gain.setValueAtTime(volume, now);
+    gainNode.connect(this.sfxGain || this.masterGain || this.ctx.destination);
+
+    // Render gunshot through the attenuated gain node
+    let noiseDuration = 0.08;
+    let noiseFreq = 2200;
+    let bassStart = 140;
+    let bassEnd = 35;
+    let bassDuration = 0.12;
+
+    const wKey = (weaponType || '').toLowerCase();
+    if (wKey.includes('smg')) {
+      noiseDuration = 0.05;
+      noiseFreq = 2600;
+      bassStart = 110;
+      bassEnd = 45;
+      bassDuration = 0.08;
+    } else if (wKey.includes('sniper')) {
+      noiseDuration = 0.15;
+      noiseFreq = 1500;
+      bassStart = 180;
+      bassEnd = 24;
+      bassDuration = 0.28;
+    } else if (wKey.includes('pistol')) {
+      noiseDuration = 0.06;
+      noiseFreq = 2400;
+      bassStart = 150;
+      bassEnd = 55;
+      bassDuration = 0.09;
+    }
+
+    // High frequency acoustic snap
+    const bufferSize = Math.floor(this.ctx.sampleRate * noiseDuration);
+    const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      output[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.015));
+    }
+    const whiteNoise = this.ctx.createBufferSource();
+    whiteNoise.buffer = noiseBuffer;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(noiseFreq, now);
+    filter.Q.setValueAtTime(1.5, now);
+
+    whiteNoise.connect(filter);
+    filter.connect(gainNode);
+    whiteNoise.start(now);
+
+    // Low frequency punch
+    const osc = this.ctx.createOscillator();
+    const oscGain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(bassStart, now);
+    osc.frequency.exponentialRampToValueAtTime(bassEnd, now + bassDuration);
+    oscGain.gain.setValueAtTime(0.7, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.01, now + bassDuration);
+
+    osc.connect(oscGain);
+    oscGain.connect(gainNode);
+    osc.start(now);
+    osc.stop(now + bassDuration);
+  }
+
+  /**
+   * Supersonic bullet snap / whiz-by when a shot narrowly misses the player
+   */
+  playBulletWhiz() {
+    if (!this.initialized || !this.ctx || this.isMuted) return;
+    this.resume();
+
+    const now = this.ctx.currentTime;
+    const dest = this.sfxGain || this.masterGain || this.ctx.destination;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    const startFreq = 3400 + Math.random() * 900;
+    osc.frequency.setValueAtTime(startFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(1200, now + 0.045);
+
+    gain.gain.setValueAtTime(0.38, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+
+    osc.connect(gain);
+    gain.connect(dest);
+    osc.start(now);
+    osc.stop(now + 0.045);
+  }
+
   playFootstep() {
     if (!this.initialized || !this.ctx || this.isMuted) return;
     this.resume();

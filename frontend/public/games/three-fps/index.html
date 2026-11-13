@@ -52,16 +52,16 @@
         <!-- Navigation Menu Tabs (6 Options) -->
         <div class="menu-tabs">
           <button class="menu-tab" id="tab-solo" type="button">
-            <span class="tab-icon">⚔️</span>
-            <span class="tab-label">PLAY SOLO</span>
+            <span class="tab-icon">🗺️</span>
+            <span class="tab-label">FREE ROAM</span>
           </button>
           <button class="menu-tab active" id="tab-bots" type="button">
             <span class="tab-icon">🤖</span>
-            <span class="tab-label">PLAY WITH BOTS</span>
+            <span class="tab-label">VS TACTICAL BOTS</span>
           </button>
           <button class="menu-tab" id="tab-multiplayer" type="button">
             <span class="tab-icon">🌐</span>
-            <span class="tab-label">MULTIPLAYER</span>
+            <span class="tab-label">MULTIPLAYER ARENA</span>
           </button>
           <button class="menu-tab" id="tab-training" type="button">
             <span class="tab-icon">🎯</span>
@@ -77,22 +77,22 @@
           </button>
         </div>
 
-        <!-- Tab View 1: Play Solo (FFA Combat) -->
+        <!-- Tab View 1: Free Roam Exploration -->
         <div class="menu-view" id="view-solo">
           <div class="view-header">
-            <h3>Solo Free-For-All Combat</h3>
-            <p>Every operator for themselves. Survive against 3 independent tactical AI operators in the compound.</p>
+            <h3>Free Roam Exploration</h3>
+            <p>Explore the full tactical compound with zero hostile fire. Practice movement kinematics, parkour routes, and arena angles.</p>
           </div>
 
           <div class="mode-info-card">
-            <div class="info-row"><span>MATCH TYPE:</span><strong>Free-For-All (FFA)</strong></div>
-            <div class="info-row"><span>TARGET SCORE:</span><strong>25 Kills</strong></div>
-            <div class="info-row"><span>TIME LIMIT:</span><strong>10 Minutes</strong></div>
-            <div class="info-row"><span>TELEMETRY:</span><strong style="color: #10b981;">Active ML Anti-Cheat Logging</strong></div>
+            <div class="info-row"><span>MATCH TYPE:</span><strong>Free Roam (No Hostiles)</strong></div>
+            <div class="info-row"><span>COMBAT BOTS:</span><strong style="color: #64748b;">Disabled</strong></div>
+            <div class="info-row"><span>WEAPONS:</span><strong>Full Arsenal (1-4 Keys)</strong></div>
+            <div class="info-row"><span>TELEMETRY:</span><strong style="color: #10b981;">Active Kinematics Logging</strong></div>
           </div>
 
           <button id="btn-deploy-solo" class="start-btn" type="button" style="display: block; margin-top: 18px;">
-            DEPLOY TO SOLO DEATHMATCH
+            EXPLORE ARENA IN FREE ROAM
           </button>
         </div>
 
@@ -191,7 +191,7 @@
           <div class="mp-profile-bar">
             <div class="mp-input-group">
               <label for="mp-player-name">OPERATOR CALLSIGN</label>
-              <input id="mp-player-name" type="text" maxlength="18" value="Ghost_01" spellcheck="false" autocomplete="off" />
+              <input id="mp-player-name" type="text" maxlength="18" placeholder="Operator_Callsign" spellcheck="false" autocomplete="off" />
             </div>
             <div class="mp-status-pill" id="mp-server-status">
               <span class="status-dot"></span>
@@ -385,11 +385,11 @@
             <!-- Show FPS Display -->
             <div class="setting-row">
               <div class="setting-info">
-                <strong>FPS &amp; Diagnostics Overlay</strong>
-                <span>Toggle in-game frame rate and hardware monitor</span>
+                <strong>Show FPS Counter</strong>
+                <span>Toggle clean in-game frame rate display in top-right corner</span>
               </div>
               <div class="setting-control">
-                <input id="setting-show-fps" type="checkbox" checked style="transform: scale(1.3); cursor: pointer;" />
+                <input id="setting-show-fps" type="checkbox" style="transform: scale(1.3); cursor: pointer;" />
               </div>
             </div>
 
@@ -559,7 +559,7 @@
         <div class="mc-stat-box"><span class="stat-lbl">HEADSHOTS</span><strong id="mc-headshots" class="stat-val">0</strong></div>
         <div class="mc-stat-box"><span class="stat-lbl">MATCH TIME</span><strong id="mc-duration" class="stat-val">00:00</strong></div>
         <div class="mc-stat-box span-2"><span class="stat-lbl">FINAL SCORE</span><strong id="mc-score" class="stat-val score-glow">0 PTS</strong></div>
-        <div class="mc-stat-box span-2 honour-box"><span class="stat-lbl">HONOUR SCORE</span><strong id="mc-honour-val" class="stat-val highlight">100/100 (+5 MATCH COMPLETED)</strong></div>
+        <div class="mc-stat-box span-2 honour-box"><span class="stat-lbl">HONOUR SCORE</span><strong id="mc-honour-val" class="stat-val highlight">--/100</strong></div>
       </div>
 
       <div class="mc-security-badge">
@@ -619,33 +619,37 @@
       <div class="tr-hud-card"><span class="tr-lbl">SCORE</span><strong id="tr-score" style="color:#00f0ff;">0</strong></div>
     </div>
 
-    <!-- Top Left: Match Bar (Kills, Deaths, Assists, Streak, Ping, Timer) -->
-    <div class="hud-match-bar">
-      <div class="match-stat-unit">
-        <span>KILLS</span>
-        <strong id="match-kills">0</strong>
+    <!-- Top-Center Compact Match Header (Task 3a) -->
+    <div class="compact-match-panel" id="compact-match-panel">
+      <span class="match-mode-tag" id="hud-mode-tag">VS TACTICAL BOTS</span>
+      <div class="match-panel-divider"></div>
+      <div class="match-panel-stat" id="match-player-count-box">
+        <span class="panel-icon">👥</span>
+        <span id="match-player-count">ENEMIES LEFT 4/4</span>
       </div>
-      <div class="match-stat-unit">
-        <span>DEATHS</span>
-        <strong id="match-deaths">0</strong>
+      <div class="match-panel-divider"></div>
+      <div class="match-panel-stat" id="match-kills-box">
+        <span class="panel-icon">🎯</span>
+        <span id="match-kills-display">KILLS <strong id="match-kills">0</strong><span id="match-kills-target"> / 25</span></span>
       </div>
-      <div class="match-stat-unit">
-        <span>ASSISTS</span>
-        <strong id="match-assists">0</strong>
+      <div class="match-panel-divider"></div>
+      <div class="match-panel-stat" id="match-timer-box">
+        <span class="panel-icon">⏱️</span>
+        <strong id="match-timer" class="match-timer">00:00</strong>
       </div>
-      <div class="match-stat-unit">
-        <span>STREAK</span>
-        <strong id="match-streak" style="color: #fbbf24;">0</strong>
+      <div class="match-panel-divider"></div>
+      <div class="match-panel-stat" id="match-ping-box">
+        <span class="panel-icon">📡</span>
+        <strong id="match-ping" style="color: #10b981;">LOCAL (0ms)</strong>
       </div>
-      <div class="match-stat-unit">
-        <span>PING</span>
-        <strong id="match-ping" style="color: #10b981;">14ms</strong>
-      </div>
-      <div class="match-stat-unit">
-        <span>MATCH TIME</span>
-        <strong id="match-timer" class="match-timer">12:00</strong>
-      </div>
+      <!-- Background telemetry counters kept intact for listeners -->
+      <span id="match-deaths" style="display: none;">0</span>
+      <span id="match-assists" style="display: none;">0</span>
+      <span id="match-streak" style="display: none;">0</span>
     </div>
+
+    <!-- Minimal Clean FPS Badge (Top Right) -->
+    <div id="clean-fps-badge" class="clean-fps-badge" style="display: none;">60 FPS</div>
 
     <!-- Top Tactical Compass Strip -->
     <div class="hud-compass-strip">
@@ -660,8 +664,8 @@
       <span class="shield-text">SPAWN PROTECTION: 5.0s</span>
     </div>
 
-    <!-- Top Right: Diagnostics & FPS Monitor -->
-    <div class="hud-stats-panel">
+    <!-- Top Right: Detailed Diagnostics (Dev Overlay, Hidden by Default, Toggle F3) -->
+    <div class="hud-stats-panel dev-overlay-element" style="display: none;">
       <div class="telemetry-row">
         <span>ENGINE:</span>
         <strong>Three.js 3D</strong>
@@ -681,6 +685,49 @@
       <div class="telemetry-row">
         <span>TRIANGLES:</span>
         <strong id="hud-triangles">--</strong>
+      </div>
+      <div class="telemetry-row" id="dev-model-status-row" style="border-top: 1px dashed rgba(255,255,255,0.2); margin-top: 6px; padding-top: 4px;">
+        <span style="color: #fbbf24;">3D RIG:</span>
+        <strong id="hud-model-status" style="font-size: 10px; color: #fbbf24;">CHECKING...</strong>
+      </div>
+    </div>
+
+    <!-- Model Fallback Notice in Dev Overlay (Requirement 1, 10) -->
+    <div id="dev-model-notice-banner" class="dev-overlay-element" style="display: none; position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: rgba(220, 38, 38, 0.90); color: #fff; border: 1px solid #ef4444; border-radius: 4px; padding: 5px 14px; font-family: var(--font-mono, monospace); font-size: 11px; z-index: 1000; pointer-events: none; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+      ⚠️ Rigged GLB models invalid/corrupted (EF BF BD). Using high-fidelity procedural anatomical tactical operator rig.
+    </div>
+
+    <!-- Live Weapon Socket Calibration Panel (Requirement 6, F3 Dev Overlay) -->
+    <div id="dev-weapon-calibration" class="hud-stats-panel dev-overlay-element" style="display: none; position: absolute; top: 220px; right: 20px; width: 230px; font-size: 11px; z-index: 1000; background: rgba(6, 12, 22, 0.92); border: 1px solid rgba(0, 240, 255, 0.3); border-radius: 6px; padding: 12px;">
+      <div style="font-weight: 700; color: #00f0ff; margin-bottom: 8px; border-bottom: 1px solid rgba(0,240,255,0.3); padding-bottom: 4px; font-family: var(--font-mono, monospace);">
+        WEAPON SOCKET CALIBRATION
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 5px; font-family: var(--font-mono, monospace);">
+        <div>
+          <label style="display:flex; justify-content:space-between; color:#94a3b8;">PosX: <span id="val-wep-pos-x" style="color:#fff;">0.02</span></label>
+          <input type="range" id="slider-wep-pos-x" min="-0.2" max="0.2" step="0.005" value="0.02" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:flex; justify-content:space-between; color:#94a3b8;">PosY: <span id="val-wep-pos-y" style="color:#fff;">0.05</span></label>
+          <input type="range" id="slider-wep-pos-y" min="-0.2" max="0.2" step="0.005" value="0.05" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:flex; justify-content:space-between; color:#94a3b8;">PosZ: <span id="val-wep-pos-z" style="color:#fff;">-0.06</span></label>
+          <input type="range" id="slider-wep-pos-z" min="-0.2" max="0.2" step="0.005" value="-0.06" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:flex; justify-content:space-between; color:#94a3b8;">RotX: <span id="val-wep-rot-x" style="color:#fff;">-1.42</span></label>
+          <input type="range" id="slider-wep-rot-x" min="-3.14" max="3.14" step="0.05" value="-1.42" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:flex; justify-content:space-between; color:#94a3b8;">RotY: <span id="val-wep-rot-y" style="color:#fff;">0.00</span></label>
+          <input type="range" id="slider-wep-rot-y" min="-3.14" max="3.14" step="0.05" value="0.00" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:flex; justify-content:space-between; color:#94a3b8;">RotZ: <span id="val-wep-rot-z" style="color:#fff;">0.10</span></label>
+          <input type="range" id="slider-wep-rot-z" min="-3.14" max="3.14" step="0.05" value="0.10" style="width:100%;">
+        </div>
+        <button id="dev-copy-weapon-btn" type="button" style="margin-top:6px; padding:5px 8px; background:#00f0ff; color:#060c16; font-weight:700; border:none; border-radius:3px; cursor:pointer; font-size:10px;">Copy Calibrated Values</button>
       </div>
     </div>
 
@@ -717,8 +764,8 @@
       </div>
     </div>
 
-    <!-- Real-Time Input & Kinematics Debugging HUD -->
-    <div id="input-debug-hud" class="input-debug-hud">
+    <!-- Real-Time Input & Kinematics Debugging HUD (Dev Overlay, Hidden by Default, Toggle F3) -->
+    <div id="input-debug-hud" class="input-debug-hud dev-overlay-element" style="display: none;">
       <div class="dbg-header">
         <span class="dbg-title">INPUT DIAGNOSTICS [F3]</span>
         <span id="dbg-lock-badge" class="dbg-badge locked">LOCKED</span>
@@ -756,7 +803,7 @@
       <div class="vital-card" style="padding: 4px 10px; margin-bottom: 4px; background: rgba(6, 12, 22, 0.85); border-left: 3px solid #00f0ff;">
         <div class="vital-header" style="margin-bottom: 0;">
           <span style="font-size: 10px; color: #64748b; letter-spacing: 1px;">OPERATOR CALLSIGN</span>
-          <span id="hud-operator-name" style="font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: #00f0ff;">GHOST</span>
+          <span id="hud-operator-name" style="font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: #00f0ff;">OPERATOR</span>
         </div>
       </div>
 
@@ -818,6 +865,8 @@
   <script src="libs/GLTFLoader.js?v=20261031_1005"></script>
   <script src="libs/SkeletonUtils.js?v=20261031_1005"></script>
   <script src="libs/socket.io.min.js?v=20261031_1005"></script>
+  <script src="js/shared/weapon_config.js?v=20261112"></script>
+  <script src="js/shared/arena_collision.js?v=20261112"></script>
   <script src="js/TextureGenerator.js?v=20261031_1005"></script>
   <script src="js/Lighting.js?v=20261031_1005"></script>
   <script src="js/Arena.js?v=20261031_1005"></script>
@@ -870,12 +919,12 @@
         <div class="modal-honour-summary">
           <div class="honour-stat">
             <span class="stat-label">CURRENT HONOUR</span>
-            <span class="stat-val" id="exit-modal-current-honour">100/100</span>
+            <span class="stat-val" id="exit-modal-current-honour">--/100</span>
           </div>
           <div class="honour-arrow">➔</div>
           <div class="honour-stat penalty">
             <span class="stat-label">AFTER FORFEIT</span>
-            <span class="stat-val penalty-val" id="exit-modal-after-honour">95/100</span>
+            <span class="stat-val penalty-val" id="exit-modal-after-honour">--/100</span>
           </div>
         </div>
         <p class="modal-subtext">Are you sure you want to abandon the match? This action cannot be reversed.</p>

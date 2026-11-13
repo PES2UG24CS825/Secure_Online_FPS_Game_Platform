@@ -1,0 +1,150 @@
+{
+  "model_version": "v2.0.0",
+  "date": "2026-11-12T18:04:20.153916+00:00",
+  "dataset_hash": "1862255bfa0c0b37c32e52e3ddd93c6d6e5bcb3008229ceb4ccf5eeef9213114",
+  "unseen_cheat_type": "triggerbot",
+  "feature_order": [
+    "accuracy",
+    "headshot_ratio",
+    "reaction_time_median",
+    "reaction_time_min",
+    "fire_rate",
+    "fire_interval_cv",
+    "burst_length_mean",
+    "movement_speed_mean",
+    "movement_speed_max",
+    "movement_speed_std",
+    "aim_speed_mean",
+    "aim_speed_std",
+    "aim_speed_max",
+    "flick_rate",
+    "aim_error_at_fire_mean",
+    "aim_error_at_fire_std",
+    "snap_to_hit_ratio",
+    "wall_aim_ratio",
+    "kdr",
+    "time_to_kill_median",
+    "shots_per_kill"
+  ],
+  "feature_units": {
+    "accuracy": "ratio [0-1]",
+    "headshot_ratio": "ratio [0-1]",
+    "reaction_time_median": "seconds",
+    "reaction_time_min": "seconds",
+    "fire_rate": "shots/s",
+    "fire_interval_cv": "unitless (std/mean)",
+    "burst_length_mean": "shots",
+    "movement_speed_mean": "m/s",
+    "movement_speed_max": "m/s",
+    "movement_speed_std": "m/s",
+    "aim_speed_mean": "deg/s",
+    "aim_speed_std": "deg/s",
+    "aim_speed_max": "deg/s",
+    "flick_rate": "flicks/min",
+    "aim_error_at_fire_mean": "degrees",
+    "aim_error_at_fire_std": "degrees",
+    "snap_to_hit_ratio": "ratio [0-1]",
+    "wall_aim_ratio": "ratio [0-1]",
+    "kdr": "ratio",
+    "time_to_kill_median": "seconds",
+    "shots_per_kill": "shots/kill"
+  },
+  "training_ranges": {
+    "accuracy": [
+      0.0476,
+      1.0
+    ],
+    "headshot_ratio": [
+      0.0,
+      1.0
+    ],
+    "reaction_time_median": [
+      0.0397,
+      0.5001
+    ],
+    "reaction_time_min": [
+      0.03,
+      0.4084
+    ],
+    "fire_rate": [
+      0.5071,
+      2.8866
+    ],
+    "fire_interval_cv": [
+      0.7511,
+      2.3108
+    ],
+    "burst_length_mean": [
+      1.5,
+      6.75
+    ],
+    "movement_speed_mean": [
+      2.5683,
+      19.2745
+    ],
+    "movement_speed_max": [
+      3.58,
+      29.18
+    ],
+    "movement_speed_std": [
+      0.4373,
+      5.4129
+    ],
+    "aim_speed_mean": [
+      113.3079,
+      184.3337
+    ],
+    "aim_speed_std": [
+      40.6419,
+      322.2266
+    ],
+    "aim_speed_max": [
+      215.57,
+      2398.6
+    ],
+    "flick_rate": [
+      0.0,
+      7.1964
+    ],
+    "aim_error_at_fire_mean": [
+      0.1062,
+      15.0046
+    ],
+    "aim_error_at_fire_std": [
+      0.0226,
+      5.4323
+    ],
+    "snap_to_hit_ratio": [
+      0.0,
+      0.3158
+    ],
+    "wall_aim_ratio": [
+      0.0,
+      1.0
+    ],
+    "kdr": [
+      0.0,
+      19.0
+    ],
+    "time_to_kill_median": [
+      0.1193,
+      50.5978
+    ],
+    "shots_per_kill": [
+      2.2632,
+      54.0
+    ]
+  },
+  "operating_threshold": 0.5901027973337134,
+  "operating_fpr": 0.01,
+  "iforest_percentiles": {
+    "p1": 4.9873299934333204e-18,
+    "p99": 0.1586607874871954
+  },
+  "library_versions": {
+    "scikit-learn": "1.7.1",
+    "joblib": "1.5.1",
+    "numpy": "2.3.2",
+    "pandas": "3.0.6"
+  }
+}

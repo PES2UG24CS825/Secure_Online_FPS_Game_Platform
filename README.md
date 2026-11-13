@@ -87,28 +87,67 @@ python app.py
 ```
 *The Flask application will start on `http://127.0.0.1:5000`.*
 
-### 5. Access the Platform
-- **Sign In / Registration:** <http://127.0.0.1:5000/login.html>
-- **Player Dashboard:** <http://127.0.0.1:5000/player.html>
-- **CyberStrike 3D (FPS 02):** <http://127.0.0.1:5000/public/games/three-fps/index.html>
-- **Admin Control Center:** <http://127.0.0.1:5000/admin.html>
-
-*Default Development Admin Credentials:*
-`admin1@gmail.com` / `Admin@12345` (MFA Secret: `JBSWY3DPEHPK3PXP`)
-
----
-
-## 🧪 Automated Testing
-
-Run the full pytest test suite from the repository root:
+### 5. Seed Demo Accounts
+In a third terminal:
 ```bash
-python -m pytest backend/tests -v
+python scripts/seed_demo.py
 ```
-**Status:** 26 of 26 tests passing (100% test coverage across API, authentication, RBAC, SSE, and ML models).
+- **Admin Console:** `admin1@gmail.com` / `Admin@12345` (MFA Secret: `JBSWY3DPEHPK3PXP`)
+- **Clean Player:** `player1@gmail.com` / `Player@12345` (MFA Secret: `JBSWY3DPEHPK3PXP`)
+- **Flagged Cheater:** `cheater_demo@example.com` / `Cheater@12345` (Status: Suspended)
+
+### 6. Run Adversarial Cheat Simulator
+```bash
+node scripts/cheat_simulator.js --mode all
+```
 
 ---
 
-## 📚 Technical Research & Algorithm Documentation
+## 🧪 Automated Testing & Benchmarks
 
-For in-depth mathematical derivations, formulas, feature engineering algorithms, and comparisons to previous academic literature, please refer to:
-👉 [**Full Architecture, AI Anti-Cheat & Research Specification (docs/PROJECT_ARCHITECTURE_AND_AI_ANTI_CHEAT_SPEC.md)**](docs/PROJECT_ARCHITECTURE_AND_AI_ANTI_CHEAT_SPEC.md)
+Run the complete test suite covering all layers of the architecture:
+
+```bash
+# 1. Full Backend Hardening & ML Model Tests (56 tests)
+pytest backend/tests/ -v
+
+# 2. Authoritative Multiplayer Server & Simulated WAN Harness (11 tests)
+npm --prefix multiplayer-server test
+
+# 3. Three.js Client Articulated Rig & Dataset Bot Verification (12 tests)
+node --test frontend/public/games/three-fps/test/ai_hud_verification.test.js
+
+# 4. GLB Binary Integrity Validator
+python tools/validate_glb.py
+
+# 5. Measure Real-Time Latencies & Generate Benchmark Report (50 trials)
+python scripts/measure_realtime.py
+
+# 6. Comprehensive 5-Fold ML Model Benchmark (6 Supervised + 3 Anomaly Detectors)
+python scripts/evaluate_models.py
+```
+**Status:** **100% Passing** across all test suites with zero failures.
+
+---
+
+## 📚 Technical Documentation Directory
+
+- 📖 [**Demonstration Walkthrough Script (docs/DEMO_SCRIPT.md)**](docs/DEMO_SCRIPT.md): Step-by-step localhost demo guide.
+- 🏛️ [**Platform Architecture (docs/ARCHITECTURE.md)**](docs/ARCHITECTURE.md): Technical architecture, Mermaid diagrams, and data flow.
+- 🛡️ [**Threat Model & Mitigation Matrix (docs/THREAT_MODEL.md)**](docs/THREAT_MODEL.md): Security vectors, defenses, and test coverage.
+- 📊 [**Real-Time Latency Benchmark (docs/REALTIME_RESULTS.md)**](docs/REALTIME_RESULTS.md): 50-trial empirical latency metrics.
+- 📈 [**Feature Engineering & Dataset Specs (docs/FEATURES_AND_DATASET.md)**](docs/FEATURES_AND_DATASET.md): Feature definitions, formulas, and human dataset placeholder.
+- ⚠️ [**Limitations & Formulas Appendix (docs/LIMITATIONS.md)**](docs/LIMITATIONS.md): Limitations, credits, and mathematical derivations.
+- 🎨 [**Character Assets & Rigging Guide (docs/CHARACTER_ASSETS.md)**](docs/CHARACTER_ASSETS.md): Asset requirements, bone hierarchy, and procedural fallback.
+
+---
+
+## 📦 3D Asset & Binary File Integrity (.glb, .wasm, .data)
+
+> [!IMPORTANT]
+> **GLB & 3D Asset Binary Integrity:**
+> `.glb` 3D model files (such as `models/Soldier.glb` and `models/FemaleOperator.glb`) are binary container formats holding packed JSON chunks and raw binary buffers (geometry, skinning weights, animations).
+> **Never copy, filter, or process `.glb` files using text mode** or editors that enforce UTF-8 conversion. Text-mode conversion inserts UTF-8 replacement byte sequences (`0xEF 0xBF 0xBD` / `\ufffd`) whenever invalid UTF-8 byte sequences are encountered, permanently corrupting the binary header magic, chunk lengths, and vertex buffers.
+> 
+> `.gitattributes` is configured to mark `*.glb binary` to enforce binary checkouts across all platforms. When models fail binary validation, the game engine logs a clear diagnostic error and seamlessly activates the high-fidelity procedural anatomical tactical operator rig.
+

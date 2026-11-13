@@ -8,16 +8,45 @@
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/admin.css">
   <link rel="stylesheet" href="css/ui-polish.css">
+  <style>
+    /* Admin Enhancement Styles */
+    .health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .health-card { background: var(--bg-card, #131722); border: 1px solid var(--border-color, #222838); border-radius: 8px; padding: 14px 18px; }
+    .health-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .status-indicator { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .status-online { background: #10b981; box-shadow: 0 0 8px #10b981aa; }
+    .status-offline { background: #ef4444; box-shadow: 0 0 8px #ef4444aa; }
+    .status-dot.paused { background: #f59e0b; }
+    .bulk-toolbar { display: flex; align-items: center; gap: 12px; background: rgba(30, 41, 59, 0.8); border: 1px solid var(--accent-cyan, #06b6d4); padding: 10px 16px; border-radius: 6px; margin-bottom: 12px; }
+    .badge-deleted { background: #475569; color: #cbd5e1; }
+    .anticheat-meta-card { background: var(--bg-card, #131722); border: 1px solid var(--border-color, #222838); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .meta-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .feature-bar-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+    .feature-bar-item { display: flex; align-items: center; gap: 12px; font-size: 0.85rem; }
+    .feat-name { width: 180px; font-family: monospace; }
+    .feat-track { flex: 1; height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; }
+    .feat-fill { height: 100%; background: linear-gradient(90deg, #06b6d4, #3b82f6); border-radius: 4px; }
+    .feat-val { width: 40px; text-align: right; font-weight: 700; }
+    .admin-action-modal { border: 1px solid #334155; border-radius: 12px; background: #0f172a; color: #f8fafc; padding: 24px; max-width: 480px; width: 90%; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); }
+    .admin-modal-card h3 { margin-top: 0; color: #38bdf8; }
+    .modal-form-group { margin: 14px 0; }
+    .modal-form-group label { display: block; font-size: 0.85rem; margin-bottom: 6px; font-weight: 600; }
+    .admin-modal-input, .admin-modal-textarea { width: 100%; box-sizing: border-box; background: #1e293b; border: 1px solid #334155; color: #f8fafc; padding: 8px 12px; border-radius: 6px; }
+    .modal-err-msg { color: #f87171; font-size: 0.8rem; margin-top: 4px; display: block; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+    .reauth-box { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 10px; border-radius: 6px; }
+    .required-star { color: #ef4444; }
+  </style>
 </head>
 <body class="dashboard-page admin-page">
   <aside class="admin-sidebar">
     <div class="brand"><img class="brand-lockup" src="public/securefps-logo-crop.png?v=1" alt="SecureFPS Gaming Security"></div>
-    <nav id="adminNavigation" aria-label="Admin sections">
-      <button class="admin-nav-btn active" type="button" data-admin-section="overview"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg></span>Overview</button>
-      <button class="admin-nav-btn" type="button" data-admin-section="players"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3.5 20v-1.5a5.5 5.5 0 0 1 11 0V20M16 5.2a3.5 3.5 0 0 1 0 6.6M17 14a4.8 4.8 0 0 1 3.5 4.6V20"/></svg></span>Players</button>
-      <button class="admin-nav-btn" type="button" data-admin-section="security"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 19 6v5.2c0 4.5-2.8 7.8-7 9.8-4.2-2-7-5.3-7-9.8V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>Security &amp; access</button>
-      <button class="admin-nav-btn" type="button" data-admin-section="gameplay"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19.5h16M6.5 16V11M12 16V5M17.5 16V8"/></svg></span>Game monitoring</button>
-      <button class="admin-nav-btn" type="button" data-admin-section="support"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="m4.5 7 7.5 5.5L19.5 7"/></svg></span>Customer support</button>
+    <nav id="adminNavigation" aria-label="Admin sections" role="tablist">
+      <button class="admin-nav-btn active" type="button" data-admin-section="overview" role="tab" aria-selected="true"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg></span>Overview</button>
+      <button class="admin-nav-btn" type="button" data-admin-section="players" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3.5 20v-1.5a5.5 5.5 0 0 1 11 0V20M16 5.2a3.5 3.5 0 0 1 0 6.6M17 14a4.8 4.8 0 0 1 3.5 4.6V20"/></svg></span>Players</button>
+      <button class="admin-nav-btn" type="button" data-admin-section="security" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 19 6v5.2c0 4.5-2.8 7.8-7 9.8-4.2-2-7-5.3-7-9.8V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>Security &amp; Appeals</button>
+      <button class="admin-nav-btn" type="button" data-admin-section="gameplay" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19.5h16M6.5 16V11M12 16V5M17.5 16V8"/></svg></span>Game &amp; ML Anti-Cheat</button>
+      <button class="admin-nav-btn" type="button" data-admin-section="support" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="m4.5 7 7.5 5.5L19.5 7"/></svg></span>Customer support</button>
     </nav>
     <div class="admin-sidebar-mascots" aria-hidden="true">
       <img src="public/admin-characters.png?v=2" alt="">
@@ -25,42 +54,252 @@
   </aside>
   <div class="admin-main-wrapper">
   <main class="dashboard-main admin-main">
-    <header class="topbar"><div><p class="eyebrow">SECURITY OPERATIONS</p><h1 id="adminPageTitle">Admin overview</h1><p class="muted admin-subtitle" id="adminPageSubtitle">Live platform activity and security health.</p></div><div class="admin-header-actions"><div class="admin-header-card"><div class="avatar">SA</div><div><strong id="adminName">Security Admin</strong><small id="adminEmail">Signed-in administrator</small></div></div><span class="status-pill" id="adminLiveStatus"><span class="status-dot"></span>Connecting to live data…</span><button id="playerViewBtn" class="play-btn admin-player-view" type="button">Player view</button><button id="logoutBtn" class="ghost-btn admin-logout" type="button">Sign out</button></div></header>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">SECURITY OPERATIONS</p>
+        <h1 id="adminPageTitle">Admin overview</h1>
+        <p class="muted admin-subtitle" id="adminPageSubtitle">Live platform activity and security health.</p>
+      </div>
+      <div class="admin-header-actions">
+        <div class="admin-header-card">
+          <div class="avatar">SA</div>
+          <div><strong id="adminName">Security Admin</strong><small id="adminEmail">Signed-in administrator</small></div>
+        </div>
+        <span class="status-pill" id="adminLiveStatus"><span class="status-dot live"></span>Live connected</span>
+        <span id="lastUpdatedIndicator" class="muted" style="font-size:0.8rem; margin:0 8px;">Updated just now</span>
+        <button id="manualRefreshBtn" class="ghost-btn" type="button" title="Manual refresh">↻ Refresh</button>
+        <button id="playerViewBtn" class="play-btn admin-player-view" type="button">Player view</button>
+        <button id="logoutBtn" class="ghost-btn admin-logout" type="button">Sign out</button>
+      </div>
+    </header>
 
-    <section class="admin-section active" id="admin-overview" data-admin-view="overview">
-      <section class="stats-grid"><article class="stat-card"><span>Players</span><strong id="playerCount">—</strong><small>Registered accounts</small></article><article class="stat-card"><span>Recorded matches</span><strong id="matchCount">—</strong><small>FPS Microgame sessions</small></article><article class="stat-card"><span>Security events</span><strong id="eventCount">—</strong><small>Audit trail</small></article><article class="stat-card"><span>High severity</span><strong id="highCount">—</strong><small>Needs review</small></article></section>
-      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">MODEL REVIEW QUEUE</p><h2>Gameplay security alerts</h2></div><div class="admin-support-actions"><button id="retryAnalysesBtn" class="ghost-btn" type="button">Retry analyses</button><button id="refreshAdminBtn" class="play-btn" type="button">Refresh</button></div></div><div id="gameplayAlertBanner" class="gameplay-alert-banner clear" role="status" aria-live="polite">No suspicious gameplay alerts at this time.</div><div id="analysisIncompleteNotice"></div><div id="gameplayAlerts" class="gameplay-alert-list"></div></section>
-      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">ACCOUNT ENFORCEMENT</p><h2>Banned and suspended accounts</h2></div><span id="bannedAccountCount" class="muted">0 accounts</span></div><div id="bannedAccountsList" class="list"><div class="empty">No banned or suspended accounts.</div></div></section>
+    <!-- SECTION 1: OVERVIEW -->
+    <section class="admin-section active" id="admin-overview" data-admin-view="overview" role="tabpanel">
+      <!-- Cluster Health Monitor -->
+      <section class="panel admin-table-panel">
+        <div class="section-title">
+          <div><p class="eyebrow">INFRASTRUCTURE &amp; SERVERS</p><h2>Live Cluster Health</h2></div>
+        </div>
+        <div id="clusterHealthPanel">Loading cluster health…</div>
+        <div style="margin-top: 20px;">
+          <div style="font-weight: 700; color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">Active Multiplayer Game Rooms</div>
+          <div id="liveRoomsPanel">Checking active multiplayer rooms…</div>
+        </div>
+      </section>
+
+      <section class="stats-grid">
+        <article class="stat-card"><span>Players</span><strong id="playerCount">—</strong><small>Registered accounts</small></article>
+        <article class="stat-card"><span>Recorded matches</span><strong id="matchCount">—</strong><small>FPS Microgame sessions</small></article>
+        <article class="stat-card"><span>Security events</span><strong id="eventCount">—</strong><small>Audit trail</small></article>
+        <article class="stat-card"><span>High severity</span><strong id="highCount">—</strong><small>Needs review</small></article>
+      </section>
+
+      <section class="panel admin-table-panel">
+        <div class="section-title">
+          <div><p class="eyebrow">MODEL REVIEW QUEUE</p><h2>Gameplay security alerts</h2></div>
+          <div class="admin-support-actions">
+            <a id="exportDatasetBtn" href="/api/admin/dataset/export" class="ghost-btn" download="dataset_v2.csv" style="display:inline-flex; align-items:center; gap:6px; text-decoration:none; font-weight:700;">📥 Export Dataset v2</a>
+            <button id="retryAnalysesBtn" class="ghost-btn" type="button">Retry analyses</button>
+            <button id="refreshAdminBtn" class="play-btn" type="button">Refresh</button>
+          </div>
+        </div>
+        <div id="gameplayAlertBanner" class="gameplay-alert-banner clear" role="status" aria-live="polite">No suspicious gameplay alerts at this time.</div>
+        <div id="analysisIncompleteNotice"></div>
+        <div id="gameplayAlerts" class="gameplay-alert-list"></div>
+      </section>
+
+      <section class="panel admin-table-panel">
+        <div class="section-title">
+          <div><p class="eyebrow">ACCOUNT ENFORCEMENT</p><h2>Banned and suspended accounts</h2></div>
+          <span id="bannedAccountCount" class="muted">0 accounts</span>
+        </div>
+        <div id="bannedAccountsList" class="list"><div class="empty">No banned or suspended accounts.</div></div>
+      </section>
     </section>
 
-    <section class="admin-section" id="admin-players" data-admin-view="players">
-      <div class="admin-section-heading"><div><h2>Player accounts</h2><p>Review player status, gameplay risk, and access controls.</p></div><button id="refreshPlayersBtn" class="play-btn" type="button">Refresh</button></div>
-      <section class="panel admin-table-panel"><div class="admin-filter-row"><label for="playerSearch">Search players</label><input id="playerSearch" type="search" placeholder="Search by name or email" aria-label="Search players by name or email"></div><div class="admin-table-wrap"><table><thead><tr><th>Player</th><th>Role</th><th>Account Security</th><th>Matches (Hover for last 5)</th><th>Risk score</th><th>Last login IP</th><th>Created</th><th>Actions</th></tr></thead><tbody id="players" aria-live="polite"><tr><td colspan="8">Loading player accounts…</td></tr></tbody></table></div><div id="playersPagination" class="admin-pagination" aria-live="polite"></div></section>
+    <!-- SECTION 2: PLAYERS -->
+    <section class="admin-section" id="admin-players" data-admin-view="players" role="tabpanel">
+      <div class="admin-section-heading">
+        <div><h2>Player accounts</h2><p>Review player status, server-side paginated, sortable, with soft delete.</p></div>
+        <div style="display:flex; gap:10px;">
+          <button id="exportPlayersCsvBtn" class="ghost-btn" type="button">📥 Export Players CSV</button>
+          <button id="refreshPlayersBtn" class="play-btn" type="button">Refresh</button>
+        </div>
+      </div>
+
+      <!-- Bulk Actions Toolbar -->
+      <div id="bulkActionsToolbar" class="bulk-toolbar" hidden>
+        <span><strong id="selectedPlayersCount">0</strong> player(s) selected:</span>
+        <button id="bulkSuspendBtn" class="action-btn" type="button">Bulk Suspend</button>
+        <button id="bulkBanBtn" class="action-btn danger-btn" type="button">Bulk Ban</button>
+        <button id="bulkUnsuspendBtn" class="action-btn ghost-btn" type="button">Bulk Unsuspend</button>
+      </div>
+
+      <section class="panel admin-table-panel">
+        <div class="admin-filter-row">
+          <label for="playerSearch">Search players</label>
+          <input id="playerSearch" type="search" placeholder="Search by name or email" aria-label="Search players by name or email">
+          <label for="playerStatusFilter">Status</label>
+          <select id="playerStatusFilter" class="admin-modal-input" style="width:auto;">
+            <option value="">All Statuses</option>
+            <option value="active">Active Only</option>
+            <option value="suspended">Suspended Only</option>
+            <option value="banned">Banned Only</option>
+            <option value="deleted">Soft-Deleted Only</option>
+          </select>
+        </div>
+        <div class="admin-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:40px;"><input type="checkbox" id="selectAllPlayers" title="Select all players"></th>
+                <th>Player</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Account Security</th>
+                <th>Matches</th>
+                <th>Risk score</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="players" aria-live="polite"><tr><td colspan="9">Loading player accounts…</td></tr></tbody>
+          </table>
+        </div>
+        <div id="playersPagination" class="admin-pagination" aria-live="polite"></div>
+      </section>
     </section>
 
-    <section class="admin-section" id="admin-security" data-admin-view="security">
-      <div class="admin-section-heading"><h2>Security &amp; access</h2><p>Successful sign-ins and recorded security events.</p></div>
-      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">ACCOUNT ACCESS AUDIT</p><h2>Sign-in activity</h2></div><label class="admin-toggle"><input id="includeTestData" type="checkbox"> Include test data</label></div><div class="admin-filter-row"><label for="loginSearch">Search sign-ins</label><input id="loginSearch" type="search" placeholder="Search player, IP, device"><label for="loginPlayerFilter">Player</label><select id="loginPlayerFilter"><option value="">All players</option></select><label for="loginResultFilter">Result</label><select id="loginResultFilter"><option value="">All results</option><option value="Success">Success</option><option value="Failed">Failed</option></select><label for="loginDateFilter">Date</label><input id="loginDateFilter" type="date"><button id="refreshLogins" class="play-btn" type="button">Refresh</button></div><div class="admin-table-wrap login-audit-table"><table><thead><tr><th>Player</th><th>Result</th><th>Device / user agent</th><th>Location</th><th>IP address</th><th>Risk</th><th>Time</th></tr></thead><tbody id="recentLogins" aria-live="polite"><tr><td colspan="7">Loading sign-in activity…</td></tr></tbody></table></div><div id="loginPagination" class="admin-pagination"></div></section>
-      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">FAIR PLAY</p><h2>Honour score report</h2><p class="muted">Completed matches add Honour; leaving unfinished matches removes it. Players can keep matchmaking.</p></div><button id="refreshHonourReport" class="play-btn" type="button">Refresh</button></div><div class="admin-table-wrap honour-report-table"><table><thead><tr><th>Player</th><th>Matches / result</th><th>Latest session</th><th>Honour change</th><th>Honour score</th><th>Match access</th><th>Last update</th></tr></thead><tbody id="honourReportRows" aria-live="polite"><tr><td colspan="7">Loading Honour report…</td></tr></tbody></table></div></section>
-      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">AUDIT TRAIL</p><h2>Security events</h2></div></div><div id="events" class="list"><div class="empty">No security events.</div></div></section>
+    <!-- SECTION 3: SECURITY & APPEALS -->
+    <section class="admin-section" id="admin-security" data-admin-view="security" role="tabpanel">
+      <div class="admin-section-heading">
+        <h2>Security &amp; Ban Appeals</h2>
+        <p>Review player ban appeals, sign-in activity, and audit logs.</p>
+      </div>
+
+      <!-- Ban Appeals Queue -->
+      <section class="panel admin-table-panel">
+        <div class="section-title">
+          <div><p class="eyebrow">PLAYER DEFENSE</p><h2>Ban Appeals Queue</h2></div>
+          <div>
+            <label for="appealsStatusFilter">Filter:</label>
+            <select id="appealsStatusFilter" class="admin-modal-input" style="width:auto; margin-left:6px;">
+              <option value="pending">Pending Review</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+              <option value="">All Appeals</option>
+            </select>
+          </div>
+        </div>
+        <div id="banAppealsList"><div class="empty">Loading ban appeals…</div></div>
+      </section>
+
+      <!-- Audit Log Viewer -->
+      <section class="panel admin-table-panel">
+        <div class="section-title">
+          <div><p class="eyebrow">ADMINISTRATIVE AUDIT LOG</p><h2>Enforcement Action History</h2></div>
+          <button id="exportAuditLogBtn" class="ghost-btn" type="button">📥 Export Audit CSV</button>
+        </div>
+        <div class="admin-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Admin</th>
+                <th>Action</th>
+                <th>Target ID</th>
+                <th>Details / Reason</th>
+              </tr>
+            </thead>
+            <tbody id="auditLogTableBody"><tr><td colspan="5">Loading audit log…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel admin-table-panel">
+        <div class="section-title">
+          <div><p class="eyebrow">ACCOUNT ACCESS AUDIT</p><h2>Sign-in activity</h2></div>
+        </div>
+        <div class="admin-table-wrap login-audit-table">
+          <table>
+            <thead><tr><th>Player</th><th>Result</th><th>Device / user agent</th><th>Location</th><th>IP address</th><th>Risk</th><th>Time</th></tr></thead>
+            <tbody id="recentLogins" aria-live="polite"><tr><td colspan="7">Loading sign-in activity…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
     </section>
 
-    <section class="admin-section" id="admin-gameplay" data-admin-view="gameplay">
-      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">DEVELOPMENT FIXTURES</p><h2>Model comparison</h2></div><div id="hackerDemoControls" class="admin-support-actions" hidden><button id="runHackerDemoBtn" class="play-btn" type="button">Run full demo</button><button id="resetHackerDemoBtn" class="ghost-btn" type="button">Reset demo hackers</button></div></div><div id="hackerAccountsPanel"><div class="empty">Hacker demo accounts are loading.</div></div></section>
-      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">GAME SESSION ANALYSIS</p><h2>Analyzed sessions</h2></div><button id="refreshAnalysisBtn" class="play-btn" type="button">Refresh</button></div><div id="demoComparisonBanner" class="gameplay-alert-banner reviewed" role="status">Choose Run full demo above to add comparison sessions and start the hacker simulations.</div><div id="demoSessionComparison" class="demo-session-comparison"></div><div class="admin-table-wrap"><table class="analysis-results-table"><thead><tr><th>Session / Player</th><th>Created</th><th>Status / Missing</th><th title="Aim accuracy and smoothness measurements">Aim behavior</th><th title="Shots per second">Fire rate</th><th title="Player movement speed">Movement speed</th><th title="Aim correction smoothness">Aim smoothness</th><th title="Kills divided by deaths">K/D ratio</th><th title="Random Forest cheater probability and label">Random Forest</th><th title="Isolation Forest normalized anomaly score and label">Isolation Forest</th><th title="Weighted continuous risk score: 60% RF + 40% Isolation Forest">Final risk</th></tr></thead><tbody id="analyses"><tr><td colspan="11">No analyzed sessions.</td></tr></tbody></table></div></section>
-      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">GAME HISTORY</p><h2>All player game sessions</h2></div></div><div class="admin-table-wrap"><table><thead><tr><th>Session</th><th>Player</th><th>Game</th><th>Started</th><th>Status</th><th>Risk score</th></tr></thead><tbody id="allMatches"><tr><td colspan="6">No game sessions recorded.</td></tr></tbody></table></div></section>
+    <!-- SECTION 4: GAME & ML ANTI-CHEAT -->
+    <section class="admin-section" id="admin-gameplay" data-admin-view="gameplay" role="tabpanel">
+      <!-- Anti-Cheat Decisions Panel -->
+      <section class="panel admin-table-panel">
+        <div class="section-title">
+          <div><p class="eyebrow">MACHINE LEARNING</p><h2>Anti-Cheat Model &amp; Decisions Review</h2></div>
+        </div>
+        <div id="antiCheatDecisionsPanel"><div class="empty">Loading anti-cheat decisions…</div></div>
+      </section>
+
+      <!-- Dev Fixtures (Hidden unless enabled) -->
+      <section class="panel admin-table-panel" id="hackerDemoSection" hidden>
+        <div class="section-title">
+          <div><p class="eyebrow">DEVELOPMENT FIXTURES</p><h2>Model comparison</h2></div>
+          <div id="hackerDemoControls" class="admin-support-actions" hidden>
+            <button id="runHackerDemoBtn" class="play-btn" type="button">Run full demo</button>
+            <button id="resetHackerDemoBtn" class="ghost-btn" type="button">Reset demo hackers</button>
+          </div>
+        </div>
+        <div id="hackerAccountsPanel" hidden><div class="empty">Hacker demo accounts are loading.</div></div>
+        <div id="demoComparisonBanner" class="gameplay-alert-banner reviewed" role="status" hidden>Choose Run full demo above to add comparison sessions and start the hacker simulations.</div>
+      </section>
+
+      <section class="panel admin-table-panel">
+        <div class="section-title">
+          <div><p class="eyebrow">GAME HISTORY</p><h2>All player game sessions</h2></div>
+          <a href="/api/admin/export/sessions" class="ghost-btn" download="sessions.csv">📥 Export Sessions CSV</a>
+        </div>
+        <div class="admin-table-wrap">
+          <table>
+            <thead><tr><th>Session</th><th>Player</th><th>Game</th><th>Started</th><th>Status</th><th>Risk score</th></tr></thead>
+            <tbody id="allMatches"><tr><td colspan="6">No game sessions recorded.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
     </section>
 
-    <section class="admin-section" id="admin-support" data-admin-view="support">
-      <div class="admin-section-heading"><h2>Customer support</h2><p>Review player messages, evidence images, and send replies.</p></div>
-      <section class="panel admin-table-panel"><div class="section-title"><div><p class="eyebrow">SUPPORT QUEUE</p><h2>Player messages</h2></div><button id="refreshSupportInbox" class="play-btn" type="button">Refresh</button></div><div id="supportTicketInbox" class="admin-support-inbox"><div class="empty">Loading player messages…</div></div></section>
+    <!-- SECTION 5: CUSTOMER SUPPORT -->
+    <section class="admin-section" id="admin-support" data-admin-view="support" role="tabpanel">
+      <div class="admin-section-heading">
+        <h2>Customer support</h2>
+        <p>Review player messages, evidence images, priority, and send replies with templates.</p>
+        <div style="display:flex; gap:10px;">
+          <select id="supportStatusFilter" class="admin-modal-input" style="width:auto;">
+            <option value="">All Statuses</option>
+            <option value="open">Open</option>
+            <option value="answered">Answered</option>
+            <option value="resolved">Resolved</option>
+          </select>
+          <select id="supportPriorityFilter" class="admin-modal-input" style="width:auto;">
+            <option value="">All Priorities</option>
+            <option value="urgent">Urgent</option>
+            <option value="high">High</option>
+            <option value="normal">Normal</option>
+            <option value="low">Low</option>
+          </select>
+          <button id="refreshSupportInbox" class="play-btn" type="button">Refresh</button>
+        </div>
+      </div>
+      <section class="panel admin-table-panel">
+        <div class="section-title"><div><p class="eyebrow">SUPPORT QUEUE</p><h2>Player messages</h2></div></div>
+        <div id="supportTicketInbox" class="admin-support-inbox"><div class="empty">Loading player messages…</div></div>
+      </section>
     </section>
 
   </main>
   <div id="playerMatchesHoverCard" class="admin-hover-popover" hidden aria-hidden="true"></div>
   </div>
-  <dialog id="supportProofDialog" class="support-proof-dialog"><div><button id="closeSupportProof" type="button" aria-label="Close image">×</button><img id="supportProofImage" alt="Player supplied support evidence"></div></dialog>
-  <dialog id="reviewNoteDialog" class="review-note-dialog"><form method="dialog" id="reviewNoteForm" novalidate><h2>Save review action</h2><p id="reviewNotePrompt">Add a note for this decision.</p><label id="banDurationLabel" for="banDuration" hidden>Ban duration</label><select id="banDuration" hidden><option value="24h">24 hours</option><option value="7d">7 days</option><option value="permanent">Permanent</option></select><label for="reviewNote">Review note</label><textarea id="reviewNote" maxlength="1000" aria-describedby="reviewNoteError" placeholder="Explain why this action was selected"></textarea><p id="reviewNoteError" class="review-note-error" role="alert" hidden>Enter a review note before saving.</p><div class="review-note-actions"><button id="cancelReviewNote" class="ghost-btn" value="cancel" type="submit" formnovalidate>Cancel</button><button id="saveReviewNote" class="play-btn" value="default" type="submit">Save action</button></div></form></dialog>
-  <script src="js/config.js"></script><script src="js/api.js"></script><script src="js/admin.js?v=20261031-final"></script>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script type="module" src="js/admin.js?v=20261113-v2"></script>
 </body>
 </html>

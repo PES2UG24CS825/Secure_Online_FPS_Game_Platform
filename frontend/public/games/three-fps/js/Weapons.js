@@ -6,7 +6,7 @@
  * ammunition management, reload cycles, and telemetry integration.
  */
 
-const WEAPON_REGISTRY = {
+const WEAPON_REGISTRY = (typeof WeaponConfig !== "undefined" && WeaponConfig.WEAPONS) ? WeaponConfig.WEAPONS : {
   carbine: {
     id: 'carbine',
     name: 'P-24 Carbine',
@@ -673,6 +673,12 @@ class WeaponManager {
     // Eject Brass Bullet Casing
     this.spawnShellEjection();
 
+    // Alert nearby tactical AI bots to audible gunfire
+    if (botManager && typeof botManager.notifyGunshot === 'function' && !w.isSilenced) {
+      const playerPos = controller?.position || camPos;
+      botManager.notifyGunshot(playerPos);
+    }
+
     // Recoil Kick
     this.currentRecoil.z = w.recoilKickZ;
     this.currentRecoil.y = w.recoilKickY;
@@ -821,7 +827,8 @@ class WeaponManager {
       if (this.audio) this.audio.playHitmarker(isHeadshot);
       this.triggerHitmarkerHUD(isHeadshot);
 
-      if (this.camera && window.SecureFPSGame?.hud?.showFloatingDamage) {
+      const isMultiplayer = Boolean(window.SecureFPSGame?.multiplayer?.isInRoom);
+      if (!isMultiplayer && this.camera && window.SecureFPSGame?.hud?.showFloatingDamage) {
         const screenPos = hitPoint.clone().project(this.camera);
         const screenX = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
         const screenY = (-(screenPos.y * 0.5) + 0.5) * window.innerHeight;
@@ -831,9 +838,7 @@ class WeaponManager {
       if (window.SecureFPSGame?.multiplayer) {
         window.SecureFPSGame.multiplayer.emitFire(
           raycaster.ray.origin,
-          hitPoint,
-          remote.id,
-          isHeadshot,
+          raycaster.ray.direction,
           this.activeKey
         );
       }
@@ -851,17 +856,11 @@ class WeaponManager {
       }
 
       if (window.SecureFPSGame?.multiplayer) {
-        window.SecureFPSGame.multiplayer.emitFire(
-          raycaster.ray.origin,
-          hitPoint
-        );
+        window.SecureFPSGame.multiplayer.emitFire(raycaster.ray.origin, raycaster.ray.direction, this.activeKey);
       }
     } else {
       if (window.SecureFPSGame?.multiplayer) {
-        window.SecureFPSGame.multiplayer.emitFire(
-          raycaster.ray.origin,
-          hitPoint
-        );
+        window.SecureFPSGame.multiplayer.emitFire(raycaster.ray.origin, raycaster.ray.direction, this.activeKey);
       }
     }
 

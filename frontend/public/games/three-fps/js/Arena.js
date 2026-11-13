@@ -533,6 +533,9 @@ class Arena {
    * Returns precise elevation for floor, ramps, elevated compound, and catwalks.
    */
   getGroundHeight(x, z) {
+    if (typeof ArenaCollision !== "undefined" && ArenaCollision.getGroundHeight) {
+      return ArenaCollision.getGroundHeight(x, z);
+    }
     // 1. Sloped Access Ramps to Central Compound
     // South Ramp: x in [-2.5, 2.5], z in [8, 14]
     if (Math.abs(x) <= 2.5 && z >= 8.0 && z <= 14.0) {
