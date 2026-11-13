@@ -41,6 +41,7 @@
         var(--player-scene-image) center center / cover fixed,
         #1E1B4B !important;
     }
+    body.player-page[data-player-banner="default-banner"] { --player-scene-image:url("../public/backgrounds/default-banner.jpg"); }
     body.player-page[data-player-banner="sakura"] { --player-scene-image:url("../public/backgrounds/cosmic-cherry-blossom.jpg"); }
     body.player-page[data-player-banner="frontline"] { --player-scene-image:url("../public/backgrounds/sakura-frontline.jpg"); }
     body.player-page[data-player-banner="dawn"] { --player-scene-image:url("../public/backgrounds/sakura-dawn.jpg"); }
@@ -493,9 +494,14 @@
     .match-card-kicker { color:var(--player-blue); font-size:9px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
     .match-card h3 { margin:6px 0 0; font-size:15px; }
     .match-card-date { margin-top:5px; color:var(--player-muted); font-size:11px; }
-    .player-page .match-stat-grid { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)) !important; gap:8px !important; padding:15px 0 !important; }
+    .player-page .match-stat-grid {
+      display: grid !important;
+      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+      gap: 10px !important;
+      padding: 16px 0 !important;
+    }
     .player-page .match-stat {
-      padding: 10px 6px !important;
+      padding: 10px 8px !important;
       border: 1px solid #DDD6FE !important;
       border-top: 3px solid #7C3AED !important;
       border-radius: 10px !important;
@@ -503,6 +509,8 @@
       box-shadow: 0 2px 8px rgba(124, 58, 237, 0.06) !important;
       text-align: center !important;
       transition: all .16s ease !important;
+      min-width: 0 !important;
+      overflow: hidden !important;
     }
     .player-page .match-stat:hover {
       border-color: #8B5CF6 !important;
@@ -512,18 +520,24 @@
     .player-page .match-stat span {
       display: block !important;
       color: #7C3AED !important;
-      font-size: 10px !important;
+      font-size: 11px !important;
       font-weight: 700 !important;
       text-transform: uppercase !important;
-      letter-spacing: 0.04em !important;
-      margin-bottom: 3px !important;
+      letter-spacing: 0.05em !important;
+      margin-bottom: 4px !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
     }
     .player-page .match-stat strong {
       display: block !important;
       color: #4C1D95 !important;
-      font-size: 17px !important;
+      font-size: 16px !important;
       font-weight: 800 !important;
       margin-top: 0 !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
     }
     .match-risk { display:grid; justify-items:center; gap:6px; padding:15px 0 2px; border-top:1px solid var(--player-border); text-align:center; }
     .match-risk span { color:var(--player-muted); font-size:11px; }
@@ -762,6 +776,7 @@
       background-position: center;
       box-shadow: inset 0 -30px 40px -15px rgba(237, 233, 254, 0.95);
     }
+    .profile-banner[data-banner="default-banner"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/default-banner.jpg"); background-position:center 50%; }
     .profile-banner[data-banner="sakura"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/cosmic-cherry-blossom.jpg"); background-position:center 48%; }
     .profile-banner[data-banner="frontline"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/sakura-frontline.jpg"); background-position:center 52%; }
     .profile-banner[data-banner="dawn"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/sakura-dawn.jpg"); background-position:center 55%; }
@@ -774,6 +789,7 @@
     .appearance-option { border:1.5px solid #DDD6FE !important; border-radius:12px !important; padding:4px !important; background:#F5F3FF !important; color:#4C1D95 !important; cursor:pointer; transition:border-color .15s ease,box-shadow .15s ease; }
     .appearance-option[aria-pressed="true"] { border-color:#7C3AED !important; box-shadow:0 0 0 3px rgba(124,58,237,0.2) !important; }
     .banner-option { width:92px; height:44px; border-radius:8px; overflow:hidden; background-image:var(--banner-swatch); }
+    .banner-option[data-banner="default-banner"] { --banner-swatch:linear-gradient(105deg,rgba(39,23,74,.18),rgba(75,35,89,.03)),url("../public/backgrounds/default-banner.jpg"); background-position:center; background-size:cover; }
     .banner-option[data-banner="sakura"] { --banner-swatch:linear-gradient(105deg,rgba(39,23,74,.25),rgba(75,35,89,.05)),url("../public/backgrounds/cosmic-cherry-blossom.jpg"); background-position:center; background-size:cover; }
     .banner-option[data-banner="frontline"] { --banner-swatch:linear-gradient(105deg,rgba(39,23,74,.18),rgba(75,35,89,.03)),url("../public/backgrounds/sakura-frontline.jpg"); background-position:center; background-size:cover; }
     .banner-option[data-banner="dawn"] { --banner-swatch:linear-gradient(105deg,rgba(39,23,74,.12),rgba(75,35,89,.02)),url("../public/backgrounds/sakura-dawn.jpg"); background-position:center; background-size:cover; }
@@ -1031,14 +1047,17 @@
     .reward-store-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)) !important; gap:16px !important; }
     
     .reward-item {
-      display: flex !important;
-      flex-direction: column !important;
+      display: flex;
+      flex-direction: column;
       border: 1px solid #DDD6FE !important;
       border-radius: 14px !important;
       background: #FFFFFF !important;
       box-shadow: 0 4px 16px rgba(124, 58, 237, 0.06) !important;
       overflow: hidden !important;
       transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease !important;
+    }
+    .reward-item.filter-hidden {
+      display: none !important;
     }
     .reward-item:hover {
       transform: translateY(-3px) !important;
@@ -1059,8 +1078,14 @@
       border-color: #D97706 !important;
       box-shadow: 0 12px 35px rgba(245, 158, 11, 0.35), 0 0 20px rgba(124, 58, 237, 0.3) !important;
     }
-    .reward-item.masterpiece-card .reward-preview-box {
+    .reward-item.masterpiece-card .avatar-preview-box,
+    .reward-item.masterpiece-card .perk-preview-box {
       background: radial-gradient(circle at center, rgba(245, 158, 11, 0.35), transparent 70%), linear-gradient(135deg, #451A03 0%, #2E1065 50%, #581C87 100%) !important;
+    }
+    .reward-item.masterpiece-card .banner-preview-box {
+      background-size: cover !important;
+      background-position: center !important;
+      background-repeat: no-repeat !important;
     }
     .reward-item.masterpiece-card .reward-type-tag {
       background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%) !important;
@@ -1405,34 +1430,39 @@
       color: #312E81 !important;
     }
 
-    /* CyberStrike 3D Unique Featured Purple Center Theme */
+    /* Both Game Hub Arena Cards Styled in Royal Purple Theme (Requirement 6) */
+    .player-page .player-game-grid .player-game-card,
     .player-page .player-game-grid .cyberstrike-card-theme {
       border: 2px solid #7c3aed !important;
-      box-shadow: 0 12px 35px rgba(124, 58, 237, 0.25) !important;
+      box-shadow: 0 12px 35px rgba(124, 58, 237, 0.22) !important;
+      border-radius: 20px !important;
+      overflow: hidden !important;
+      background: #FFFFFF !important;
     }
 
-    .player-page .player-game-grid .cyberstrike-card-theme .game-art,
+    .player-page .player-game-grid .player-game-card .game-art,
     .player-page .player-game-grid .cyberstrike-art-theme {
-      background: radial-gradient(circle at 75% 35%, rgba(168, 85, 247, 0.4), transparent 55%), linear-gradient(135deg, #2e1065 0%, #581c87 50%, #7c3aed 100%) !important;
+      background: radial-gradient(circle at 75% 35%, rgba(168, 85, 247, 0.45), transparent 55%), linear-gradient(135deg, #2e1065 0%, #581c87 50%, #7c3aed 100%) !important;
       border-bottom: 2px solid rgba(168, 85, 247, 0.4) !important;
     }
 
-    .player-page .player-game-grid .cyberstrike-card-theme .game-art span {
+    .player-page .player-game-grid .player-game-card .game-art span {
       background: rgba(124, 58, 237, 0.95) !important;
       color: #ffffff !important;
-      border-color: rgba(255, 255, 255, 0.3) !important;
+      border: 1px solid rgba(255, 255, 255, 0.3) !important;
     }
 
-    .player-page .player-game-grid .cyberstrike-card-theme .game-art .game-art-mascot span {
+    .player-page .player-game-grid .player-game-card .game-art .game-art-mascot span {
       background: #7c3aed !important;
       color: #ffffff !important;
       border-color: #a855f7 !important;
     }
 
-    .player-page .player-game-grid .cyberstrike-card-theme .game-info {
+    .player-page .player-game-grid .player-game-card .game-info {
       background: #faf5ff !important;
     }
 
+    .player-page .player-game-grid .player-game-card .game-tag,
     .player-page .player-game-grid .cyberstrike-card-theme .cyberstrike-tag-theme {
       background: rgba(124, 58, 237, 0.18) !important;
       color: #6d28d9 !important;
@@ -1440,16 +1470,120 @@
       font-weight: 700 !important;
     }
 
-    .player-page .player-game-grid .cyberstrike-card-theme .play-btn {
+    .player-page .player-game-grid .player-game-card .play-btn {
       background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%) !important;
       color: #ffffff !important;
       box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35) !important;
       font-weight: 700 !important;
+      border: none !important;
     }
 
-    .player-page .player-game-grid .cyberstrike-card-theme .play-btn:hover {
+    .player-page .player-game-grid .player-game-card .play-btn:hover {
       background: linear-gradient(135deg, #6d28d9 0%, #5b21b6 100%) !important;
       box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5) !important;
+    }
+
+    /* High-Contrast UI Text Legibility (Requirement 6) */
+    .player-page .page-description,
+    .player-page .dashboard-panel-caption {
+      color: #334155 !important;
+      font-weight: 500 !important;
+      font-size: 13px !important;
+    }
+    .player-page .section-title .page-description {
+      color: #1E1B4B !important;
+      font-weight: 600 !important;
+    }
+    .player-page .eyebrow {
+      color: #6D28D9 !important;
+      font-weight: 800 !important;
+      letter-spacing: 0.08em !important;
+    }
+    .player-page .security-card-meta {
+      color: #475569 !important;
+      font-weight: 600 !important;
+    }
+    .player-page table th {
+      color: #4C1D95 !important;
+      font-weight: 700 !important;
+    }
+    .player-page .live-indicator {
+      color: #15803D !important;
+      font-weight: 700 !important;
+    }
+
+    /* Combat Milestones & Daily Mission Bounties (Requirement 7) */
+    .bounties-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+    .bounty-card {
+      background: #FFFFFF;
+      border: 1px solid #DDD6FE;
+      border-top: 3px solid #7C3AED;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(124, 58, 237, 0.06);
+    }
+    .bounty-badge {
+      font-size: 10px;
+      font-weight: 800;
+      color: #7C3AED;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .bounty-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #1E1B4B;
+    }
+    .bounty-desc {
+      font-size: 12.5px;
+      color: #475569;
+      line-height: 1.4;
+      margin: 0;
+      flex: 1;
+    }
+    .bounty-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #F3E8FF;
+    }
+    .bounty-reward {
+      font-size: 12px;
+      font-weight: 800;
+      color: #6D28D9;
+    }
+    .bounty-status-tag {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: #DCFCE7;
+      color: #166534;
+    }
+    .claim-bounty-btn {
+      width: 100%;
+      background: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%) !important;
+      color: #FFFFFF !important;
+      font-weight: 700 !important;
+      margin-top: 6px;
+    }
+    .ghost-bounty-btn {
+      width: 100%;
+      background: #FAF5FF !important;
+      color: #6D28D9 !important;
+      border: 1px solid #DDD6FE !important;
+      font-weight: 700 !important;
+      margin-top: 6px;
     }
 
     .security-actions-container {

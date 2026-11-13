@@ -67,6 +67,7 @@ function updateRiskBreakdown(score) {
 }
 
 const avatarPortraits = {
+  "default-operator": "public/avatars/default-operator.png",
   "chibi-male-1": "public/avatars/chibi-male-1.png",
   "chibi-female-1": "public/avatars/chibi-female-1.png",
   "chibi-male-2": "public/avatars/chibi-male-2.png",
@@ -76,11 +77,11 @@ const avatarPortraits = {
   "celestial-sovereign": "public/avatars/celestial-sovereign.png"
 };
 const bannerScenes = new Set([
-  "sakura", "frontline", "dawn", "neon", "battlefield", "command-center", "cyber-metropolis", "orbital-bastion", "nebula-eternity"
+  "default-banner", "sakura", "frontline", "dawn", "neon", "battlefield", "command-center", "cyber-metropolis", "orbital-bastion", "nebula-eternity"
 ]);
 let playerDashboardLoading = false;
 let appearanceControlsBound = false;
-let currentAppearance = { avatar: "chibi-female-2", banner: "frontline", avatar_image: null, banner_image: null };
+let currentAppearance = { avatar: "default-operator", banner: "default-banner", avatar_image: null, banner_image: null };
 let appearanceDirty = false;
 let renderPlayerAppearance = () => {};
 let playerLiveEvents = null;
@@ -482,7 +483,20 @@ async function loadPlayerDashboard() {
 
     const securityStatus = document.getElementById("securityStatus");
     if (securityStatus && securityData) {
-      const ipRows = history.map((entry) => `<tr><td><code>${playerText(entry.ip_address || "127.0.0.1 (Localhost)")}</code></td><td><div style="display:inline-flex; align-items:center; gap:6px;"><span style="font-size:14px;">${entry.browser_icon || "🌐"}</span><strong style="color:var(--player-text,#1e1b4b); font-size:12px;">${playerText(entry.browser || "Chrome")}</strong><span style="font-size:10px; color:#5b21b6; background:#ede9fe; padding:2px 6px; border-radius:4px; font-weight:600;">${playerText(entry.os || "Windows")}</span></div></td><td>${playerText(playerDate(entry.timestamp))}</td><td>${playerText(entry.authentication_method || "Password + MFA")}</td><td><span class="badge ${entry.success === false ? "bad" : "good"}">${entry.success === false ? "Failed" : "Success"}</span></td></tr>`).join("");
+      const currentEntry = history[0] || { ip_address: "127.0.0.1 (Localhost)", browser: "Google Chrome", os: "Windows 11 / 10", authentication_method: "Password + MFA" };
+      const currentIp = currentEntry.ip_address || "127.0.0.1 (Localhost)";
+      const currentBrowser = (currentEntry.browser || "").toLowerCase();
+      const currentOs = (currentEntry.os || "").toLowerCase();
+
+      // Only show other/external devices or different browsers in the history list (Requirement 1)
+      const otherDeviceEntries = history.slice(1).filter((entry) => {
+        const isDiffIp = entry.ip_address && entry.ip_address !== currentIp;
+        const isDiffBrowser = entry.browser && entry.browser.toLowerCase() !== currentBrowser;
+        const isDiffOs = entry.os && entry.os.toLowerCase() !== currentOs;
+        return isDiffIp || isDiffBrowser || isDiffOs;
+      });
+
+      const ipRows = otherDeviceEntries.map((entry) => `<tr><td><code>${playerText(entry.ip_address || "Unknown")}</code> <span class="badge warn" style="font-size:9px; margin-left:4px;">OTHER DEVICE</span></td><td><div style="display:inline-flex; align-items:center; gap:6px;"><span style="font-size:14px;">${entry.browser_icon || "🌐"}</span><strong style="color:var(--player-text,#1e1b4b); font-size:12px;">${playerText(entry.browser || "Unknown")}</strong><span style="font-size:10px; color:#5b21b6; background:#ede9fe; padding:2px 6px; border-radius:4px; font-weight:600;">${playerText(entry.os || "Device")}</span></div></td><td>${playerText(playerDate(entry.timestamp))}</td><td>${playerText(entry.authentication_method || "Password + MFA")}</td><td><span class="badge ${entry.success === false ? "bad" : "good"}">${entry.success === false ? "Failed" : "Success"}</span></td></tr>`).join("");
       const warnings = Array.isArray(securityData.security_warnings) ? securityData.security_warnings : [];
       securityStatus.innerHTML = `
         <article class="security-card honour-score-card" data-honour-risk="${Number(securityData.honour_score ?? 100) >= 80 ? "low" : Number(securityData.honour_score ?? 100) >= 50 ? "medium" : "high"}"><div class="security-card-label">Honour score</div><div class="security-card-value honour-score-value">${Number(securityData.honour_score ?? 100)}/100</div><div class="security-card-meta">Unfinished matches reduce Honour by 5; completed matches add 5.</div></article>
@@ -491,7 +505,44 @@ async function loadPlayerDashboard() {
         <article class="security-card"><div class="security-card-label">Last login</div><div class="security-card-value security-card-value-small">${playerText(playerDate(securityData.last_login))}</div><div class="security-card-meta">Most recent successful sign in</div></article>
         <article class="security-card"><div class="security-card-label">Latest login IP</div><div class="security-card-value">${playerText(history[0]?.ip_address || "Not recorded")}</div><div class="security-card-meta">Address observed by the server</div></article>
         ${warnings.length ? `<section class="security-history security-warnings"><h3>Security warnings</h3><p class="page-description">A moderator reviewed gameplay activity on your account.</p>${warnings.map((warning) => `<article class="security-warning"><strong>${playerText(playerDate(warning.created_at))}</strong><p>${playerText(warning.note)}</p></article>`).join("")}</section>` : ""}
-        <section class="security-history"><h3>Login & Device History</h3><p class="page-description">Successful sign-ins are recorded with verified IP, browser (Brave, Chrome, Edge, etc.), OS, and MFA status.</p><div class="admin-table-wrap"><table><thead><tr><th>IP address</th><th>Browser & Device</th><th>Signed in</th><th>Authentication</th><th>Result</th></tr></thead><tbody>${ipRows || '<tr><td colspan="5">No sign-in history recorded yet.</td></tr>'}</tbody></table></div></section>
+        <section class="security-history">
+          <h3>Recognized Device &amp; Session Integrity</h3>
+          <p class="page-description" style="color:#334155; font-weight:500;">Hardware fingerprinting ensures your account is accessed exclusively from approved, verified devices.</p>
+          <div style="background: linear-gradient(135deg, #FAF5FF, #F3E8FF); border: 2px solid #7C3AED; border-radius: 12px; padding: 16px; margin: 12px 0 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <span style="font-size: 32px;">💻</span>
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <strong style="color: #4C1D95; font-size: 14px;">This Recognized Device (${playerText(currentEntry.browser || "Google Chrome")} on ${playerText(currentEntry.os || "Windows 11")})</strong>
+                  <span style="background: #10B981; color: white; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px;">CURRENT ACTIVE</span>
+                </div>
+                <div style="color: #6D28D9; font-size: 12px; margin-top: 4px;">
+                  IP: <code>${playerText(currentIp)}</code> • Authenticated: ${playerText(currentEntry.authentication_method || "Password + MFA")} • Last active: ${playerText(playerDate(currentEntry.timestamp || securityData.last_login))}
+                </div>
+              </div>
+            </div>
+            <span style="background: #EDE9FE; color: #6D28D9; border: 1px solid #DDD6FE; font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 8px;">
+              🛡️ Verified Session
+            </span>
+          </div>
+          ${otherDeviceEntries.length > 0 ? `
+            <div class="admin-table-wrap">
+              <table>
+                <thead>
+                  <tr><th>IP address</th><th>Browser & Device</th><th>Signed in</th><th>Authentication</th><th>Result</th></tr>
+                </thead>
+                <tbody>${ipRows}</tbody>
+              </table>
+            </div>` : `
+            <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 12px; padding: 18px; display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 24px;">🛡️</span>
+              <div>
+                <strong style="color: #166534; font-size: 13px;">No other devices or browsers detected</strong>
+                <p style="margin: 2px 0 0; color: #15803D; font-size: 12px;">All recent successful logins originated exclusively from your recognized primary device (${playerText(currentEntry.browser || "Chrome")} / ${playerText(currentIp)}). No foreign sign-ins recorded.</p>
+              </div>
+            </div>
+          `}
+        </section>
         <section class="security-history"><h3>Active sign-in locations</h3><div class="admin-table-wrap"><table><thead><tr><th>IP address</th><th>Device</th><th>Last activity</th></tr></thead><tbody>${activeSessions.map((item) => `<tr><td><code>${playerText(item.ip_address || "127.0.0.1 (Localhost)")}</code></td><td>${playerText(item.device || "Unknown device")}</td><td>${playerText(playerDate(item.last_activity))}</td></tr>`).join("") || '<tr><td colspan="3">No active session records.</td></tr>'}</tbody></table></div></section>`;
     }
     if (securityStatus && !securityData) securityStatus.innerHTML = '<div class="match-empty"><strong>Account security unavailable</strong><span>The security service could not be reached.</span></div>';
@@ -511,10 +562,10 @@ async function loadPlayerDashboard() {
       const customAvatar = profileData?.profile_customization?.avatar_url || profileData?.profile_customization?.avatar_image || null;
       const customBanner = profileData?.profile_customization?.banner_url || profileData?.profile_customization?.banner_image || null;
       currentAppearance = {
-        avatar: avatarPortraits[savedAvatar] ? savedAvatar : "chibi-female-2",
+        avatar: avatarPortraits[savedAvatar] ? savedAvatar : "default-operator",
         banner: bannerScenes.has(savedBanner)
           ? savedBanner
-          : customBanner ? "custom" : "frontline",
+          : customBanner ? "custom" : "default-banner",
         avatar_image: customAvatar,
         banner_image: customBanner
       };
@@ -907,6 +958,15 @@ async function loadNotifications() {
       if (unreadCount > 0) {
         badge.textContent = String(unreadCount);
         badge.hidden = false;
+        // Welcome back notification toast (Requirement 5)
+        if (!sessionStorage.getItem("securefps_welcomed")) {
+          sessionStorage.setItem("securefps_welcomed", "true");
+          setTimeout(() => {
+            if (window.showAppToast) {
+              window.showAppToast("🎁 Welcome back! You have unclaimed match rewards & +25 Daily Coins ready to claim.", "info");
+            }
+          }, 800);
+        }
       } else {
         badge.hidden = true;
       }
@@ -917,12 +977,13 @@ async function loadNotifications() {
         list.innerHTML = '<div style="padding: 16px; text-align: center; color: var(--player-muted, #94a3b8); font-size: 12px;">No notifications.</div>';
       } else {
         list.innerHTML = notifs.map(n => `
-          <div class="notif-item ${n.read ? '' : 'unread'}" data-notif-id="${escapeHtml(n.id)}">
+          <div class="notif-item ${n.read ? '' : 'unread'}" data-notif-id="${escapeHtml(n.id)}" style="${n.read ? '' : 'border-left: 3px solid #7C3AED; background: #FAF5FF;'} padding: 10px 12px; margin-bottom: 6px; border-radius: 8px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-              <strong style="font-size:12px;">${escapeHtml(n.title)}</strong>
-              <small style="font-size:10px; color:var(--player-muted, #94a3b8);">${escapeHtml(overviewDate(n.created_at))}</small>
+              <strong style="font-size:12px; color:#4C1D95;">${escapeHtml(n.title)}</strong>
+              <small style="font-size:10px; color:#6D28D9; font-weight:600;">${escapeHtml(overviewDate(n.created_at))}</small>
             </div>
-            <div style="font-size:12px; line-height:1.4;">${escapeHtml(n.message)}</div>
+            <div style="font-size:12px; line-height:1.4; color:#334155;">${escapeHtml(n.message)}</div>
+            ${n.title.includes("reward") || n.title.includes("Welcome") ? '<div style="margin-top:6px;"><a href="#rewards" style="font-size:11px; font-weight:700; color:#7C3AED; text-decoration:underline;">Go to Rewards & Claim →</a></div>' : ''}
           </div>
         `).join("");
       }

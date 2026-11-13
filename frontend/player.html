@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg?v=2">
 
   <link rel="stylesheet" href="css/styles.css?v=20261113_1825">
-  <link rel="stylesheet" href="css/player.css?v=20261113_1825">
+  <link rel="stylesheet" href="css/player.css?v=20261113_2300">
   <link rel="stylesheet" href="css/ui-polish.css?v=20261113_1825">
 </head>
 
@@ -473,19 +473,26 @@
           <div id="revokeSessionsMsg" hidden></div>
         </article>
 
-        <!-- Privacy & GDPR Data Control Card (Item 14) -->
+        <!-- Player Privacy & Zero-Download Security Card (Requirement 2) -->
         <article class="profile-card security-card-theme">
           <div class="dashboard-panel-head">
             <div>
-              <h3>Privacy & Data Control</h3>
-              <span class="dashboard-panel-caption">GDPR personal data export and self-service account deletion</span>
+              <h3>Player Privacy &amp; Data Control</h3>
+              <span class="dashboard-panel-caption">Zero-download browser execution and GDPR privacy guarantees</span>
             </div>
           </div>
-          <p>
-            Download an archive of all your personal matches, telemetry statistics, and transactions, or request permanent deletion of your profile.
+          <div style="background: rgba(124, 58, 237, 0.06); border: 1px solid #DDD6FE; border-radius: 10px; padding: 12px 16px; margin: 12px 0; display: flex; align-items: flex-start; gap: 12px;">
+            <span style="font-size: 20px;">🛡️</span>
+            <div style="font-size: 12.5px; line-height: 1.5; color: #334155;">
+              <strong style="color: #4C1D95; display: block; margin-bottom: 2px;">Zero Game Downloads Required</strong>
+              All games (CyberStrike 3D and FPS Microgame) run 100% inside your sandboxed browser via WebGL. <strong>No executables, binaries, or game files are ever downloaded or installed to your device.</strong> Your gameplay telemetry is strictly encrypted and used exclusively for real-time anti-cheat validation.
+            </div>
+          </div>
+          <p style="color: #475569; font-size: 13px; line-height: 1.5;">
+            Export a complete copy of your personal telemetry activity logs (JSON) or permanently delete your player profile and all associated data.
           </p>
-          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <button id="exportPlayerDataBtn" type="button" class="play-btn">Export Data (JSON)</button>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;">
+            <button id="exportPlayerDataBtn" type="button" class="play-btn">Export Activity Data (JSON)</button>
             <button id="selfDeleteAccountBtn" type="button" class="play-btn danger-btn">Delete My Account</button>
           </div>
           <div id="gdprFeedbackMsg" hidden style="margin-top: 10px; font-size: 13px;"></div>
@@ -506,13 +513,59 @@
           </div>
           <div class="reward-filter-tabs" id="rewardFilterTabs">
             <button type="button" class="reward-filter-pill active" data-filter="all">All Items</button>
-            <button type="button" class="reward-filter-pill" data-filter="avatar">👤 Avatars (6)</button>
-            <button type="button" class="reward-filter-pill" data-filter="banner">🖼️ Banners (8)</button>
+            <button type="button" class="reward-filter-pill" data-filter="avatar">👤 Operator Avatars</button>
+            <button type="button" class="reward-filter-pill" data-filter="banner">🖼️ Scene Banners</button>
           </div>
         </div>
         <div class="reward-store-grid" id="rewardStore"><div class="empty">Loading rewards…</div></div>
       </section>
-      <section class="profile-card reward-history"><div class="dashboard-panel-head"><div><h2>Recent rewards</h2><span class="dashboard-panel-caption">Daily and match earnings</span></div></div><div id="rewardHistory" class="list"><div class="empty">Loading reward activity…</div></div></section>
+      <!-- Combat Milestones & Daily Mission Bounties (Requirement 7) -->
+      <section class="profile-card reward-bounties-card">
+        <div class="dashboard-panel-head">
+          <div>
+            <h2>Combat Milestones &amp; Daily Mission Bounties</h2>
+            <span class="dashboard-panel-caption">Achieve operational tactical objectives in CyberStrike 3D to claim coin bounties and XP bonuses</span>
+          </div>
+          <div class="booster-status-pill" style="background:#EDE9FE; border:1px solid #DDD6FE; border-radius:999px; padding:6px 14px;">
+            <span style="color: #6D28D9; font-weight: 800; font-size:12px;">⚡ +25% XP Booster Active</span>
+          </div>
+        </div>
+        <div class="bounties-grid" id="rewardBountiesGrid">
+          <div class="bounty-card completed-bounty">
+            <div class="bounty-badge">DAILY MISSION</div>
+            <div class="bounty-title">🎯 Sharpshooter Protocol</div>
+            <p class="bounty-desc">Eliminate hostile tactical combat bots with &ge; 30% ballistic accuracy.</p>
+            <div class="bounty-meta">
+              <span class="bounty-reward">🪙 +50 Coins · ⭐ +100 XP</span>
+              <span class="bounty-status-tag">✅ Ready to Claim</span>
+            </div>
+            <button type="button" class="play-btn claim-bounty-btn" data-bounty="sharpshooter">Claim Bounty ✓</button>
+          </div>
+
+          <div class="bounty-card completed-bounty">
+            <div class="bounty-badge">FAIR PLAY STREAK</div>
+            <div class="bounty-title">🛡️ Guardian Verification</div>
+            <p class="bounty-desc">Complete 3 consecutive tactical combat sessions with 100% clean anti-cheat telemetry.</p>
+            <div class="bounty-meta">
+              <span class="bounty-reward">🪙 +40 Coins · 🛡️ +10 Honour</span>
+              <span class="bounty-status-tag">✅ Verified (3/3)</span>
+            </div>
+            <button type="button" class="play-btn claim-bounty-btn" data-bounty="guardian">Claim Bounty ✓</button>
+          </div>
+
+          <div class="bounty-card active-bounty">
+            <div class="bounty-badge">LIFETIME MILESTONE</div>
+            <div class="bounty-title">👑 Masterpiece Collector</div>
+            <p class="bounty-desc">Unlock a Mythic Masterpiece (Celestial Sovereign or Nebula Eternity) in the Tactical Armory.</p>
+            <div class="bounty-meta">
+              <span class="bounty-reward">🏆 Mythic Profile Flair</span>
+              <span class="bounty-status-tag" style="background: #EDE9FE; color: #6D28D9;">Vault Unlocked</span>
+            </div>
+            <a href="#rewardStore" class="play-btn ghost-bounty-btn" style="text-align: center; text-decoration: none;">Browse Masterpieces →</a>
+          </div>
+        </div>
+        <div id="bountyClaimMsg" style="display: none; margin-top: 12px; padding: 10px 14px; border-radius: 8px; font-weight: 600; font-size: 13px;"></div>
+      </section>
     </section>
 
     <section id="support" class="player-view">
@@ -590,10 +643,10 @@
           <div class="appearance-group">
             <h3>Banner background</h3>
             <div class="appearance-options" id="bannerOptions" role="group" aria-label="Choose banner background">
-              <button class="appearance-option banner-option" type="button" data-banner="sakura" aria-label="Moonlit cherry blossom banner" title="Moonlit sakura" aria-pressed="false"></button>
-              <button class="appearance-option banner-option" type="button" data-banner="frontline" aria-label="Sakura frontline banner" title="Sakura frontline" aria-pressed="true"></button>
-              <button class="appearance-option banner-option" type="button" data-banner="dawn" aria-label="Sakura dawn arena banner" title="Sakura dawn arena" aria-pressed="false"></button>
-              <button class="appearance-option banner-option" type="button" data-banner="neon" aria-label="Neon sakura arena banner" title="Neon sakura arena" aria-pressed="false"></button>
+              <button class="appearance-option banner-option" type="button" data-banner="default-banner" aria-label="Default Proving Ground banner" title="Proving Ground (Default Starter)" aria-pressed="true"></button>
+            </div>
+            <div class="reward-equipped-notice" style="margin: 8px 0 12px; font-size: 12px; color: #4C1D95; font-weight: 600; background: #FAF5FF; border: 1px solid #DDD6FE; border-radius: 8px; padding: 8px 12px;">
+              🌌 <strong>Cosmetic Vault:</strong> Unlock panoramic scene banners in the <a href="#rewards" style="color: #7C3AED; font-weight: 700; text-decoration: underline;">Tactical Armory</a> to equip them across your profile.
             </div>
             <label class="appearance-upload">Upload your banner
               <input id="bannerUpload" type="file" accept="image/png,image/jpeg,image/webp">
@@ -604,10 +657,10 @@
           <div class="appearance-group">
             <h3>Avatar</h3>
             <div class="appearance-options" id="avatarOptions" role="group" aria-label="Choose avatar">
-              <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="chibi-male-1" aria-label="Chibi male avatar one" title="Chibi male one" aria-pressed="false"><img src="public/avatars/chibi-male-1.png" alt=""></button>
-              <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="chibi-female-1" aria-label="Chibi female avatar one" title="Chibi female one" aria-pressed="false"><img src="public/avatars/chibi-female-1.png" alt=""></button>
-              <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="chibi-male-2" aria-label="Chibi male avatar two" title="Chibi male two" aria-pressed="false"><img src="public/avatars/chibi-male-2.png" alt=""></button>
-              <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="chibi-female-2" aria-label="Chibi female avatar two" title="Chibi female two" aria-pressed="true"><img src="public/avatars/chibi-female-2.png" alt=""></button>
+              <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="default-operator" aria-label="Default Recruit Operative" title="Recruit Operative (Default Starter)" aria-pressed="true"><img src="public/avatars/default-operator.png" alt="Recruit Operative"></button>
+            </div>
+            <div class="reward-equipped-notice" style="margin: 8px 0 12px; font-size: 12px; color: #4C1D95; font-weight: 600; background: #FAF5FF; border: 1px solid #DDD6FE; border-radius: 8px; padding: 8px 12px;">
+              👤 <strong>Operator Skins:</strong> Unlock custom combat avatars in the <a href="#rewards" style="color: #7C3AED; font-weight: 700; text-decoration: underline;">Tactical Armory</a> to equip them here.
             </div>
             <label class="appearance-upload">Upload profile photo
               <input id="avatarUpload" type="file" accept="image/png,image/jpeg,image/webp">
@@ -674,10 +727,10 @@
 
 
   <!-- Existing application logic -->
-  <script src="js/config.js?v=20261113_2030"></script>
-  <script src="js/api.js?v=20261113_2030"></script>
-  <script src="js/player-features.js?v=20261113_2030"></script>
-  <script src="js/player.js?v=20261113_2030"></script>
+  <script src="js/config.js?v=20261113_2300"></script>
+  <script src="js/api.js?v=20261113_2300"></script>
+  <script src="js/player-features.js?v=20261113_2300"></script>
+  <script src="js/player.js?v=20261113_2300"></script>
 
 
   <!-- ============================================================

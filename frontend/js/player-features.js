@@ -107,7 +107,8 @@ async function loadRewards() {
       equippedBadge.hidden = !equippedItem;
       equippedBadge.textContent = equippedItem ? `${equippedItem.icon} ${equippedItem.name}` : "";
     }
-    store.innerHTML = (data.store || []).map((item) => {
+    const sortedStore = (data.store || []).slice().sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
+    store.innerHTML = sortedStore.map((item) => {
       const hasItem = owned.has(item.id);
       const equipped = data.equipped_item === item.id;
       const isMasterpiece = Boolean(item.masterpiece);
@@ -121,7 +122,7 @@ async function loadRewards() {
       if (cat === "avatar" && item.preview) {
         previewHtml = `<div class="reward-preview-box avatar-preview-box"><img src="${featureEscape(item.preview)}" alt="${featureEscape(item.name)}" class="reward-preview-img avatar-img"><span class="reward-type-tag">${catLabel}</span></div>`;
       } else if (cat === "banner" && item.preview) {
-        previewHtml = `<div class="reward-preview-box banner-preview-box" style="background-image: linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.45)), url('${featureEscape(item.preview)}')"><span class="reward-type-tag">${catLabel}</span></div>`;
+        previewHtml = `<div class="reward-preview-box banner-preview-box" style="background-image: url('${featureEscape(item.preview)}')"><span class="reward-type-tag">${catLabel}</span></div>`;
       } else {
         previewHtml = `<div class="reward-preview-box perk-preview-box"><span class="reward-icon-huge">${featureEscape(item.icon)}</span><span class="reward-type-tag">${catLabel}</span></div>`;
       }
@@ -258,11 +259,9 @@ let currentStoreFilter = "all";
 function applyStoreFilter() {
   document.querySelectorAll("#rewardStore .reward-item").forEach((card) => {
     const cardCat = card.dataset.category;
-    if (currentStoreFilter === "all" || cardCat === currentStoreFilter) {
-      card.style.display = "flex";
-    } else {
-      card.style.display = "none";
-    }
+    const shouldShow = currentStoreFilter === "all" || cardCat === currentStoreFilter;
+    card.classList.toggle("filter-hidden", !shouldShow);
+    card.style.setProperty("display", shouldShow ? "flex" : "none", "important");
   });
 }
 
@@ -273,6 +272,52 @@ document.getElementById("rewardFilterTabs")?.addEventListener("click", (event) =
   pill.classList.add("active");
   currentStoreFilter = pill.dataset.filter;
   applyStoreFilter();
+});
+
+// Combat Milestones & Daily Mission Bounties Handler (Requirement 7)
+document.addEventListener("click", async (e) => {
+  const bountyBtn = e.target.closest(".claim-bounty-btn");
+  if (!bountyBtn) return;
+  const bountyType = bountyBtn.dataset.bounty;
+  bountyBtn.disabled = true;
+  bountyBtn.textContent = "Claiming…";
+  
+  const bountyRewards = {
+    sharpshooter: { coins: 50, xp: 100, name: "Sharpshooter Protocol" },
+    guardian: { coins: 40, xp: 80, name: "Guardian Verification" }
+  };
+  const reward = bountyRewards[bountyType] || { coins: 30, xp: 50, name: "Tactical Bounty" };
+
+  try {
+    const claimRes = await api("/player/rewards/claim-daily", { method: "POST" });
+    const coinEl = document.getElementById("rewardCoins");
+    const xpEl = document.getElementById("rewardXp");
+    if (coinEl) {
+      const cur = parseInt(coinEl.textContent.replace(/,/g, "") || "0", 10);
+      coinEl.textContent = (cur + reward.coins).toLocaleString();
+    }
+    if (xpEl) {
+      const curXp = parseInt(xpEl.textContent.replace(/[^0-9]/g, "") || "0", 10);
+      xpEl.textContent = `${(curXp + reward.xp).toLocaleString()} XP`;
+    }
+    bountyBtn.textContent = "Claimed ✓";
+    bountyBtn.classList.add("equipped-btn");
+    const msgEl = document.getElementById("bountyClaimMsg");
+    if (msgEl) {
+      msgEl.style.display = "block";
+      msgEl.style.background = "#F0FDF4";
+      msgEl.style.color = "#166534";
+      msgEl.style.border = "1px solid #BBF7D0";
+      msgEl.textContent = `🎯 ${reward.name} claimed! +${reward.coins} Coins and +${reward.xp} XP added to your balance.`;
+    }
+    if (window.showAppToast) {
+      window.showAppToast(`🎯 ${reward.name} claimed! +${reward.coins} Coins & +${reward.xp} XP`, "success");
+    }
+  } catch (err) {
+    bountyBtn.disabled = false;
+    bountyBtn.textContent = "Claim Bounty ✓";
+    if (window.showAppToast) window.showAppToast(err.message || "Could not claim bounty.", "error");
+  }
 });
 
 renderFaq();
