@@ -174,6 +174,18 @@ Ran `python -m pytest backend/tests`:
 | **K3. Live Store Preview Cards & Real-Time Equipping** | `frontend/js/player-features.js`, `frontend/player.html`, `frontend/css/player.css` | Rendered preview thumbnail boxes for avatars and banners, type badges (`OPERATOR SKIN`, `SCENE BANNER`, `WEAPON SKIN`, `COMBAT PERK`), unlocked state badges, and dynamic "Equip Skin" / "Equip Banner" buttons that instantly update the dashboard appearance without page reload. |
 | **K4. Rich Royal Purple Aesthetics Across Dashboard** | `frontend/css/player.css` | Implemented electric royal purple theme (`#7C3AED`, `#6D28D9`, `#8B5CF6`): sidebar active navigation link features an electric purple gradient (`linear-gradient(135deg, #7C3AED, #6D28D9)`) with purple glow, hover links use soft lavender (`#F3E8FF`), and stat balance cards feature purple top borders and text. Verified in `combat_hit_registration.test.js`. |
 
+---
+
+## Section L: Avatars & Banners Cosmetic Vault Overhaul
+
+| Issue / Requirement | Files & Components Changed | Verification Method |
+| :--- | :--- | :--- |
+| **L1. Legacy Badges & Combat Perks Removed from Store** | `backend/routes/player_routes.py` (lines 74–185, 765) | Replaced text-heavy perks and legacy badges with real cosmetic gear. Marked old items `"hidden": True` so only high-tier visual cosmetics populate the store grid while preserving backward-compatibility. |
+| **L2. Six High-Fidelity Equippable Operator Avatars** | `frontend/public/avatars/`, `backend/routes/player_routes.py`, `frontend/js/player.js` | Integrated 6 distinct operator avatars: Valkyrie Void (`valkyrie-void.png`), Ghost Spec-Ops (`ghost-specops.png`), Neon Valkyrie (`chibi-female-1.png`), Cyber Infiltrator (`chibi-male-1.png`), Phantom Recon (`chibi-female-2.png`), and Tactical Vanguard (`chibi-male-2.png`). Equipping directly updates `profile_customization.avatar`. |
+| **L3. Eight High-Resolution Panoramic Scene Banners** | `frontend/public/backgrounds/`, `backend/routes/player_routes.py`, `frontend/css/player.css`, `frontend/js/player.js` | Integrated 8 panoramic banners: Cyber Metropolis (`cyber-metropolis.jpg`), Orbital Bastion (`orbital-bastion.jpg`), Cosmic Blossom (`cosmic-cherry-blossom.jpg`), Sakura Neon Cyber (`sakura-neon.jpg`), Command Ops Center (`command-center.jpg`), Frontline Battlefield (`battlefield.jpg`), Purple Dawn Skyline (`sakura-dawn.jpg`), and Combat Outpost (`sakura-frontline.jpg`). Equipping directly changes the live page scene. |
+| **L4. Real-Time Category Filter Tabs & Preview Cards** | `frontend/player.html`, `frontend/js/player-features.js`, `frontend/css/player.css` | Added interactive category filter pills (`All Items`, `👤 Avatars (6)`, `🖼️ Banners (8)`), image preview boxes with violet radial glow, and dynamic "Equip Skin" / "Equip Banner" buttons. Verified in `combat_hit_registration.test.js`. |
+
+
 
 
 

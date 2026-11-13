@@ -72,66 +72,124 @@ ACHIEVEMENTS = [
 ]
 
 REWARD_STORE = {
-    # 1. Operator Skins & Character Avatars (Equippable)
-    "skin_neon_valkyrie": {
-        "name": "Neon Valkyrie Skin",
-        "description": "High-tech purple cyber-operative avatar with glowing violet HUD visor.",
-        "price": 180,
+    # ==========================================
+    # 1. EXCLUSIVE OPERATOR AVATARS (Equippable)
+    # ==========================================
+    "skin_valkyrie_void": {
+        "name": "Valkyrie Void Avatar",
+        "description": "High-tech cyberpunk operative with glowing violet visor and sleek ballistic armor.",
+        "price": 220,
         "icon": "⚡",
+        "category": "avatar",
+        "avatar_key": "valkyrie-void",
+        "preview": "public/avatars/valkyrie-void.png",
+    },
+    "skin_ghost_specops": {
+        "name": "Ghost Spec-Ops Avatar",
+        "description": "Stealth operative with dual-lens violet night-vision optics and carbon-weave armor.",
+        "price": 200,
+        "icon": "🥷",
+        "category": "avatar",
+        "avatar_key": "ghost-specops",
+        "preview": "public/avatars/ghost-specops.png",
+    },
+    "skin_neon_valkyrie": {
+        "name": "Neon Valkyrie Chibi",
+        "description": "Cute chibi tactical specialist with high-contrast violet sensory headset.",
+        "price": 150,
+        "icon": "💜",
         "category": "avatar",
         "avatar_key": "chibi-female-1",
         "preview": "public/avatars/chibi-female-1.png",
     },
     "skin_cyber_ninja": {
-        "name": "Cyber Ninja Spec-Ops",
-        "description": "Covert tactical infiltrator avatar wrapped in reinforced carbon-violet weave.",
-        "price": 160,
-        "icon": "🥷",
+        "name": "Cyber Infiltrator Chibi",
+        "description": "Covert tactical operative wrapped in reinforced carbon-violet weave.",
+        "price": 140,
+        "icon": "🗡️",
         "category": "avatar",
         "avatar_key": "chibi-male-1",
         "preview": "public/avatars/chibi-male-1.png",
     },
     "skin_phantom_ghost": {
-        "name": "Phantom Recon Operative",
-        "description": "Elite long-range marksman avatar with night-vision optics and ballistic shroud.",
-        "price": 200,
+        "name": "Phantom Recon Chibi",
+        "description": "Long-range marksman operative with dark tactical cloak and sensor array.",
+        "price": 160,
         "icon": "🔮",
         "category": "avatar",
         "avatar_key": "chibi-female-2",
         "preview": "public/avatars/chibi-female-2.png",
     },
     "skin_tactical_vanguard": {
-        "name": "Tactical Vanguard",
-        "description": "Frontline combat specialist avatar equipped with heavy purple alloy plate carrier.",
-        "price": 150,
+        "name": "Tactical Vanguard Chibi",
+        "description": "Frontline combat specialist equipped with heavy alloy purple plate carrier.",
+        "price": 130,
         "icon": "🛡️",
         "category": "avatar",
         "avatar_key": "chibi-male-2",
         "preview": "public/avatars/chibi-male-2.png",
     },
 
-    # 2. Profile Scene Banners (Equippable)
-    "banner_sakura_neon": {
-        "name": "Sakura Neon Cyber Banner",
-        "description": "Vibrant cyberpunk district scene bathed in neon violet & magenta rain.",
-        "price": 140,
+    # ==========================================
+    # 2. PANORAMIC SCENE BANNERS (Equippable)
+    # ==========================================
+    "banner_cyber_metropolis": {
+        "name": "Cyber Metropolis Banner",
+        "description": "Breathtaking cyberpunk city skyline with purple neon skyscrapers and rain reflections.",
+        "price": 180,
         "icon": "🌆",
         "category": "banner",
-        "banner_key": "neon",
-        "preview": "public/backgrounds/sakura-neon.jpg",
+        "banner_key": "cyber-metropolis",
+        "preview": "public/backgrounds/cyber-metropolis.jpg",
+    },
+    "banner_orbital_bastion": {
+        "name": "Orbital Bastion Banner",
+        "description": "Space defense fortress overlooking Earth with glowing violet ion energy barriers.",
+        "price": 200,
+        "icon": "🛰️",
+        "category": "banner",
+        "banner_key": "orbital-bastion",
+        "preview": "public/backgrounds/orbital-bastion.jpg",
     },
     "banner_cosmic_cherry": {
         "name": "Cosmic Blossom Banner",
-        "description": "Ethereal violet blossom sanctuary beneath a celestial purple moon.",
-        "price": 160,
+        "description": "Ethereal violet blossom sanctuary beneath a celestial full moon.",
+        "price": 150,
         "icon": "🌸",
         "category": "banner",
         "banner_key": "sakura",
         "preview": "public/backgrounds/cosmic-cherry-blossom.jpg",
     },
+    "banner_sakura_neon": {
+        "name": "Sakura Neon Cyber Banner",
+        "description": "Cyberpunk neon alleyway with electric purple signs and reflective puddles.",
+        "price": 140,
+        "icon": "💜",
+        "category": "banner",
+        "banner_key": "neon",
+        "preview": "public/backgrounds/sakura-neon.jpg",
+    },
+    "banner_command_center": {
+        "name": "Command Ops Center Banner",
+        "description": "High-tech anti-cheat operations room with multi-screen telemetry feeds.",
+        "price": 160,
+        "icon": "🖥️",
+        "category": "banner",
+        "banner_key": "command-center",
+        "preview": "public/backgrounds/command-center.jpg",
+    },
+    "banner_battlefield": {
+        "name": "Frontline Battlefield Banner",
+        "description": "Dynamic frontline battlefield with armored units and tactical HUD elements.",
+        "price": 150,
+        "icon": "🚁",
+        "category": "banner",
+        "banner_key": "battlefield",
+        "preview": "public/backgrounds/battlefield.jpg",
+    },
     "banner_sakura_dawn": {
         "name": "Purple Dawn Skyline Banner",
-        "description": "Tactical panoramic sunrise over misty purple peaks and high-tech radar arrays.",
+        "description": "Misty mountain peaks under an electric purple sunrise.",
         "price": 120,
         "icon": "🌄",
         "category": "banner",
@@ -139,8 +197,8 @@ REWARD_STORE = {
         "preview": "public/backgrounds/sakura-dawn.jpg",
     },
     "banner_sakura_frontline": {
-        "name": "Frontline Combat Zone Banner",
-        "description": "Forward operational perimeter fortified under electric twilight skies.",
+        "name": "Combat Outpost Banner",
+        "description": "Reinforced military forward operating base under dusk skies.",
         "price": 100,
         "icon": "⚔️",
         "category": "banner",
@@ -148,42 +206,15 @@ REWARD_STORE = {
         "preview": "public/backgrounds/sakura-frontline.jpg",
     },
 
-    # 3. Weapon Skins & Combat Perks
-    "camo_purple_damascus": {
-        "name": "Purple Damascus Camo",
-        "description": "Folded-steel weapon skin treated with vibrant electric purple iridescent waves.",
-        "price": 220,
-        "icon": "✨",
-        "category": "weapon",
-        "camo_key": "purple_damascus",
-    },
-    "tactical_comp": {
-        "name": "Recoil Compensator",
-        "description": "High-efficiency muzzle brake reducing vertical recoil by 15%.",
-        "price": 150,
-        "icon": "🎯",
-        "category": "perk",
-    },
-    "combat_booster": {
-        "name": "+25% XP Combat Protocol",
-        "description": "Combat protocol booster granting +25% bonus XP on match victory.",
-        "price": 120,
-        "icon": "⚡",
-        "category": "perk",
-    },
-    "extended_mag": {
-        "name": "Tactical Extended Mags",
-        "description": "High-capacity PMAG magazines (+5 capacity) for all primary weapons.",
-        "price": 180,
-        "icon": "📦",
-        "category": "perk",
-    },
-
-    # Preserved legacy IDs
-    "guardian_badge": {"name": "Guardian badge", "description": "A shield badge for your player profile.", "price": 100, "icon": "⬡", "category": "badge"},
-    "marksman_badge": {"name": "Marksman badge", "description": "A reticle badge for your player profile.", "price": 180, "icon": "◎", "category": "badge"},
-    "elite_badge": {"name": "Elite sentinel badge", "description": "A premium SecureFPS profile badge.", "price": 300, "icon": "✦", "category": "badge"},
-    "stealth_camo": {"name": "Night-Stalker Operator Camo", "description": "Matte-black stealth ballistic weave tactical uniform.", "price": 250, "icon": "🥷", "category": "perk"},
+    # Preserved legacy items (hidden from store UI per user request)
+    "camo_purple_damascus": {"name": "Purple Damascus Camo", "description": "Folded-steel weapon skin.", "price": 220, "icon": "✨", "category": "weapon", "hidden": True},
+    "tactical_comp": {"name": "Recoil Compensator", "description": "High-efficiency muzzle brake.", "price": 150, "icon": "🎯", "category": "perk", "hidden": True},
+    "combat_booster": {"name": "+25% XP Combat Protocol", "description": "Bonus XP booster.", "price": 120, "icon": "⚡", "category": "perk", "hidden": True},
+    "extended_mag": {"name": "Tactical Extended Mags", "description": "High-capacity magazines.", "price": 180, "icon": "📦", "category": "perk", "hidden": True},
+    "guardian_badge": {"name": "Guardian badge", "description": "A shield badge for your player profile.", "price": 100, "icon": "⬡", "category": "badge", "hidden": True},
+    "marksman_badge": {"name": "Marksman badge", "description": "A reticle badge for your player profile.", "price": 180, "icon": "◎", "category": "badge", "hidden": True},
+    "elite_badge": {"name": "Elite sentinel badge", "description": "A premium SecureFPS profile badge.", "price": 300, "icon": "✦", "category": "badge", "hidden": True},
+    "stealth_camo": {"name": "Night-Stalker Operator Camo", "description": "Matte-black stealth tactical uniform.", "price": 250, "icon": "🥷", "category": "perk", "hidden": True},
 }
 
 UPLOADS_DIR = Path(__file__).resolve().parents[1] / "uploads"
@@ -731,7 +762,7 @@ def get_rewards():
             }
             for a in ACHIEVEMENTS
         ],
-        "store": [{"id": item_id, **item} for item_id, item in REWARD_STORE.items()],
+        "store": [{"id": item_id, **item} for item_id, item in REWARD_STORE.items() if not item.get("hidden")],
         "transactions": [{
             "type": item.get("type", "reward"),
             "description": item.get("description", "Reward earned"),

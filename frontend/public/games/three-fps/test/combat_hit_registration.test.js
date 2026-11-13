@@ -101,15 +101,19 @@ describe('Combat & Hit Registration Verification', () => {
     assert.match(routesPy, /Tactical Extended Mags/);
 
     // Equippable skins and banners in reward store
-    assert.match(routesPy, /skin_neon_valkyrie/);
-    assert.match(routesPy, /banner_sakura_neon/);
+    assert.match(routesPy, /skin_valkyrie_void/);
+    assert.match(routesPy, /skin_ghost_specops/);
+    assert.match(routesPy, /banner_cyber_metropolis/);
+    assert.match(routesPy, /banner_orbital_bastion/);
     assert.match(routesPy, /profile_customization\.avatar/);
     assert.match(routesPy, /profile_customization\.banner/);
+    assert.match(routesPy, /"hidden":\s*True/);
 
     // Purple featured center styling for CyberStrike and sidebar navigation
     assert.match(playerCss, /cyberstrike-card-theme/);
     assert.match(playerCss, /#7c3aed/i);
     assert.match(playerCss, /linear-gradient\(135deg,\s*#7c3aed/i);
+    assert.match(playerCss, /reward-filter-pill/);
   });
 
   it('BotManager prevents elevation floating and checks full diagonal step collision', () => {

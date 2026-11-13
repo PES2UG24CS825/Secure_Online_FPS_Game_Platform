@@ -70,9 +70,13 @@ const avatarPortraits = {
   "chibi-male-1": "public/avatars/chibi-male-1.png",
   "chibi-female-1": "public/avatars/chibi-female-1.png",
   "chibi-male-2": "public/avatars/chibi-male-2.png",
-  "chibi-female-2": "public/avatars/chibi-female-2.png"
+  "chibi-female-2": "public/avatars/chibi-female-2.png",
+  "valkyrie-void": "public/avatars/valkyrie-void.png",
+  "ghost-specops": "public/avatars/ghost-specops.png"
 };
-const bannerScenes = new Set(["sakura", "frontline", "dawn", "neon"]);
+const bannerScenes = new Set([
+  "sakura", "frontline", "dawn", "neon", "battlefield", "command-center", "cyber-metropolis", "orbital-bastion"
+]);
 let playerDashboardLoading = false;
 let appearanceControlsBound = false;
 let currentAppearance = { avatar: "chibi-female-2", banner: "frontline", avatar_image: null, banner_image: null };

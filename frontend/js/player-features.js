@@ -125,7 +125,7 @@ async function loadRewards() {
         previewHtml = `<div class="reward-preview-box perk-preview-box"><span class="reward-icon-huge">${featureEscape(item.icon)}</span><span class="reward-type-tag">${catLabel}</span></div>`;
       }
 
-      return `<article class="reward-item ${equipped ? 'equipped-card' : ''} ${hasItem ? 'unlocked-card' : ''}">
+      return `<article class="reward-item ${equipped ? 'equipped-card' : ''} ${hasItem ? 'unlocked-card' : ''}" data-category="${cat}">
         ${previewHtml}
         <div class="reward-item-body">
           <h3>${featureEscape(item.name)}</h3>
@@ -137,6 +137,7 @@ async function loadRewards() {
         </div>
       </article>`;
     }).join("") || '<div class="empty">No store items are available.</div>';
+    applyStoreFilter();
 
     const history = document.getElementById("rewardHistory");
     if (history) history.innerHTML = (data.transactions || []).map((item) => `<div class="list-row"><div><strong>${featureEscape(item.description)}</strong><small>${featureEscape(item.created_at ? new Date(item.created_at).toLocaleString() : "")}</small></div><span class="badge good">${item.coins > 0 ? `+${item.coins} coins` : item.coins < 0 ? `${item.coins} coins` : `+${item.xp} XP`}</span></div>`).join("") || '<div class="empty">Daily and match rewards will appear here.</div>';
@@ -250,6 +251,27 @@ document.getElementById("rewardStore")?.addEventListener("click", async (event) 
       window.showAppAlert(error.message, { title: "Tactical Armory", tone: "warning" });
     }
   }
+});
+
+let currentStoreFilter = "all";
+function applyStoreFilter() {
+  document.querySelectorAll("#rewardStore .reward-item").forEach((card) => {
+    const cardCat = card.dataset.category;
+    if (currentStoreFilter === "all" || cardCat === currentStoreFilter) {
+      card.style.display = "flex";
+    } else {
+      card.style.display = "none";
+    }
+  });
+}
+
+document.getElementById("rewardFilterTabs")?.addEventListener("click", (event) => {
+  const pill = event.target.closest("button[data-filter]");
+  if (!pill) return;
+  document.querySelectorAll("#rewardFilterTabs .reward-filter-pill").forEach((p) => p.classList.remove("active"));
+  pill.classList.add("active");
+  currentStoreFilter = pill.dataset.filter;
+  applyStoreFilter();
 });
 
 renderFaq();
