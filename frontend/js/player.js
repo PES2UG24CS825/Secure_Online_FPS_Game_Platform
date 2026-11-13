@@ -72,10 +72,11 @@ const avatarPortraits = {
   "chibi-male-2": "public/avatars/chibi-male-2.png",
   "chibi-female-2": "public/avatars/chibi-female-2.png",
   "valkyrie-void": "public/avatars/valkyrie-void.png",
-  "ghost-specops": "public/avatars/ghost-specops.png"
+  "ghost-specops": "public/avatars/ghost-specops.png",
+  "celestial-sovereign": "public/avatars/celestial-sovereign.png"
 };
 const bannerScenes = new Set([
-  "sakura", "frontline", "dawn", "neon", "battlefield", "command-center", "cyber-metropolis", "orbital-bastion"
+  "sakura", "frontline", "dawn", "neon", "battlefield", "command-center", "cyber-metropolis", "orbital-bastion", "nebula-eternity"
 ]);
 let playerDashboardLoading = false;
 let appearanceControlsBound = false;

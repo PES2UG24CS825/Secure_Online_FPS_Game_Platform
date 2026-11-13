@@ -176,14 +176,16 @@ Ran `python -m pytest backend/tests`:
 
 ---
 
-## Section L: Avatars & Banners Cosmetic Vault Overhaul
+## Section M: Electric Purple Theme, 1,000-Coin Masterpieces & Interactive Hover Popover
 
 | Issue / Requirement | Files & Components Changed | Verification Method |
 | :--- | :--- | :--- |
-| **L1. Legacy Badges & Combat Perks Removed from Store** | `backend/routes/player_routes.py` (lines 74–185, 765) | Replaced text-heavy perks and legacy badges with real cosmetic gear. Marked old items `"hidden": True` so only high-tier visual cosmetics populate the store grid while preserving backward-compatibility. |
-| **L2. Six High-Fidelity Equippable Operator Avatars** | `frontend/public/avatars/`, `backend/routes/player_routes.py`, `frontend/js/player.js` | Integrated 6 distinct operator avatars: Valkyrie Void (`valkyrie-void.png`), Ghost Spec-Ops (`ghost-specops.png`), Neon Valkyrie (`chibi-female-1.png`), Cyber Infiltrator (`chibi-male-1.png`), Phantom Recon (`chibi-female-2.png`), and Tactical Vanguard (`chibi-male-2.png`). Equipping directly updates `profile_customization.avatar`. |
-| **L3. Eight High-Resolution Panoramic Scene Banners** | `frontend/public/backgrounds/`, `backend/routes/player_routes.py`, `frontend/css/player.css`, `frontend/js/player.js` | Integrated 8 panoramic banners: Cyber Metropolis (`cyber-metropolis.jpg`), Orbital Bastion (`orbital-bastion.jpg`), Cosmic Blossom (`cosmic-cherry-blossom.jpg`), Sakura Neon Cyber (`sakura-neon.jpg`), Command Ops Center (`command-center.jpg`), Frontline Battlefield (`battlefield.jpg`), Purple Dawn Skyline (`sakura-dawn.jpg`), and Combat Outpost (`sakura-frontline.jpg`). Equipping directly changes the live page scene. |
-| **L4. Real-Time Category Filter Tabs & Preview Cards** | `frontend/player.html`, `frontend/js/player-features.js`, `frontend/css/player.css` | Added interactive category filter pills (`All Items`, `👤 Avatars (6)`, `🖼️ Banners (8)`), image preview boxes with violet radial glow, and dynamic "Equip Skin" / "Equip Banner" buttons. Verified in `combat_hit_registration.test.js`. |
+| **M1. Electric Purple Theme on Stat Cards & Career Overview** | `frontend/css/player.css` | Converted all stat card surfaces (`.player-page .stat-card`, `.player-page .match-stat`) to clean high-contrast cards with 3px solid electric purple top accent (`#7C3AED`), subtle lavender-white gradients, royal purple titles (`#7C3AED`), and deep purple metric numerals (`#4C1D95`). Replaced pale gray buttons with vibrant purple action buttons. |
+| **M2. 4th Card (Last Login) Relocated to Interactive Hover Popover** | `frontend/player.html`, `frontend/css/player.css` | Reduced top quick-stat grid from 4 cards to 3 clean equal-width cards (`Completed matches`, `Account status`, `Two-factor auth`). Housed `#lastLoginIp` in a sleek floating popover (`.hover-stat-popover`) on the Account status card with an interactive `ℹ️ Session` badge, revealed strictly when the user hovers over the card. |
+| **M3. Increased Background Scene Visibility** | `frontend/css/player.css` | Reduced the heavy 86–92% opaque background tint overlay down to a translucent ambient veil (`rgba(245, 243, 255, 0.42), rgba(237, 233, 254, 0.62)`), allowing custom and equipped scenic banners (cyber metropolis, sakura blossoms, cosmic nebula) to display with crisp clarity. |
+| **M4. 1,000-Coin Masterpiece Avatar & Banner Creation** | `frontend/public/avatars/celestial-sovereign.png`, `frontend/public/backgrounds/nebula-eternity.jpg`, `backend/routes/player_routes.py`, `frontend/js/player-features.js`, `frontend/css/player.css` | Created 1,000-coin Masterpiece Avatar ("Celestial Sovereign", ornate purple-and-gold cybernetic deity operator) and Masterpiece Banner ("Nebula Eternity", panoramic cyberpunk citadel suspended in a deep purple and gold nebula). Styled in store with gold/purple mythic borders, golden crown badge (`★ MYTHIC MASTERPIECE ★`), and golden glow shadows. |
+| **M5. Clean Non-Zero Store Catalog with Default Starter Gear** | `backend/routes/player_routes.py`, `frontend/js/player.js` | Established default starter loadout (`chibi-female-2` avatar and `frontline` banner). Removed all free (0 coin) items from store so all items represent earned unlockables (100–1,000 coins). Verified across all 23 test suites. |
+
 
 
 

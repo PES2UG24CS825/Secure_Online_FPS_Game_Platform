@@ -110,8 +110,9 @@ async function loadRewards() {
     store.innerHTML = (data.store || []).map((item) => {
       const hasItem = owned.has(item.id);
       const equipped = data.equipped_item === item.id;
+      const isMasterpiece = Boolean(item.masterpiece);
       const cat = item.category || "perk";
-      const catLabel = cat === "avatar" ? "OPERATOR SKIN" : cat === "banner" ? "SCENE BANNER" : cat === "weapon" ? "WEAPON SKIN" : "COMBAT PERK";
+      const catLabel = isMasterpiece ? "★ MYTHIC MASTERPIECE ★" : (cat === "avatar" ? "OPERATOR AVATAR" : cat === "banner" ? "SCENE BANNER" : "COMBAT PERK");
       const equipVerb = cat === "avatar" ? "Equip Skin" : cat === "banner" ? "Equip Banner" : "Equip Perk";
       const label = equipped ? "Equipped ✓" : hasItem ? equipVerb : `Unlock · ${item.price} Coins`;
       const action = hasItem ? "equip" : "buy";
@@ -125,7 +126,7 @@ async function loadRewards() {
         previewHtml = `<div class="reward-preview-box perk-preview-box"><span class="reward-icon-huge">${featureEscape(item.icon)}</span><span class="reward-type-tag">${catLabel}</span></div>`;
       }
 
-      return `<article class="reward-item ${equipped ? 'equipped-card' : ''} ${hasItem ? 'unlocked-card' : ''}" data-category="${cat}">
+      return `<article class="reward-item ${isMasterpiece ? 'masterpiece-card' : ''} ${equipped ? 'equipped-card' : ''} ${hasItem ? 'unlocked-card' : ''}" data-category="${cat}">
         ${previewHtml}
         <div class="reward-item-body">
           <h3>${featureEscape(item.name)}</h3>

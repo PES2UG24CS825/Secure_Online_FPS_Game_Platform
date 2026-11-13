@@ -73,6 +73,30 @@ ACHIEVEMENTS = [
 
 REWARD_STORE = {
     # ==========================================
+    # ★ 1,000 COIN MYTHIC MASTERPIECES ★
+    # ==========================================
+    "skin_celestial_sovereign": {
+        "name": "Celestial Sovereign",
+        "description": "★ MYTHIC MASTERPIECE ★ Transcendent cyber-deity operator in royal purple & gold filigree armor with an amethyst halo and cosmic stardust aura.",
+        "price": 1000,
+        "icon": "👑",
+        "category": "avatar",
+        "avatar_key": "celestial-sovereign",
+        "preview": "public/avatars/celestial-sovereign.png",
+        "masterpiece": True,
+    },
+    "banner_nebula_eternity": {
+        "name": "Nebula Eternity",
+        "description": "★ MYTHIC MASTERPIECE ★ Majestic floating cosmic citadel suspended in a swirling deep purple and gold galaxy nebula with violet plasma energy spires.",
+        "price": 1000,
+        "icon": "🌌",
+        "category": "banner",
+        "banner_key": "nebula-eternity",
+        "preview": "public/backgrounds/nebula-eternity.jpg",
+        "masterpiece": True,
+    },
+
+    # ==========================================
     # 1. EXCLUSIVE OPERATOR AVATARS (Equippable)
     # ==========================================
     "skin_valkyrie_void": {

@@ -58,3 +58,13 @@ __pycache__/
 
 # Local runtime files
 *.log
+
+# Uploaded test and user media
+backend/uploads/avatars/*.webp
+backend/uploads/avatars/*.png
+backend/uploads/avatars/*.jpg
+backend/uploads/banners/*.webp
+backend/uploads/banners/*.png
+backend/uploads/banners/*.jpg
+!backend/uploads/avatars/.gitkeep
+!backend/uploads/banners/.gitkeep

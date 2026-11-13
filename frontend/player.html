@@ -156,9 +156,20 @@
 
       <section class="stats-grid overview-quick-stats">
         <article class="stat-card"><span>Completed matches</span><strong id="matchesCount">—</strong><small id="matchesSummary">FPS Microgame results</small></article>
-        <article class="stat-card"><span>Account status</span><strong id="accountStatus">Loading</strong><small>Current account state</small></article>
+        <article class="stat-card has-hover-tooltip" tabindex="0">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span>Account status</span>
+            <span class="hover-info-badge">ℹ️ Session</span>
+          </div>
+          <strong id="accountStatus">Loading</strong>
+          <small>Current account state (hover for IP)</small>
+          <div class="hover-stat-popover">
+            <span class="popover-title">Last Authentication</span>
+            <strong id="lastLoginIp" class="ip-stat">127.0.0.1 (Localhost)</strong>
+            <small>Most recent sign-in address</small>
+          </div>
+        </article>
         <article class="stat-card"><span>Two-factor auth</span><strong id="mfaStatus">Loading</strong><small>Authenticator app</small></article>
-        <article class="stat-card"><span>Last login</span><strong id="lastLoginIp" class="ip-stat">Not recorded</strong><small>Most recent sign-in address</small></article>
       </section>
 
       <section class="dashboard-panel overview-combat-panel" style="margin-top: 16px; margin-bottom: 20px;">
