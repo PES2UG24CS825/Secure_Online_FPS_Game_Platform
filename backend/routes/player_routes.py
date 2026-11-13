@@ -27,6 +27,37 @@ from database.db import (
     honour_history,
 )
 from services.csrf import verify_csrf_and_origin
+from routes.auth_routes import parse_client_device
+
+
+def format_login_entry(item):
+    browser = item.get("browser")
+    browser_icon = item.get("browser_icon")
+    os_name = item.get("os")
+    device = item.get("device")
+    if not browser or not os_name:
+        parsed = parse_client_device(item.get("user_agent") or item.get("device") or "")
+        browser = browser or parsed["browser"]
+        browser_icon = browser_icon or parsed["browser_icon"]
+        os_name = os_name or parsed["os"]
+        device = device or parsed["device"]
+
+    ip_raw = item.get("ip_address", item.get("ip", "Unknown"))
+    ip_display = ip_raw
+    if ip_raw in {"127.0.0.1", "localhost", "::1"}:
+        ip_display = "127.0.0.1 (Localhost)"
+
+    return {
+        "timestamp": item["created_at"].isoformat() if item.get("created_at") else None,
+        "ip_address": ip_display,
+        "raw_ip": ip_raw,
+        "authentication_method": item.get("authentication_method", "password+mfa"),
+        "success": item.get("status", "success") == "success",
+        "browser": browser or "Google Chrome",
+        "browser_icon": browser_icon or "🌐",
+        "os": os_name or "Windows",
+        "device": device or f"{browser} ({os_name})",
+    }
 
 ACHIEVEMENTS = [
     {"id": "first_blood", "name": "First Blood", "desc": "Score your first enemy elimination", "reward_xp": 50, "reward_coins": 20},
@@ -451,11 +482,29 @@ def get_leaderboard():
             {"$group": {"_id": "$user_id", "average_risk": {"$avg": "$risk_score"}}},
         ])
     }
+
+    disallowed_keywords = ("test", "demo", "soldier", "hacker", "bot", "dummy", "mock", "temp", "deleted", "operator")
+    disallowed_domains = ("@example.com", "@test.com", "@test.lan", "@test.local", "@deleted.securefps.local", "@example.test")
+    disallowed_prefixes = ("player_", "player", "mfa_", "lan_tester_", "test_")
+
     players = []
     for user in users.find(
-        {"role": {"$ne": "admin"}},
-        {"name": 1},
+        {"role": "player", "account_status": {"$nin": ["suspended", "banned", "deleted"]}},
+        {"name": 1, "email": 1, "role": 1, "account_status": 1, "is_demo": 1},
     ):
+        name = str(user.get("name") or "").strip().lower()
+        email = str(user.get("email") or "").strip().lower()
+
+        # Filter out test, bot, and demo accounts from leaderboard
+        if user.get("is_demo") is True:
+            continue
+        if any(email.endswith(d) for d in disallowed_domains):
+            continue
+        if any(email.startswith(p) for p in disallowed_prefixes):
+            continue
+        if any(kw in name for kw in disallowed_keywords):
+            continue
+
         completed_sessions = list(game_sessions.find(
             {"user_id": user["_id"], "status": "completed"},
             {"session_id": 1},
@@ -487,16 +536,16 @@ def get_leaderboard():
             "average_risk": round(float(risk_by_user.get(user["_id"], 0) or 0), 1),
         })
 
+    # Keep genuine players with match history, or include the currently logged in genuine user
+    current_id = str(user_id)
     players = [
         item for item in players
-        if item["matches"] > 0
-        and item["name"].strip().lower() not in {"live check", "test", "test player", "demo player"}
+        if item["matches"] > 0 or item["id"] == current_id
     ]
     players.sort(key=lambda item: (-item["performance"], -item["kills"], -item["matches"], item["name"].lower()))
     for rank, player in enumerate(players, start=1):
         player["rank"] = rank
 
-    current_id = str(user_id)
     current_player = next((item for item in players if item["id"] == current_id), None)
     return jsonify({
         "leaderboard": players[:10],
@@ -776,12 +825,7 @@ def get_security_summary():
             for item in active_sessions
         ],
         "login_history": [
-            {
-                "timestamp": item["created_at"].isoformat() if item.get("created_at") else None,
-                "ip_address": item.get("ip_address", item.get("ip", "Unknown")),
-                "authentication_method": item.get("authentication_method", "password+mfa"),
-                "success": item.get("status", "success") == "success",
-            }
+            format_login_entry(item)
             for item in logins
         ],
     })
@@ -821,15 +865,7 @@ def get_login_history():
     )
     return jsonify({
         "login_history": [
-            {
-                "timestamp": item["created_at"].isoformat()
-                if item.get("created_at") else None,
-                "ip_address": item.get("ip_address", item.get("ip", "Unknown")),
-                "authentication_method": item.get(
-                    "authentication_method", "password+mfa"
-                ),
-                "success": item.get("status", "success") == "success",
-            }
+            format_login_entry(item)
             for item in history
         ]
     })

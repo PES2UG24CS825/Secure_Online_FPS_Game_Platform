@@ -693,6 +693,23 @@ html, body {
   font-size: 12px;
 }
 
+.match-alive-count {
+  font-weight: 800;
+  color: #00f0ff;
+  letter-spacing: 0.6px;
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.45);
+}
+
+.live-pulse-icon {
+  display: inline-block;
+  animation: pulse-alive-dot 1.8s infinite ease-in-out;
+}
+
+@keyframes pulse-alive-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.85); }
+}
+
 .match-panel-stat strong {
   color: #ffffff;
   font-weight: 700;

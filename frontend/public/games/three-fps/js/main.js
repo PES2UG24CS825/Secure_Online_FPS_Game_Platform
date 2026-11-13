@@ -1637,7 +1637,7 @@ function renderLoop() {
 
         if (curMode === 'solo') {
           modeTag = 'FREE ROAM';
-          playerCountText = 'FREE EXPLORATION';
+          playerCountText = 'ALIVE 1 / 1 (SOLO)';
           targetKills = null;
           const elapsed = Math.floor(gameMode.matchDuration - (gameMode.timeRemaining || 0));
           const mins = Math.floor(Math.max(0, elapsed) / 60).toString().padStart(2, '0');
@@ -1650,7 +1650,10 @@ function renderLoop() {
           const botMgr = window.SecureFPSGame?.botManager;
           const aliveBots = botMgr?.bots ? botMgr.bots.filter(b => !b.isDead).length : 0;
           const totalBots = botMgr?.bots ? botMgr.bots.length : 4;
-          playerCountText = `ENEMIES LEFT ${aliveBots} / ${totalBots}`;
+          const isPlayerAlive = (gameMode.playerHealth || 100) > 0 ? 1 : 0;
+          const totalAlive = aliveBots + isPlayerAlive;
+          const totalPlayers = totalBots + 1;
+          playerCountText = `ALIVE ${totalAlive} / ${totalPlayers} PLAYERS`;
           targetKills = 25;
           const rem = Math.max(0, Math.floor(gameMode.timeRemaining || 0));
           const mins = Math.floor(rem / 60).toString().padStart(2, '0');
@@ -1663,7 +1666,7 @@ function renderLoop() {
           let aliveCount = ((gameMode.playerHealth || 100) > 0 ? 1 : 0);
           remotes.forEach(p => { if (p.health > 0) aliveCount++; });
           const totalCount = remotes.size + 1;
-          playerCountText = `ALIVE ${aliveCount} / ${totalCount}`;
+          playerCountText = `ALIVE ${aliveCount} / ${totalCount} PLAYERS`;
           targetKills = gameMode.targetKills || 25;
           const rem = Math.max(0, Math.floor(gameMode.timeRemaining || 0));
           const mins = Math.floor(rem / 60).toString().padStart(2, '0');

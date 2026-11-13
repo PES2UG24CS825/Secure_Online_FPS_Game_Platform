@@ -48,6 +48,72 @@ def format_iso(dt):
     return str(dt)
 
 
+def parse_client_device(user_agent_str, headers=None):
+    """
+    Parses User-Agent and client hint headers into human-readable browser, OS, and icon.
+    """
+    ua = str(user_agent_str or "")
+    sec_ch_ua = ""
+    if headers:
+        sec_ch_ua = headers.get("Sec-Ch-Ua", "") or ""
+
+    # Browser Detection
+    browser = "Chrome"
+    icon = "🌐"
+    if "Brave" in ua or "Brave" in sec_ch_ua:
+        browser = "Brave"
+        icon = "🦁"
+    elif "Edg/" in ua or "Edge/" in ua:
+        browser = "Microsoft Edge"
+        icon = "🌊"
+    elif "OPR/" in ua or "Opera" in ua:
+        browser = "Opera"
+        icon = "🔴"
+    elif "Vivaldi" in ua:
+        browser = "Vivaldi"
+        icon = "🎭"
+    elif "Firefox/" in ua or "FxiOS" in ua:
+        browser = "Firefox"
+        icon = "🦊"
+    elif "Chrome/" in ua and "Chromium" not in ua and "Edg" not in ua:
+        browser = "Google Chrome"
+        icon = "🌐"
+    elif "Safari/" in ua and "Chrome" not in ua:
+        browser = "Safari"
+        icon = "🧭"
+    elif "Chromium" in ua:
+        browser = "Chromium"
+        icon = "🌐"
+
+    # OS Detection
+    os_name = "Windows"
+    if "Windows NT 10.0" in ua or "Windows NT 11.0" in ua:
+        os_name = "Windows 11 / 10"
+    elif "Windows NT 6.3" in ua:
+        os_name = "Windows 8.1"
+    elif "Windows NT 6.1" in ua:
+        os_name = "Windows 7"
+    elif "Windows" in ua:
+        os_name = "Windows"
+    elif "Android" in ua:
+        os_name = "Android"
+    elif "iPhone" in ua:
+        os_name = "iPhone (iOS)"
+    elif "iPad" in ua:
+        os_name = "iPad (iOS)"
+    elif "Macintosh" in ua or "Mac OS X" in ua:
+        os_name = "macOS"
+    elif "Linux" in ua:
+        os_name = "Linux"
+
+    return {
+        "browser": browser,
+        "browser_icon": icon,
+        "os": os_name,
+        "device": f"{browser} ({os_name})",
+    }
+
+
 def blocked_account_message(user):
     """
     Returns an error message if the account is banned or suspended; otherwise None.
@@ -533,11 +599,14 @@ def complete_login_session(user, auth_method="password+mfa"):
     logged_in_at = utcnow()
     ip_address = request.remote_addr or "Unknown"
 
+    device_info = parse_client_device(request.user_agent.string, request.headers)
     session_record = {
         "user_id": user["_id"],
         "ip": ip_address,
         "ip_address": ip_address,
-        "device": request.user_agent.string[:250],
+        "device": device_info["device"],
+        "browser": device_info["browser"],
+        "os": device_info["os"],
         "created_at": logged_in_at,
         "last_activity": logged_in_at,
         "is_active": True,
@@ -590,7 +659,10 @@ def complete_login_session(user, auth_method="password+mfa"):
         "ip": ip_address,
         "ip_address": ip_address,
         "authentication_method": auth_method,
-        "device": request.user_agent.string[:250],
+        "device": device_info["device"],
+        "browser": device_info["browser"],
+        "browser_icon": device_info["browser_icon"],
+        "os": device_info["os"],
         "user_agent": request.user_agent.string[:250],
         "created_at": logged_in_at,
     })
