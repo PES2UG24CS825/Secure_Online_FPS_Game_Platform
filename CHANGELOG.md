@@ -125,4 +125,17 @@ Ran `python -m pytest backend/tests`:
 | **F6. Demo Readiness Scripts** | `scripts/seed_demo.py`, `scripts/reset_demo.py`, `docs/DEMO_SCRIPT.md` | Built automated demo seeder (clean players, admin, flagged cheater, ban appeal, match history), database reset utility, and step-by-step walkthrough demo script for zero-friction evaluation. |
 | **F7. Architecture & Threat Documentation** | `README.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md`, `docs/LIMITATIONS.md` | Complete architecture guide with Mermaid topology diagram; MITRE/STRIDE-aligned threat model with mitigation matrix; honest limitations and human asset instructions. |
 
+---
+
+## Section G: Player Experience & In-Game Combat Fixes
+
+| Issue / Requirement | Files & Components Changed | Verification Method |
+| :--- | :--- | :--- |
+| **G1. In-Game Red Error Banner Removal** | `frontend/public/games/three-fps/index.html`, `css/game.css`, `js/TacticalOperator.js` | Removed on-screen `#dev-model-notice-banner` element; added CSS `display: none !important;`; silenced `updateDevOverlayStatus()` so the red banner never renders during gameplay. Verified in `combat_hit_registration.test.js`. |
+| **G2. Combat Firing & Enemy Hit Registration Fix** | `frontend/public/games/three-fps/js/TacticalOperator.js`, `js/Weapons.js`, `js/BotManager.js` | Replaced `visible: false` on hitbox material with `{ transparent: true, opacity: 0, depthWrite: false }` so Three.js Raycaster reliably intersects bot head and body hitboxes. Added immediate trigger response on click in `Weapons.js`, filtered out particle FX and UI sprites during raycast, restored correct local positions on bot respawn, and improved `resolveCombatTarget()` to detect headshots and deal fatal damage to bots. Verified with `combat_hit_registration.test.js` and automated tests. |
+| **G3. Game Hub: Only Games Visible** | `frontend/player.html` | Removed redundant `.quick-launch-strip` ("Features" strip) from Game Hub tab; updated title to "FPS Training Arenas"; cards strictly display `CyberStrike 3D` and `FPS Microgame` with high-contrast chibi avatars. |
+| **G4. Aesthetic Background Image Restoration** | `frontend/css/player.css` | Restored `--player-scene-image` (`cosmic-cherry-blossom.jpg`) with an 86%–92% soft lavender gradient tint (`#F4F1FC`), keeping the background art visible while ensuring the sidebar and logo have clean, non-clashing backgrounds. |
+| **G5. Profile Account Creation Date Fix** | `backend/routes/player_routes.py`, `frontend/js/player.js` | Added server-side fallback to `user["_id"].generation_time` if `user.created_at` is missing in MongoDB, backfilling it into the user document. Updated `playerDate()` in `player.js` to format localized date strings (e.g., `Oct 31, 2026`). Verified with `pytest backend/tests/`. |
+
+
 

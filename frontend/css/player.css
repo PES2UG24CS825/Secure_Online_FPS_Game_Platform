@@ -35,27 +35,33 @@
     body.player-page {
       min-height: 100vh;
       overflow-x: hidden;
+      --player-scene-image: url("../public/backgrounds/cosmic-cherry-blossom.jpg");
       background:
-        radial-gradient(circle at 10% 10%, rgba(221, 214, 254, 0.45), transparent 40%),
-        radial-gradient(circle at 90% 90%, rgba(196, 181, 253, 0.35), transparent 45%),
+        linear-gradient(rgba(244, 241, 252, 0.86), rgba(237, 233, 254, 0.92)),
+        var(--player-scene-image) center center / cover fixed,
         #F4F1FC !important;
     }
+    body.player-page[data-player-banner="sakura"] { --player-scene-image:url("../public/backgrounds/cosmic-cherry-blossom.jpg"); }
+    body.player-page[data-player-banner="frontline"] { --player-scene-image:url("../public/backgrounds/sakura-frontline.jpg"); }
+    body.player-page[data-player-banner="dawn"] { --player-scene-image:url("../public/backgrounds/sakura-dawn.jpg"); }
+    body.player-page[data-player-banner="neon"] { --player-scene-image:url("../public/backgrounds/sakura-neon.jpg"); }
 
     /* ---------- Sidebar ---------- */
 
     .player-page .sidebar {
-      background: #FFFFFF !important;
+      background: rgba(255, 255, 255, 0.95) !important;
+      backdrop-filter: blur(12px);
       border-right: 1px solid #DDD6FE !important;
       width: 240px !important;
       box-shadow: 2px 0 16px rgba(109, 40, 217, 0.04) !important;
     }
     body.player-page .sidebar {
-      background: #FFFFFF !important;
+      background: rgba(255, 255, 255, 0.95) !important;
     }
 
     .player-page .brand {
       padding: 24px 20px !important;
-      background: #FFFFFF !important;
+      background: transparent !important;
     }
 
     .player-page .brand-lockup {

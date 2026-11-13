@@ -163,9 +163,9 @@ class Bot {
 
     this.mesh = this.operator.root;
     this.headMesh = this.operator.headMesh;
-    if (this.headMesh) this.headMesh.userData = { bot: this, isHead: true, operator: this.operator };
+    if (this.headMesh) this.headMesh.userData = { bot: this, isHead: true, isHeadshot: true, operator: this.operator };
     this.bodyMesh = this.operator.bodyMesh;
-    if (this.bodyMesh) this.bodyMesh.userData = { bot: this, isHead: false, isBody: true, operator: this.operator };
+    if (this.bodyMesh) this.bodyMesh.userData = { bot: this, isHead: false, isHeadshot: false, isBody: true, operator: this.operator };
   }
 
   setupWaypointRoute() {

@@ -189,6 +189,14 @@ def get_profile():
     # Fetch pending appeal if any
     pending_appeal = ban_appeals.find_one({"user_id": user["_id"], "status": "pending"})
 
+    created_at_val = user.get("created_at")
+    if not created_at_val and "_id" in user and hasattr(user["_id"], "generation_time"):
+        created_at_val = user["_id"].generation_time
+        try:
+            users.update_one({"_id": user["_id"]}, {"$set": {"created_at": created_at_val}})
+        except Exception:
+            pass
+
     return jsonify({
         "id": str(user["_id"]),
         "name": user["name"],
@@ -200,7 +208,7 @@ def get_profile():
         "can_appeal": acc_status in {"banned", "suspended"},
         "has_pending_appeal": bool(pending_appeal),
         "honour_score": user.get("honour_score", 100),
-        "created_at": user["created_at"].isoformat() if user.get("created_at") else None,
+        "created_at": created_at_val.isoformat() if created_at_val and hasattr(created_at_val, "isoformat") else (str(created_at_val) if created_at_val else None),
         "profile_customization": user.get("profile_customization", {
             "avatar": "chibi-female-2",
             "banner": "frontline",
@@ -933,6 +941,10 @@ def get_account_status():
     acc_status = user.get("account_status") or ("suspended" if user.get("revoked") else "active")
     pending_appeal = ban_appeals.find_one({"user_id": user_oid, "status": "pending"})
 
+    created_at_val = user.get("created_at")
+    if not created_at_val and "_id" in user and hasattr(user["_id"], "generation_time"):
+        created_at_val = user["_id"].generation_time
+
     return jsonify({
         "mfa_enabled": user.get("mfa_enabled", False),
         "account_status": acc_status,
@@ -942,7 +954,7 @@ def get_account_status():
         "has_pending_appeal": bool(pending_appeal),
         "risk_score": user.get("risk_score", 0),
         "honour_score": user.get("honour_score", 100),
-        "created_at": user["created_at"].isoformat() if user.get("created_at") else None,
+        "created_at": created_at_val.isoformat() if created_at_val and hasattr(created_at_val, "isoformat") else (str(created_at_val) if created_at_val else None),
         "last_login": recent_login["created_at"].isoformat() if recent_login else None,
         "active_sessions": sessions_db.count_documents({"user_id": user_oid, "is_active": True}),
     })

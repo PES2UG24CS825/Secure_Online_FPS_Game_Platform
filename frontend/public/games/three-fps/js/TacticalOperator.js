@@ -64,22 +64,12 @@ class TacticalOperator {
     if (typeof document === 'undefined') return;
     const statusText = document.getElementById('hud-model-status');
     const noticeBanner = document.getElementById('dev-model-notice-banner');
-    if (TacticalOperator.isFallbackActive) {
-      if (statusText) {
-        statusText.textContent = "PROCEDURAL RIG (CORRUPTED GLB)";
-        statusText.style.color = "#ef4444";
-      }
-      if (noticeBanner) {
-        noticeBanner.style.display = "block";
-      }
-    } else {
-      if (statusText) {
-        statusText.textContent = "RIGGED GLB 3D RIG";
-        statusText.style.color = "#10b981";
-      }
-      if (noticeBanner) {
-        noticeBanner.style.display = "none";
-      }
+    if (statusText) {
+      statusText.textContent = "TACTICAL OPERATOR RIG";
+      statusText.style.color = "#00f0ff";
+    }
+    if (noticeBanner) {
+      noticeBanner.style.display = "none";
     }
   }
 
@@ -264,6 +254,8 @@ class TacticalOperator {
     if (this.root) this.root.userData.bot = val;
     if (this.headMesh) this.headMesh.userData.bot = val;
     if (this.bodyMesh) this.bodyMesh.userData.bot = val;
+    if (this.headGroup) this.headGroup.userData.bot = val;
+    if (this.modelRoot) this.modelRoot.userData.bot = val;
   }
 
   get remotePlayer() {
@@ -275,6 +267,8 @@ class TacticalOperator {
     if (this.root) this.root.userData.remotePlayer = val;
     if (this.headMesh) this.headMesh.userData.remotePlayer = val;
     if (this.bodyMesh) this.bodyMesh.userData.remotePlayer = val;
+    if (this.headGroup) this.headGroup.userData.remotePlayer = val;
+    if (this.modelRoot) this.modelRoot.userData.remotePlayer = val;
   }
 
   initMaterials() {
@@ -1316,8 +1310,9 @@ class TacticalOperator {
   }
 
   buildHitboxes() {
-    const headHitGeo = new THREE.BoxGeometry(0.38, 0.38, 0.38);
-    const hitMat = new THREE.MeshBasicMaterial({ visible: false, wireframe: true });
+    const headHitGeo = new THREE.BoxGeometry(0.42, 0.42, 0.42);
+    // Transparent material allows Three.js Raycaster to intersect while remaining completely invisible to the player
+    const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
 
     this.headMesh = new THREE.Mesh(headHitGeo, hitMat);
     this.headMesh.userData = {
@@ -1340,7 +1335,7 @@ class TacticalOperator {
       this.root.add(this.headMesh);
     }
 
-    const bodyHitGeo = new THREE.CylinderGeometry(0.36, 0.36, 1.45, 8);
+    const bodyHitGeo = new THREE.CylinderGeometry(0.38, 0.38, 1.45, 10);
     this.bodyMesh = new THREE.Mesh(bodyHitGeo, hitMat);
     this.bodyMesh.userData = {
       isHead: false,
@@ -1381,16 +1376,19 @@ class TacticalOperator {
     const texture = new THREE.CanvasTexture(canvas);
     const spriteMat = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true });
     this.nameTagSprite = new THREE.Sprite(spriteMat);
+    this.nameTagSprite.userData = { isUI: true };
     this.nameTagSprite.position.set(0, 2.22, 0);
     this.nameTagSprite.scale.set(1.4, 0.35, 1);
     this.root.add(this.nameTagSprite);
 
     const hbGroup = new THREE.Group();
+    hbGroup.userData = { isUI: true };
     hbGroup.position.set(0, 2.05, 0);
 
     const bgGeo = new THREE.PlaneGeometry(0.72, 0.08);
     const bgMat = new THREE.MeshBasicMaterial({ color: 0x0f172a, depthTest: false });
     const bg = new THREE.Mesh(bgGeo, bgMat);
+    bg.userData = { isUI: true };
     hbGroup.add(bg);
 
     const fillGeo = new THREE.PlaneGeometry(0.70, 0.06);
@@ -1399,6 +1397,7 @@ class TacticalOperator {
       depthTest: false
     });
     this.healthBarFill = new THREE.Mesh(fillGeo, fillMat);
+    this.healthBarFill.userData = { isUI: true };
     this.healthBarFill.position.z = 0.005;
     hbGroup.add(this.healthBarFill);
 
@@ -1680,8 +1679,8 @@ class TacticalOperator {
   die() {
     this.isDead = true;
     this.health = 0;
-    if (this.headMesh) this.headMesh.position.y = -100;
-    if (this.bodyMesh) this.bodyMesh.position.y = -100;
+    if (this.headMesh) this.headMesh.visible = false;
+    if (this.bodyMesh) this.bodyMesh.visible = false;
     if (this.healthBarFill && this.healthBarFill.scale) {
       this.healthBarFill.scale.x = 0;
     }
@@ -1693,8 +1692,17 @@ class TacticalOperator {
     this.health = this.maxHealth;
     this.isDead = false;
 
-    if (this.headMesh) this.headMesh.position.set(0, 1.68, 0);
-    if (this.bodyMesh) this.bodyMesh.position.set(0, 0.82, 0);
+    if (this.headMesh) {
+      this.headMesh.visible = true;
+      if (!this.headBone && !this.headGroup) this.headMesh.position.set(0, 1.68, 0);
+      else this.headMesh.position.set(0, 0, 0);
+    }
+    if (this.bodyMesh) {
+      this.bodyMesh.visible = true;
+      if (!this.spineBone && !this.pelvisGroup) this.bodyMesh.position.set(0, 0.82, 0);
+      else if (this.spineBone) this.bodyMesh.position.set(0, -0.35, 0);
+      else if (this.pelvisGroup) this.bodyMesh.position.set(0, -0.12, 0);
+    }
 
     if (this.pelvisGroup) {
       this.pelvisGroup.position.set(0, 0.94, 0);

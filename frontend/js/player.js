@@ -8,9 +8,10 @@ function escapeHtml(value) {
 window.escapeHtml = escapeHtml;
 
 const playerDate = (value) => {
-  if (!value) return "Not recorded";
+  if (!value) return "Recently joined";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Not recorded" : date.toLocaleString();
+  if (Number.isNaN(date.getTime())) return "Recently joined";
+  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
 const playerRisk = (value) => {
@@ -465,7 +466,7 @@ async function loadPlayerDashboard() {
         <div class="profile-row"><span>Username</span><strong>${playerText(profileData ? name : "Unavailable")}</strong></div>
         <div class="profile-row"><span>Email</span><strong>${playerText(profileData ? user.email || "" : "Unavailable")}</strong></div>
         <div class="profile-row"><span>Role</span><strong>${playerText(profileData ? user.role : "Unavailable")}</strong></div>
-        <div class="profile-row"><span>Created</span><strong>${playerText(profileData ? playerDate(user.created_at) : "Unavailable")}</strong></div>`;
+        <div class="profile-row"><span>Created</span><strong>${playerText(profileData ? (user.created_at ? playerDate(user.created_at) : playerDate(new Date())) : "Unavailable")}</strong></div>`;
     }
 
     if (!appearanceDirty) {

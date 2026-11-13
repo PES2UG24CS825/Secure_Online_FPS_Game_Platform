@@ -2700,3 +2700,12 @@ html, body {
   color: #ffffff;
   box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
 }
+
+#dev-model-notice-banner,
+.dev-model-notice-banner,
+.dev-model-fallback-notice {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
