@@ -70,6 +70,23 @@ def require_admin_write(f):
     return decorated_function
 
 
+def require_super_admin(f):
+    """Ensure that only accounts with super_admin role can execute privileged or destructive actions."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        admin = current_admin()
+        if not admin:
+            return jsonify({"message": "Admin authorization required."}), 403
+        role = admin.get("role")
+        is_super = role == "super_admin" or admin.get("is_super_admin") is True
+        if not is_super:
+            return jsonify({
+                "message": "Restricted operation: Super Administrator authorization required."
+            }), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 def format_iso(dt):
     if not dt:
         return None
@@ -146,10 +163,22 @@ def overview():
     now_ts = time.time()
     force_refresh = request.args.get("refresh", "0") in ("1", "true")
 
+    admin_user = current_admin() or {}
+    admin_role = admin_user.get("role", "admin")
+    is_super = admin_role == "super_admin" or admin_user.get("is_super_admin") is True
+    admin_info = {
+        "id": str(admin_user.get("_id", "")),
+        "name": admin_user.get("name", "Security Admin"),
+        "email": admin_user.get("email", "admin1@gmail.com"),
+        "role": admin_role,
+        "is_super_admin": is_super
+    }
+
     if not force_refresh and _OVERVIEW_CACHE["data"] and (now_ts - _OVERVIEW_CACHE["timestamp"] < OVERVIEW_CACHE_TTL):
         cached_resp = dict(_OVERVIEW_CACHE["data"])
         cached_resp["cached"] = True
         cached_resp["cache_age_seconds"] = round(now_ts - _OVERVIEW_CACHE["timestamp"], 1)
+        cached_resp["admin"] = admin_info
         return jsonify(cached_resp)
 
     # Compute stats using server-side count_documents without unbounded users.find
@@ -187,14 +216,26 @@ def overview():
 
     # Fetch latest 20 game sessions
     recent_game_sessions = list(game_sessions.find().sort("created_at", -1).limit(20))
-    user_ids = [s.get("user_id") for s in recent_game_sessions if s.get("user_id")]
+    user_ids = []
+    for s in recent_game_sessions:
+        uid = s.get("user_id")
+        if uid:
+            user_ids.append(uid)
+            try:
+                user_ids.append(ObjectId(uid))
+            except Exception:
+                pass
     user_docs = list(users.find({"_id": {"$in": user_ids}}, {"name": 1}))
-    user_name_map = {str(u["_id"]): u.get("name", "Operator") for u in user_docs}
+    user_name_map = {}
+    for u in user_docs:
+        user_name_map[str(u["_id"])] = u.get("name", "Operator")
+        user_name_map[u["_id"]] = u.get("name", "Operator")
 
     formatted_matches = []
     for s in recent_game_sessions:
-        uid = str(s.get("user_id", ""))
-        pname = user_name_map.get(uid, s.get("player_name", "Operator"))
+        raw_uid = s.get("user_id", "")
+        uid = str(raw_uid)
+        pname = user_name_map.get(raw_uid, user_name_map.get(uid, s.get("player_name", "Operator")))
         started_dt = s.get("started_at") or s.get("created_at")
         risk = s.get("risk_score")
         formatted_matches.append({
@@ -222,9 +263,10 @@ def overview():
     data = {
         "stats": stats_dict,
         "summary": stats_dict,
+        "admin": admin_info,
         "players": [
-            {"id": uid, "name": name}
-            for uid, name in list(user_name_map.items())[:10]
+            {"id": str(u["_id"]), "name": u.get("name", "Operator")}
+            for u in user_docs[:10]
         ],
         "matches": formatted_matches,
         "events": formatted_events,
@@ -252,7 +294,11 @@ def list_players():
     limit = max(1, min(request.args.get("limit", 25, type=int), 100))
     offset = max(0, request.args.get("offset", 0, type=int))
 
-    query = {"role": {"$nin": ["admin", "demo_admin", "super_admin"]}}
+    query = {
+        "role": {"$nin": ["admin", "demo_admin", "super_admin"]},
+        "email": {"$not": {"$regex": r"(@example\.com|@test\.local|@example\.test|@test\.com|@test\.lan|@securefps\.local)"}},
+        "name": {"$not": {"$regex": r"^(Test Player|Test Soldier|Demo Player)"}}
+    }
 
     if search:
         query["$or"] = [
@@ -357,13 +403,18 @@ def list_players():
             "created_at": format_iso(p.get("created_at")),
         })
 
+    admin_user = current_admin() or {}
+    admin_role = admin_user.get("role", "admin")
+    is_super = admin_role == "super_admin" or admin_user.get("is_super_admin") is True
+
     return jsonify({
         "players": player_rows,
         "total": total_count,
         "limit": limit,
         "offset": offset,
         "sort_by": actual_sort_field,
-        "sort_dir": "asc" if sort_dir == 1 else "desc"
+        "sort_dir": "asc" if sort_dir == 1 else "desc",
+        "is_super_admin": is_super
     })
 
 
@@ -760,7 +811,7 @@ def unban_player(player_id):
 
 
 @admin_bp.post("/players/<player_id>/delete")
-@require_admin_write
+@require_super_admin
 def soft_delete_player(player_id):
     """
     Item 2: Soft delete player account.
@@ -833,7 +884,7 @@ def soft_delete_player(player_id):
 
 
 @admin_bp.post("/players/<player_id>/purge")
-@require_admin_write
+@require_super_admin
 def purge_player(player_id):
     """
     Item 2: Super-admin permanent purge.
@@ -1387,7 +1438,11 @@ def get_reward_balances():
     limit = max(1, min(request.args.get("limit", 25, type=int), 100))
     offset = max(0, request.args.get("offset", 0, type=int))
 
-    query = {"role": {"$nin": ["admin", "demo_admin", "super_admin"]}}
+    query = {
+        "role": {"$nin": ["admin", "demo_admin", "super_admin"]},
+        "email": {"$not": {"$regex": r"(@example\.com|@test\.local|@example\.test|@test\.com|@test\.lan|@securefps\.local)"}},
+        "name": {"$not": {"$regex": r"^(Test Player|Test Soldier|Demo Player)"}}
+    }
     if search:
         query["$or"] = [
             {"name": {"$regex": search, "$options": "i"}},

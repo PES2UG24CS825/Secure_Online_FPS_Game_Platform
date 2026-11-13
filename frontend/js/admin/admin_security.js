@@ -293,15 +293,33 @@ export async function loadAuditLogTable() {
       return;
     }
 
-    tbody.innerHTML = logs.map(l => `
-      <tr>
-        <td>${formatTimeAgo(l.timestamp)}</td>
-        <td><strong>${escapeHtml(l.admin_email || 'System')}</strong></td>
-        <td><span class="badge">${escapeHtml(l.action)}</span></td>
-        <td><code>${escapeHtml(l.target_user_id ? l.target_user_id.substring(0, 8) : '—')}</code></td>
-        <td><small class="muted">${escapeHtml(l.details ? JSON.stringify(l.details) : '')}</small></td>
-      </tr>
-    `).join('');
+    tbody.innerHTML = logs.map(l => {
+      let detailsHtml = '—';
+      if (l.details) {
+        let d = l.details;
+        if (typeof d === 'string') {
+          try { d = JSON.parse(d); } catch (e) {}
+        }
+        if (typeof d === 'object' && d !== null) {
+          const reason = d.reason || d.note || d.ban_reason || '';
+          const ip = d.ip ? `<code style="background:#EDE9FE; color:#5B21B6; padding:2px 6px; border-radius:4px; font-size:11px;">${escapeHtml(d.ip)}</code>` : '';
+          const anon = d.anonymized_email ? `<span class="badge" style="background:#F1F5F9; color:#475569; font-size:10px;">GDPR Purged</span>` : '';
+          const noteText = reason ? `<span style="font-weight:600; color:#1E1B4B;">${escapeHtml(reason)}</span>` : '';
+          detailsHtml = `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">${noteText} ${ip} ${anon}</div>`;
+        } else {
+          detailsHtml = escapeHtml(String(d));
+        }
+      }
+      return `
+        <tr>
+          <td><span style="color:#64748B; font-size:12px;">${formatTimeAgo(l.timestamp)}</span></td>
+          <td><strong>${escapeHtml(l.admin_email || 'System')}</strong></td>
+          <td><span class="badge ${l.action.includes('ban') ? 'badge-danger' : l.action.includes('delete') ? 'badge-deleted' : 'badge-cyan'}">${escapeHtml(l.action.replaceAll('_', ' '))}</span></td>
+          <td><code>${escapeHtml(l.target_user_id ? l.target_user_id.substring(0, 8) : '—')}</code></td>
+          <td>${detailsHtml}</td>
+        </tr>
+      `;
+    }).join('');
   } catch (err) {
     console.error('[AdminSecurity] Audit log load failed:', err);
   }

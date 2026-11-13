@@ -74,6 +74,9 @@ export async function loadPlayersTable() {
     }
 
     const data = await resp.json();
+    if (data.is_super_admin !== undefined) {
+      window.isSuperAdmin = Boolean(data.is_super_admin);
+    }
     const players = data.players || [];
     const total = data.total || 0;
 
@@ -90,6 +93,8 @@ function renderPlayersRows(players, tbody) {
     tbody.innerHTML = '<tr><td colspan="9" class="empty">No players found matching current filters.</td></tr>';
     return;
   }
+
+  const isSuper = Boolean(window.isSuperAdmin || (window.currentAdmin && window.currentAdmin.is_super_admin));
 
   tbody.innerHTML = players.map(p => {
     const isChecked = selectedPlayerIds.has(p.id);
@@ -137,9 +142,11 @@ function renderPlayersRows(players, tbody) {
           ` : (status === 'banned' ? `
             <button class="action-btn unban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Unban</button>
           ` : ''))}
-          ${status !== 'deleted' ? `
-            <button class="action-btn delete-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}" title="Soft delete (anonymize PII)">Soft Delete</button>
-          ` : ''}
+          ${status !== 'deleted' ? (
+            isSuper
+              ? `<button class="action-btn delete-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}" title="Soft delete (anonymize PII)">Soft Delete</button>`
+              : `<span class="badge" style="font-size:10px; background:rgba(148,163,184,0.15); color:#64748B; cursor:not-allowed;" title="Account deletion requires Super Administrator access">🔒 Super Admin</span>`
+          ) : ''}
         </td>
       </tr>
     `;

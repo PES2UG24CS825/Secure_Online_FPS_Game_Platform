@@ -567,3 +567,250 @@
 .admin-page .gameplay-review-actions .play-btn.danger-btn:hover {
   background: #ef4444 !important;
 }
+
+/* ==========================================================================
+   MODERN ENTERPRISE ADMIN DASHBOARD ENHANCEMENTS
+   ========================================================================== */
+
+/* 1. Header & Topbar Fixes */
+.admin-page .ghost-btn {
+  width: auto !important;
+  min-width: 90px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 14px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid #C3BFE0;
+  background: #FFFFFF;
+  color: #4C1D95;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+.admin-page .ghost-btn:hover {
+  background: #EDE9FE;
+  border-color: #7C3AED;
+  color: #4C1D95;
+}
+.admin-page .topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.admin-header-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.admin-header-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #FFFFFF;
+  border: 1px solid #DDD6FE;
+  padding: 6px 14px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.08);
+}
+.admin-header-card .avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #7C3AED, #5B21B6);
+  color: #FFFFFF;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 13px;
+}
+.admin-header-card .avatar.super-admin-avatar {
+  background: linear-gradient(135deg, #F59E0B, #D97706);
+  border: 1.5px solid #FDE68A;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+  font-size: 16px;
+}
+
+/* 2. Modern High-Contrast Cluster Health Cards */
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.health-card {
+  background: linear-gradient(135deg, #1E1B4B 0%, #2E1065 50%, #3B0764 100%) !important;
+  border: 1px solid rgba(139, 92, 246, 0.35) !important;
+  border-radius: 14px !important;
+  padding: 18px 20px !important;
+  color: #F8FAFC !important;
+  box-shadow: 0 4px 18px rgba(76, 29, 149, 0.15) !important;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.health-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.25) !important;
+}
+.health-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.health-header strong {
+  color: #FFFFFF !important;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+.health-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.health-body div {
+  color: #E2E8F0 !important;
+  font-size: 12px;
+}
+.health-body .muted {
+  color: #A78BFA !important;
+  font-size: 11px;
+}
+
+/* 3. Modern ML Anti-Cheat Review Card */
+.anticheat-meta-card {
+  background: linear-gradient(135deg, #1E1B4B 0%, #2E1065 50%, #3B0764 100%) !important;
+  border: 1px solid rgba(139, 92, 246, 0.35) !important;
+  border-radius: 14px !important;
+  padding: 20px !important;
+  color: #F8FAFC !important;
+  box-shadow: 0 4px 18px rgba(76, 29, 149, 0.15) !important;
+  margin-bottom: 20px;
+}
+.anticheat-meta-card strong {
+  color: #FFFFFF !important;
+}
+.anticheat-meta-card .muted {
+  color: #A78BFA !important;
+}
+.feature-bar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+.feature-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+}
+.feat-name {
+  width: 190px;
+  font-family: monospace;
+  color: #E2E8F0 !important;
+  font-weight: 600;
+}
+.feat-track {
+  flex: 1;
+  height: 9px;
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.feat-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8B5CF6, #06B6D4) !important;
+  border-radius: 999px;
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.5);
+}
+.feat-val {
+  width: 44px;
+  text-align: right;
+  font-weight: 700;
+  color: #38BDF8 !important;
+}
+
+/* 4. Professional Customer Support Ticket Card */
+.support-ticket-card {
+  background: #FFFFFF;
+  border: 1px solid #DDD6FE;
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 10px rgba(109, 40, 217, 0.05);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.support-ticket-card:hover {
+  border-color: #A78BFA;
+  box-shadow: 0 4px 16px rgba(109, 40, 217, 0.1);
+}
+.support-ticket-card .ticket-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #F1F5F9;
+}
+.support-ticket-card .ticket-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.support-ticket-card .ticket-time {
+  font-size: 11px;
+  color: #64748B;
+}
+.support-ticket-card .ticket-message {
+  background: #F5F3FF;
+  border-left: 3px solid #7C3AED;
+  padding: 12px 16px;
+  border-radius: 0 8px 8px 0;
+  font-size: 13px;
+  color: #1E1B4B;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+.support-ticket-card .ticket-existing-reply {
+  background: #F0FDF4;
+  border-left: 3px solid #10B981;
+  padding: 12px 16px;
+  border-radius: 0 8px 8px 0;
+  font-size: 13px;
+  color: #064E3B;
+  margin-bottom: 14px;
+}
+.support-ticket-card .ticket-resolved-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ECFDF5;
+  color: #059669;
+  border: 1px solid #A7F3D0;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.support-ticket-card .ticket-reply-form {
+  background: #FAF5FF;
+  border: 1px dashed #DDD6FE;
+  padding: 16px;
+  border-radius: 10px;
+  margin-top: 12px;
+}
+.support-ticket-card .macro-picker-row {
+  margin-bottom: 10px;
+}
+.support-ticket-card .ticket-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}

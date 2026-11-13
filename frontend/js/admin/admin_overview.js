@@ -13,6 +13,7 @@ export async function loadAdminOverview(forceRefresh = false) {
       throw new Error(`Overview fetch failed: ${resp.status}`);
     }
     const data = await resp.json();
+    if (data.admin) renderAdminHeaderBadge(data.admin);
     renderOverviewStats(data.stats || {});
     renderRecentMatches(data.matches || []);
     renderRecentEvents(data.events || []);
@@ -189,4 +190,28 @@ function renderRecentEvents(events) {
       <div class="event-desc">${escapeHtml(e.description || '')}</div>
     </div>
   `).join('');
+}
+
+export function renderAdminHeaderBadge(admin) {
+  if (!admin) return;
+  window.currentAdmin = admin;
+  const nameEl = document.getElementById('adminName');
+  const emailEl = document.getElementById('adminEmail');
+  const avatarEl = document.querySelector('.admin-header-card .avatar');
+
+  if (admin.is_super_admin) {
+    if (nameEl) nameEl.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;"><span>👑</span><strong>Super Administrator</strong></span>`;
+    if (emailEl) emailEl.innerHTML = `<span style="color:#F59E0B; font-weight:700;">Full System Privileges</span> · ${escapeHtml(admin.email || '')}`;
+    if (avatarEl) {
+      avatarEl.textContent = '👑';
+      avatarEl.classList.add('super-admin-avatar');
+    }
+  } else {
+    if (nameEl) nameEl.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;"><span>🛡️</span><strong>Security Admin</strong></span>`;
+    if (emailEl) emailEl.innerHTML = `<span style="color:#7C3AED; font-weight:600;">Restricted Ops</span> · ${escapeHtml(admin.email || '')}`;
+    if (avatarEl) {
+      avatarEl.textContent = 'SA';
+      avatarEl.classList.remove('super-admin-avatar');
+    }
+  }
 }
