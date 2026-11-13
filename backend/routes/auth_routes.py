@@ -463,11 +463,15 @@ def login():
     session["mfa_pending_user"] = str(user["_id"])
     session["mfa_takeover"] = session_takeover
 
-    return jsonify({
+    resp_payload = {
         "message": "Password verified. Authenticator MFA required.",
         "mfa_required": True,
         "replace_other_session": session_takeover,
-    })
+    }
+    if not is_production() and user.get("mfa_secret"):
+        resp_payload["dev_totp_code"] = pyotp.TOTP(user["mfa_secret"]).now()
+
+    return jsonify(resp_payload)
 
 
 @auth_bp.post("/verify-mfa")

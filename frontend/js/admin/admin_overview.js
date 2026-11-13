@@ -9,7 +9,10 @@ export async function loadAdminOverview(forceRefresh = false) {
     const url = forceRefresh ? '/api/admin/overview?refresh=1' : '/api/admin/overview';
     const resp = await fetch(url, { credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
     if (!resp.ok) {
-      if (resp.status === 403) return;
+      if (resp.status === 401 || resp.status === 403) {
+        window.location.replace('login.html?next=admin.html');
+        return false;
+      }
       throw new Error(`Overview fetch failed: ${resp.status}`);
     }
     const data = await resp.json();
@@ -21,8 +24,10 @@ export async function loadAdminOverview(forceRefresh = false) {
     // Check cluster health
     await loadServerClusterHealth();
     await loadMultiplayerRoomsPanel();
+    return true;
   } catch (err) {
     console.error('[AdminOverview] Error loading overview:', err);
+    return false;
   }
 }
 

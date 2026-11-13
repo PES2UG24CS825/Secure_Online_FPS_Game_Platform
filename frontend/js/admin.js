@@ -14,8 +14,9 @@ async function initAdminApp() {
   setupNavigation();
   setupHeaderControls();
 
-  // Load initial view
-  await loadAdminOverview();
+  // Load initial view - will redirect to login if session is expired or unauthenticated
+  const ok = await loadAdminOverview();
+  if (!ok) return;
 
   // Initialize modular sections
   initPlayersSection();
