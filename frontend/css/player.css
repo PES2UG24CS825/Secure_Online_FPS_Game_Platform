@@ -7,13 +7,13 @@
        ============================================================ */
 
     :root {
-      --player-bg: #DEDCEE;
-      --player-sidebar: #E9E7F5;
-      --player-panel: #E9E7F5;
-      --player-panel-2: #D6D3EA;
-      --player-border: #C3BFE0;
-      --player-border-strong: #A99BD5;
-      --player-text: #1B1730;
+      --player-bg: #F4F1FC;
+      --player-sidebar: #FFFFFF;
+      --player-panel: #FFFFFF;
+      --player-panel-2: #F5F3FF;
+      --player-border: #DDD6FE;
+      --player-border-strong: #8B5CF6;
+      --player-text: #1E1B4B;
       --player-muted: #53507A;
       --player-blue: #6D28D9;
       --player-blue-2: #4C1D95;
@@ -21,42 +21,50 @@
       --player-yellow: #B45309;
       --player-red: #B91C1C;
       --player-radius: 16px;
-      --player-shadow: 0 18px 45px rgba(0, 0, 0, 0.18);
+      --player-shadow: 0 4px 20px rgba(109, 40, 217, 0.05);
     }
 
     html,
     body {
       margin: 0;
       min-height: 100%;
-      background: var(--player-bg);
-      color: var(--player-text);
+      background: #F4F1FC !important;
+      color: #1E1B4B !important;
     }
 
     body.player-page {
       min-height: 100vh;
       overflow-x: hidden;
-      --player-scene-image: url("../public/backgrounds/sakura-frontline.jpg");
       background:
-        linear-gradient(rgba(233,231,245,.76),rgba(233,231,245,.82)),
-        var(--player-scene-image) center center / cover fixed,
-        var(--player-bg);
+        radial-gradient(circle at 10% 10%, rgba(221, 214, 254, 0.45), transparent 40%),
+        radial-gradient(circle at 90% 90%, rgba(196, 181, 253, 0.35), transparent 45%),
+        #F4F1FC !important;
     }
-    body.player-page[data-player-banner="sakura"] { --player-scene-image:url("../public/backgrounds/cosmic-cherry-blossom.jpg"); }
-    body.player-page[data-player-banner="frontline"] { --player-scene-image:url("../public/backgrounds/sakura-frontline.jpg"); }
-    body.player-page[data-player-banner="dawn"] { --player-scene-image:url("../public/backgrounds/sakura-dawn.jpg"); }
-    body.player-page[data-player-banner="neon"] { --player-scene-image:url("../public/backgrounds/sakura-neon.jpg"); }
 
     /* ---------- Sidebar ---------- */
 
     .player-page .sidebar {
-      background: var(--player-sidebar) !important;
-      border-right: 1px solid var(--player-border) !important;
+      background: #FFFFFF !important;
+      border-right: 1px solid #DDD6FE !important;
       width: 240px !important;
+      box-shadow: 2px 0 16px rgba(109, 40, 217, 0.04) !important;
     }
-    body.player-page .sidebar { background:linear-gradient(rgba(233,231,245,.88),rgba(233,231,245,.91)),var(--player-scene-image) center center / cover fixed !important; }
+    body.player-page .sidebar {
+      background: #FFFFFF !important;
+    }
 
     .player-page .brand {
-      padding: 26px 22px !important;
+      padding: 24px 20px !important;
+      background: #FFFFFF !important;
+    }
+
+    .player-page .brand-lockup {
+      display: block;
+      width: 185px;
+      max-width: 100%;
+      height: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 8px rgba(109, 40, 217, 0.1));
     }
 
     .player-page .brand-mark {
@@ -1079,71 +1087,25 @@
       }
     }
 
-    /* Dark Mode Tokens (Item 11) */
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --player-bg: #0b0f19;
-        --player-sidebar: #111827;
-        --player-panel: #111827;
-        --player-panel-2: #1f2937;
-        --player-border: #374151;
-        --player-border-strong: #6366f1;
-        --player-text: #f9fafb;
-        --player-muted: #9ca3af;
-        --player-blue: #8b5cf6;
-        --player-blue-2: #7c3aed;
-        --player-shadow: 0 18px 45px rgba(0, 0, 0, 0.45);
-      }
+    /* High Contrast & Clean Tokens */
+    .security-card-theme {
+      background: #FFFFFF !important;
+      border-color: #DDD6FE !important;
+    }
 
-      body.player-page {
-        background:
-          linear-gradient(rgba(17, 24, 39, 0.88), rgba(17, 24, 39, 0.94)),
-          var(--player-scene-image) center center / cover fixed,
-          var(--player-bg);
-      }
+    .security-input-theme {
+      background: #FAF5FF !important;
+      border-color: #C4B5FD !important;
+      color: #1E1B4B !important;
+    }
 
-      body.player-page .sidebar {
-        background: linear-gradient(rgba(17, 24, 39, 0.92), rgba(17, 24, 39, 0.96)), var(--player-scene-image) center center / cover fixed !important;
-      }
+    .recovery-codes-box-theme {
+      background: #F5F3FF !important;
+      border-color: #DDD6FE !important;
+    }
 
-      .player-page .sidebar nav a {
-        color: #9ca3af !important;
-      }
-
-      .player-page .sidebar nav a:hover {
-        background: #1f2937 !important;
-        color: #f9fafb !important;
-      }
-
-      .player-page .brand strong,
-      .player-page .mini-profile strong {
-        color: #f9fafb !important;
-      }
-
-      .player-page .brand small,
-      .player-page .mini-profile small {
-        color: #9ca3af !important;
-      }
-
-      .security-card-theme {
-        background: #1f2937 !important;
-        border-color: #374151 !important;
-      }
-
-      .security-input-theme {
-        background: #111827 !important;
-        border-color: #374151 !important;
-        color: #f9fafb !important;
-      }
-
-      .recovery-codes-box-theme {
-        background: #111827 !important;
-        border-color: #4b5563 !important;
-      }
-
-      .recovery-codes-grid-theme {
-        color: #e2e8f0 !important;
-      }
+    .recovery-codes-grid-theme {
+      color: #312E81 !important;
     }
 
     /* CSS Classes Replacing Inline Styles (Item 11) */
@@ -1366,29 +1328,37 @@
     }
 
     .quick-launch-card {
-      background: var(--player-panel, #E9E7F5);
-      border: 1px solid var(--player-border, #C3BFE0);
-      border-radius: 10px;
-      padding: 14px 16px;
+      background: #FFFFFF !important;
+      border: 1px solid #DDD6FE !important;
+      border-radius: 14px !important;
+      padding: 18px 20px !important;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      transition: transform 0.15s ease, border-color 0.15s ease;
+      box-shadow: 0 4px 16px rgba(109, 40, 217, 0.05) !important;
+      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
     }
 
     .quick-launch-card:hover {
       transform: translateY(-2px);
-      border-color: #7c3aed;
+      border-color: #8B5CF6 !important;
+      box-shadow: 0 8px 24px rgba(109, 40, 217, 0.1) !important;
     }
 
     .quick-launch-card strong {
-      font-size: 1.05rem;
-      margin-bottom: 4px;
+      display: block;
+      color: #1E1B4B !important;
+      font-size: 1.1rem !important;
+      font-weight: 800 !important;
+      margin-bottom: 6px !important;
     }
 
     .quick-launch-card small {
-      color: var(--player-muted, #53507A);
-      margin-bottom: 12px;
+      display: block;
+      color: #4B5563 !important;
+      font-size: 12px !important;
+      line-height: 1.5 !important;
+      margin-bottom: 14px !important;
     }
 
     /* Skeleton Loaders (Item 13) */
