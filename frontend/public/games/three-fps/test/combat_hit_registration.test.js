@@ -33,6 +33,16 @@ describe('Combat & Hit Registration Verification', () => {
     assert.match(code, /isSprite/);
   });
 
+  it('Weapons and shared config initialize valid numeric magAmmo and reserveAmmo', () => {
+    const configCode = fs.readFileSync(path.join(rootDir, 'js/shared/weapon_config.js'), 'utf-8');
+    const wepCode = fs.readFileSync(path.join(rootDir, 'js/Weapons.js'), 'utf-8');
+    assert.match(configCode, /magAmmo:\s*30/);
+    assert.match(configCode, /magAmmo:\s*35/);
+    assert.match(configCode, /magAmmo:\s*5/);
+    assert.match(configCode, /magAmmo:\s*17/);
+    assert.match(wepCode, /wep\.magAmmo\s*=\s*wep\.magSize/);
+  });
+
   it('Game Hub in player.html has removed quick-launch features and only displays games', () => {
     const html = fs.readFileSync(path.resolve(rootDir, '../../../player.html'), 'utf-8');
     assert.doesNotMatch(html, /class="quick-launch-strip"/);

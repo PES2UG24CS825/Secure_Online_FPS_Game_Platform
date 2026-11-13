@@ -1617,17 +1617,34 @@ html, body {
    ========================================================= */
 .menu-tabs {
   grid-template-columns: repeat(6, 1fr) !important;
+  gap: 6px !important;
+  align-items: center;
+}
+
+.menu-tab {
+  padding: 8px 6px !important;
+  font-size: 11px !important;
+  letter-spacing: 0.5px !important;
+}
+
+.menu-tab .tab-svg-icon {
+  flex-shrink: 0;
+  color: inherit;
 }
 
 .menu-tab.exit-tab {
-  border-color: rgba(239, 68, 68, 0.3);
-  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.45) !important;
+  color: #f87171 !important;
+  background: rgba(239, 68, 68, 0.08) !important;
+  border-radius: 7px;
+  gap: 5px;
 }
 
 .menu-tab.exit-tab:hover {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: #ef4444;
-  color: #fff;
+  background: rgba(239, 68, 68, 0.22) !important;
+  border-color: #ef4444 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
 }
 
 .mode-info-card {

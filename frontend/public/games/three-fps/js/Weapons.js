@@ -109,6 +109,15 @@ class WeaponManager {
 
     // Active Weapon Inventory
     this.weapons = JSON.parse(JSON.stringify(WEAPON_REGISTRY));
+    Object.keys(this.weapons).forEach((k) => {
+      const wep = this.weapons[k];
+      if (typeof wep.magAmmo !== 'number' || Number.isNaN(wep.magAmmo)) {
+        wep.magAmmo = wep.magSize || 30;
+      }
+      if (typeof wep.reserveAmmo !== 'number' || Number.isNaN(wep.reserveAmmo)) {
+        wep.reserveAmmo = (wep.magSize || 30) * 4;
+      }
+    });
     this.activeKey = 'carbine';
     this.activeWeapon = this.weapons.carbine;
 
@@ -1156,9 +1165,12 @@ class WeaponManager {
 
   updateHUD() {
     const w = this.activeWeapon;
+    if (!w) return;
+    const clip = (typeof w.magAmmo === 'number' && !Number.isNaN(w.magAmmo)) ? w.magAmmo : (w.magSize || 30);
+    const reserve = (typeof w.reserveAmmo === 'number' && !Number.isNaN(w.reserveAmmo)) ? w.reserveAmmo : (w.magSize * 4 || 120);
     if (this.weaponNameEl) this.weaponNameEl.textContent = w.name;
     if (this.weaponCaliberEl) this.weaponCaliberEl.textContent = w.caliber;
-    if (this.ammoClipEl) this.ammoClipEl.textContent = w.magAmmo;
-    if (this.ammoReserveEl) this.ammoReserveEl.textContent = `/ ${w.reserveAmmo}`;
+    if (this.ammoClipEl) this.ammoClipEl.textContent = clip;
+    if (this.ammoReserveEl) this.ammoReserveEl.textContent = `/ ${reserve}`;
   }
 }
