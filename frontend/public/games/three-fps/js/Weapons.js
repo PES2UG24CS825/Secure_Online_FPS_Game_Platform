@@ -1308,12 +1308,13 @@ class WeaponManager {
   }
 
   updateHUD() {
-    const w = this.activeWeapon;
+    const w = this.activeWeapon || (this.weapons && this.weapons[this.activeKey]) || WEAPON_REGISTRY[this.activeKey] || WEAPON_REGISTRY.carbine;
     if (!w) return;
-    const clip = (typeof w.magAmmo === 'number' && !Number.isNaN(w.magAmmo)) ? w.magAmmo : (w.magSize || 30);
-    const reserve = (typeof w.reserveAmmo === 'number' && !Number.isNaN(w.reserveAmmo)) ? w.reserveAmmo : (w.magSize * 4 || 120);
-    if (this.weaponNameEl) this.weaponNameEl.textContent = w.name;
-    if (this.weaponCaliberEl) this.weaponCaliberEl.textContent = w.caliber;
+    const magSize = Number(w.magSize) || 30;
+    const clip = (typeof w.magAmmo === 'number' && !Number.isNaN(w.magAmmo)) ? Math.max(0, Math.floor(w.magAmmo)) : magSize;
+    const reserve = (typeof w.reserveAmmo === 'number' && !Number.isNaN(w.reserveAmmo)) ? Math.max(0, Math.floor(w.reserveAmmo)) : (magSize * 4);
+    if (this.weaponNameEl) this.weaponNameEl.textContent = w.name || "P-24 Carbine";
+    if (this.weaponCaliberEl) this.weaponCaliberEl.textContent = w.caliber || "5.56x45mm NATO";
     if (this.ammoClipEl) this.ammoClipEl.textContent = clip;
     if (this.ammoReserveEl) this.ammoReserveEl.textContent = `/ ${reserve}`;
   }

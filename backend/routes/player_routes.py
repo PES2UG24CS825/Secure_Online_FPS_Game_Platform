@@ -574,9 +574,21 @@ def get_matches():
         {"_id": user_oid},
         {"hacker_profile": 1, "account_type": 1},
     ) or {}
-    completed_match_filter = {"user_id": user_oid, "status": "completed"}
-    total_matches = game_sessions.count_documents(completed_match_filter)
-    player_matches = list(game_sessions.find(completed_match_filter).sort("started_at", -1).limit(10))
+    user_match_query = {
+        "$or": [
+            {"user_id": user_oid},
+            {"user_id": str(user_oid)},
+            {"user_id": user_id},
+            {"player_id": user_oid},
+            {"player_id": str(user_oid)}
+        ]
+    }
+    player_matches = list(game_sessions.find(user_match_query).sort("started_at", -1).limit(20))
+    if not player_matches:
+        # Check legacy matches collection
+        player_matches = list(matches.find(user_match_query).sort("created_at", -1).limit(20))
+
+    total_matches = len(player_matches)
     analyses = {}
     for item in game_events.find(
         {"user_id": user_oid, "analysis_type": "game_session"}

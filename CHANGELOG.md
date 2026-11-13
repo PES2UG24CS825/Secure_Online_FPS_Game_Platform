@@ -189,6 +189,20 @@ Ran `python -m pytest backend/tests`:
 | **N7. Royal Purple Theme on Both Game Cards & High-Contrast Typography** | `frontend/css/player.css` | Extended the royal purple theme (`#7C3AED`, `#6D28D9`, `#2E1065`) across both Game Hub cards (CyberStrike 3D and FPS Microgame). Darkened all muted captions, column headers, metadata, and live indicators to high-contrast slate (`#334155`, `#475569`, `#1E1B4B`). |
 | **N8. Combat Milestones & Daily Mission Bounties** | `frontend/player.html`, `frontend/js/player-features.js`, `frontend/css/player.css` | Replaced legacy "Recent rewards" list with interactive Tactical Proving Grounds: Sharpshooter Protocol, Guardian Verification, and Masterpiece Collector bounties with live claim actions. |
 
+---
+
+## Section O: Transparent Chibi & Circular Avatar Badges, Gold Cup Leaderboard Icon, Robust Ammo HUD, and Device Normalization
+
+| Issue / Requirement | Files & Components Changed | Verification Method |
+| :--- | :--- | :--- |
+| **O1. In-game Ammo HUD `NaN / NaN` Prevention** | `frontend/public/games/three-fps/js/Weapons.js`, `frontend/public/games/three-fps/index.html` | Hardened `updateHUD()` and `WeaponManager` constructor to strictly coerce `magAmmo` and `reserveAmmo` to valid positive integers, with fallback to `magSize` and `magSize * 4`. Bumped cache-busting version strings across all engine scripts. Tested in `combat_hit_registration.test.js`. |
+| **O2. Floating Transparent Chibis & Circular Avatar Badges** | `frontend/css/player.css`, `frontend/js/player.js` | Masked rectangular operator portraits (`valkyrie-void`, `celestial-sovereign`, `default-operator`) into 82px circular medallions with 3px `#7C3AED` border (or `#F59E0B` for Masterpiece) and subtle drop shadow. Set chibi cutouts (`[src*="chibi"]`) to borderless transparent floating sprites. Restricted `profileBannerMascot` exclusively to chibi cutouts, eliminating dark rectangular boxes from profile banners. |
+| **O3. Dynamic Owned Appearance Pickers in Profile** | `frontend/js/player.js`, `frontend/css/player.css` | Implemented `renderOwnedAppearancePickers()` in `player.js` to dynamically render only owned avatars and banners in clean price order, with circular previews for portraits and swatches for all 10 background banners. |
+| **O4. Device Fingerprint Normalization & Strict Deduping** | `frontend/js/player.js` | Implemented `getDeviceFingerprint(entry)` normalizing browser and operating system identifiers. Suppressed redundant localhost sessions and flagged only genuine changes in browser or hardware, displaying a verified single-device integrity banner when clean. |
+| **O5. Gold Cup Leaderboard Trophy Icon** | `frontend/player.html`, `frontend/css/player.css` | Replaced wireframe SVG with an authentic 28px gold trophy cup featuring a multi-stop golden gradient (`#FDE68A` $\rightarrow$ `#F59E0B` $\rightarrow$ `#D97706`), deep gold stroke, golden badge container (`#F59E0B` border with gold drop-shadow), and removed CSS `stroke: currentColor` override. |
+| **O6. Match History Query Broadening & Clean Accuracy Display** | `backend/routes/player_routes.py`, `frontend/js/player.js`, `frontend/player.html` | Broadened `get_matches()` MongoDB query using `$or` across `user_id` (ObjectId and string) and `player_id`, with fallback to the `matches` collection. Displayed pure accuracy percentage (e.g. `91.9%`) on match cards and overview stats without cluttering shot counts, and filtered test warning notes from dashboard notices. |
+
+
 
 
 

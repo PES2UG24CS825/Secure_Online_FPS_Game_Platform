@@ -781,6 +781,11 @@
     .profile-banner[data-banner="frontline"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/sakura-frontline.jpg"); background-position:center 52%; }
     .profile-banner[data-banner="dawn"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/sakura-dawn.jpg"); background-position:center 55%; }
     .profile-banner[data-banner="neon"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/sakura-neon.jpg"); background-position:center 50%; }
+    .profile-banner[data-banner="command-center"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/command-center.jpg"); background-position:center 50%; }
+    .profile-banner[data-banner="battlefield"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/battlefield.jpg"); background-position:center 50%; }
+    .profile-banner[data-banner="cyber-metropolis"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/cyber-metropolis.jpg"); background-position:center 50%; }
+    .profile-banner[data-banner="orbital-bastion"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/orbital-bastion.jpg"); background-position:center 50%; }
+    .profile-banner[data-banner="nebula-eternity"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/nebula-eternity.jpg"); background-position:center 50%; }
     .profile-banner-mascot { position:absolute; right:22px; bottom:-14px; width:116px; height:128px; object-fit:contain; object-position:center bottom; filter:drop-shadow(0 5px 8px rgba(109,40,217,0.25)); }
     .profile-avatar { position:relative; margin-top:-38px; border:4px solid #FFFFFF !important; border-radius:18px; box-shadow:0 4px 16px rgba(109,40,217,0.18); overflow:hidden; }
     .appearance-group { margin-top:18px; }
@@ -794,6 +799,11 @@
     .banner-option[data-banner="frontline"] { --banner-swatch:linear-gradient(105deg,rgba(39,23,74,.18),rgba(75,35,89,.03)),url("../public/backgrounds/sakura-frontline.jpg"); background-position:center; background-size:cover; }
     .banner-option[data-banner="dawn"] { --banner-swatch:linear-gradient(105deg,rgba(39,23,74,.12),rgba(75,35,89,.02)),url("../public/backgrounds/sakura-dawn.jpg"); background-position:center; background-size:cover; }
     .banner-option[data-banner="neon"] { --banner-swatch:linear-gradient(105deg,rgba(39,23,74,.22),rgba(75,35,89,.04)),url("../public/backgrounds/sakura-neon.jpg"); background-position:center; background-size:cover; }
+    .banner-option[data-banner="command-center"] { --banner-swatch:linear-gradient(105deg,rgba(39,23,74,.18),rgba(75,35,89,.03)),url("../public/backgrounds/command-center.jpg"); background-position:center; background-size:cover; }
+    .banner-option[data-banner="battlefield"] { --banner-swatch:linear-gradient(105deg,rgba(39,23,74,.18),rgba(75,35,89,.03)),url("../public/backgrounds/battlefield.jpg"); background-position:center; background-size:cover; }
+    .banner-option[data-banner="cyber-metropolis"] { --banner-swatch:linear-gradient(105deg,rgba(39,23,74,.22),rgba(75,35,89,.04)),url("../public/backgrounds/cyber-metropolis.jpg"); background-position:center; background-size:cover; }
+    .banner-option[data-banner="orbital-bastion"] { --banner-swatch:linear-gradient(105deg,rgba(39,23,74,.22),rgba(75,35,89,.04)),url("../public/backgrounds/orbital-bastion.jpg"); background-position:center; background-size:cover; }
+    .banner-option[data-banner="nebula-eternity"] { --banner-swatch:linear-gradient(105deg,rgba(39,23,74,.3),rgba(75,35,89,.08)),url("../public/backgrounds/nebula-eternity.jpg"); background-position:center; background-size:cover; }
     .avatar-option { min-width:58px; min-height:48px; font-size:16px; font-weight:800; }
     .avatar-portrait-option { width:76px; height:76px; padding:3px; overflow:hidden; background:#EDE9FE; border-radius:12px; }
     .avatar-portrait-option img { display:block; width:100%; height:100%; object-fit:cover; object-position:center 38%; border-radius:8px; }
@@ -1116,11 +1126,30 @@
       background: radial-gradient(circle at center, rgba(168, 85, 247, 0.4), transparent 70%), linear-gradient(135deg, #1E1B4B 0%, #3B0764 50%, #581C87 100%);
     }
     .avatar-img {
-      width: 80px;
-      height: 80px;
-      object-fit: contain;
-      filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
+      width: 82px;
+      height: 82px;
+      border-radius: 50%;
+      border: 3px solid #7C3AED;
+      box-shadow: 0 4px 14px rgba(124, 58, 237, 0.45);
+      object-fit: cover;
       transition: transform .2s ease;
+    }
+    .avatar-img[src*="chibi"] {
+      width: auto;
+      max-height: 104px;
+      border-radius: 0;
+      border: none;
+      box-shadow: none;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));
+    }
+    .masterpiece-card .avatar-img {
+      border-color: #F59E0B !important;
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.6) !important;
+    }
+    .masterpiece-card .avatar-img[src*="chibi"] {
+      border: none !important;
+      box-shadow: none !important;
     }
     .reward-item:hover .avatar-img {
       transform: scale(1.08);
@@ -1302,8 +1331,21 @@
     .player-page .overview-recent-table { min-width:720px; }
     .player-page .overview-recent-table th { letter-spacing:.035em; }
     .player-page .leaderboard-hero { border-radius:14px; box-shadow:0 10px 24px rgba(76,29,149,.13); }
-    .player-page .leaderboard-hero-icon { border-radius:12px; }
-    .player-page .leaderboard-hero-icon svg { width:26px; height:26px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+    .player-page .leaderboard-hero-icon {
+      display: grid;
+      place-items: center;
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(251, 191, 36, 0.28), rgba(217, 119, 6, 0.45));
+      border: 1.5px solid #F59E0B;
+      box-shadow: 0 4px 18px rgba(245, 158, 11, 0.35);
+    }
+    .player-page .leaderboard-hero-icon svg {
+      width: 28px;
+      height: 28px;
+      display: block;
+    }
     .player-page .leaderboard-rank { display:grid; place-items:center; min-height:30px; border:1px solid #DED8EF; border-radius:8px; background:#F4F1FC; color:#5D4A8C; font-size:12px; font-weight:700; }
     .player-page .leaderboard-rank.rank-1 { background:#EAE3F8; border-color:#CFC1EB; color:#4C1D95; }
     .player-page .leaderboard-rank.rank-2 { background:#F0EFF7; border-color:#D9D6E5; color:#57536B; }

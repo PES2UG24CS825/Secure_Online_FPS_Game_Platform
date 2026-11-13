@@ -255,7 +255,7 @@ async function loadPlayerDashboard() {
     ]);
 
     const matches = Array.isArray(matchesData?.matches) ? matchesData.matches : [];
-    const completedMatches = matches.filter((match) => String(match.status || "").toLowerCase() === "completed");
+    const completedMatches = matches;
     latestPlayerMatchId = completedMatches[0]?.id || "";
     const history = Array.isArray(securityData?.login_history) ? securityData.login_history : [];
     const activeSessions = Array.isArray(securityData?.active_sessions) ? securityData.active_sessions : [];
@@ -406,7 +406,7 @@ async function loadPlayerDashboard() {
     if (careerAccEl) careerAccEl.textContent = `${Number(careerAcc).toFixed(1)}%`;
 
     const careerShotsEl = document.getElementById("careerShotsSummary");
-    if (careerShotsEl) careerShotsEl.textContent = `${totalHits} hits / ${totalShots} shots`;
+    if (careerShotsEl) careerShotsEl.textContent = "";
 
     const careerMatchesEl = document.getElementById("careerMatches");
     if (careerMatchesEl) careerMatchesEl.textContent = totalMatchesCount;
@@ -485,15 +485,34 @@ async function loadPlayerDashboard() {
     if (securityStatus && securityData) {
       const currentEntry = history[0] || { ip_address: "127.0.0.1 (Localhost)", browser: "Google Chrome", os: "Windows 11 / 10", authentication_method: "Password + MFA" };
       const currentIp = currentEntry.ip_address || "127.0.0.1 (Localhost)";
-      const currentBrowser = (currentEntry.browser || "").toLowerCase();
-      const currentOs = (currentEntry.os || "").toLowerCase();
 
-      // Only show other/external devices or different browsers in the history list (Requirement 1)
-      const otherDeviceEntries = history.slice(1).filter((entry) => {
-        const isDiffIp = entry.ip_address && entry.ip_address !== currentIp;
-        const isDiffBrowser = entry.browser && entry.browser.toLowerCase() !== currentBrowser;
-        const isDiffOs = entry.os && entry.os.toLowerCase() !== currentOs;
-        return isDiffIp || isDiffBrowser || isDiffOs;
+      function getDeviceFingerprint(entry) {
+        let b = (entry?.browser || "").toLowerCase();
+        let os = (entry?.os || "").toLowerCase();
+        
+        let normBrowser = "other";
+        if (b.includes("chrome") && !b.includes("edge") && !b.includes("brave")) normBrowser = "chrome";
+        else if (b.includes("firefox")) normBrowser = "firefox";
+        else if (b.includes("safari") && !b.includes("chrome")) normBrowser = "safari";
+        else if (b.includes("edge") || b.includes("edg")) normBrowser = "edge";
+        else if (b.includes("brave")) normBrowser = "brave";
+
+        let normOs = "other";
+        if (os.includes("win")) normOs = "windows";
+        else if (os.includes("mac") || os.includes("darwin") || os.includes("os x")) normOs = "mac";
+        else if (os.includes("linux")) normOs = "linux";
+        else if (os.includes("android")) normOs = "android";
+        else if (os.includes("ios") || os.includes("iphone") || os.includes("ipad")) normOs = "ios";
+
+        return `${normBrowser}:${normOs}`;
+      }
+
+      const currentFp = getDeviceFingerprint(currentEntry);
+
+      // ONLY display entries if there is a real change in browser or laptop/device (Requirement 6)
+      const otherDeviceEntries = history.filter((entry) => {
+        const fp = getDeviceFingerprint(entry);
+        return fp !== currentFp;
       });
 
       const ipRows = otherDeviceEntries.map((entry) => `<tr><td><code>${playerText(entry.ip_address || "Unknown")}</code> <span class="badge warn" style="font-size:9px; margin-left:4px;">OTHER DEVICE</span></td><td><div style="display:inline-flex; align-items:center; gap:6px;"><span style="font-size:14px;">${entry.browser_icon || "🌐"}</span><strong style="color:var(--player-text,#1e1b4b); font-size:12px;">${playerText(entry.browser || "Unknown")}</strong><span style="font-size:10px; color:#5b21b6; background:#ede9fe; padding:2px 6px; border-radius:4px; font-weight:600;">${playerText(entry.os || "Device")}</span></div></td><td>${playerText(playerDate(entry.timestamp))}</td><td>${playerText(entry.authentication_method || "Password + MFA")}</td><td><span class="badge ${entry.success === false ? "bad" : "good"}">${entry.success === false ? "Failed" : "Success"}</span></td></tr>`).join("");
@@ -590,16 +609,25 @@ async function loadPlayerDashboard() {
         : "";
       const selectedPortrait = avatarPortraits[currentAppearance.avatar] || "";
       const avatarImage = currentAppearance.avatar_image || selectedPortrait;
-      const mascotImage = selectedPortrait || avatarPortraits["chibi-female-2"];
+      const isChibi = Boolean(currentAppearance.avatar && currentAppearance.avatar.startsWith("chibi-"));
+      const chibiMascot = isChibi ? avatarPortraits[currentAppearance.avatar] : avatarPortraits["chibi-female-2"];
+
       if (profileAvatar) profileAvatar.textContent = avatarImage ? "" : name.charAt(0).toUpperCase();
       if (avatar) avatar.textContent = avatarImage ? "" : name.charAt(0).toUpperCase();
-      if (profileBannerMascot) profileBannerMascot.src = mascotImage;
-      if (overviewMascot) overviewMascot.src = mascotImage;
-      if (supportMascot) supportMascot.src = mascotImage;
-      if (leaderboardMascot) leaderboardMascot.src = mascotImage;
-      if (rewardsMascot) rewardsMascot.src = mascotImage;
-      if (securityMascot) securityMascot.src = mascotImage;
-      if (matchesMascot) matchesMascot.src = mascotImage;
+      if (profileBannerMascot) {
+        if (isChibi) {
+          profileBannerMascot.src = selectedPortrait;
+          profileBannerMascot.style.display = "block";
+        } else {
+          profileBannerMascot.style.display = "none";
+        }
+      }
+      if (overviewMascot) overviewMascot.src = chibiMascot;
+      if (supportMascot) supportMascot.src = chibiMascot;
+      if (leaderboardMascot) leaderboardMascot.src = chibiMascot;
+      if (rewardsMascot) rewardsMascot.src = chibiMascot;
+      if (securityMascot) securityMascot.src = chibiMascot;
+      if (matchesMascot) matchesMascot.src = chibiMascot;
       for (const avatarElement of [profileAvatar, avatar]) {
         if (!avatarElement) continue;
         avatarElement.style.backgroundImage = avatarImage ? `url("${avatarImage}")` : "";
@@ -611,6 +639,62 @@ async function loadPlayerDashboard() {
     if (profileDisplayName) profileDisplayName.textContent = name;
     if (profileDisplayEmail) profileDisplayEmail.textContent = user.email || "";
     renderPlayerAppearance();
+
+    // Dynamically render player's OWNED banners and avatars in order (Requirement 3)
+    const renderOwnedAppearancePickers = async () => {
+      const bannerContainer = document.getElementById("bannerOptions");
+      const avatarContainer = document.getElementById("avatarOptions");
+      if (!bannerContainer && !avatarContainer) return;
+
+      let ownedSet = new Set();
+      try {
+        const rewRes = await api("/player/rewards");
+        (rewRes?.owned_items || []).forEach(id => ownedSet.add(id));
+      } catch (e) {
+        // Fallback
+      }
+
+      const ALL_AVATARS_ORDERED = [
+        { key: "default-operator", name: "Recruit Operative (Default Starter)", img: "public/avatars/default-operator.png", isDefault: true },
+        { key: "chibi-male-2", name: "Tactical Vanguard Chibi (130 Coins)", img: "public/avatars/chibi-male-2.png", itemId: "skin_tactical_vanguard" },
+        { key: "chibi-male-1", name: "Cyber Infiltrator Chibi (140 Coins)", img: "public/avatars/chibi-male-1.png", itemId: "skin_cyber_ninja" },
+        { key: "chibi-female-1", name: "Neon Valkyrie Chibi (150 Coins)", img: "public/avatars/chibi-female-1.png", itemId: "skin_neon_valkyrie" },
+        { key: "chibi-female-2", name: "Phantom Recon Chibi (160 Coins)", img: "public/avatars/chibi-female-2.png", itemId: "skin_phantom_ghost" },
+        { key: "ghost-specops", name: "Ghost Spec-Ops Avatar (200 Coins)", img: "public/avatars/ghost-specops.png", itemId: "skin_ghost_specops" },
+        { key: "valkyrie-void", name: "Valkyrie Void Avatar (220 Coins)", img: "public/avatars/valkyrie-void.png", itemId: "skin_valkyrie_void" },
+        { key: "celestial-sovereign", name: "Celestial Sovereign Mythic (1000 Coins)", img: "public/avatars/celestial-sovereign.png", itemId: "skin_celestial_sovereign" }
+      ];
+
+      const ALL_BANNERS_ORDERED = [
+        { key: "default-banner", name: "Proving Ground (Default Starter)", isDefault: true },
+        { key: "command-center", name: "Command Ops Center (100 Coins)", itemId: "banner_command_center" },
+        { key: "battlefield", name: "Frontline Battlefield (120 Coins)", itemId: "banner_battlefield" },
+        { key: "dawn", name: "Sakura Dawn Arena (180 Coins)", itemId: "banner_sakura_dawn" },
+        { key: "frontline", name: "Combat Outpost (200 Coins)", itemId: "banner_sakura_frontline" },
+        { key: "neon", name: "Neon Sakura Arena (220 Coins)", itemId: "banner_sakura_neon" },
+        { key: "sakura", name: "Cosmic Blossom (250 Coins)", itemId: "banner_cosmic_cherry" },
+        { key: "orbital-bastion", name: "Orbital Bastion (280 Coins)", itemId: "banner_orbital_bastion" },
+        { key: "cyber-metropolis", name: "Cyber Metropolis (300 Coins)", itemId: "banner_cyber_metropolis" },
+        { key: "nebula-eternity", name: "Nebula Eternity Mythic (1000 Coins)", itemId: "banner_nebula_eternity" }
+      ];
+
+      if (avatarContainer) {
+        const ownedAvs = ALL_AVATARS_ORDERED.filter(a => a.isDefault || ownedSet.has(a.itemId) || currentAppearance.avatar === a.key);
+        avatarContainer.innerHTML = ownedAvs.map(a => `
+          <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="${a.key}" aria-label="${a.name}" title="${a.name}" aria-pressed="${String(a.key === currentAppearance.avatar)}">
+            <img src="${a.img}" alt="${a.name}" style="${a.key.startsWith('chibi') ? 'object-fit:contain;' : 'object-fit:cover; border-radius:50%;'} width:44px; height:44px;">
+          </button>
+        `).join("");
+      }
+
+      if (bannerContainer) {
+        const ownedBans = ALL_BANNERS_ORDERED.filter(b => b.isDefault || ownedSet.has(b.itemId) || currentAppearance.banner === b.key);
+        bannerContainer.innerHTML = ownedBans.map(b => `
+          <button class="appearance-option banner-option" type="button" data-banner="${b.key}" aria-label="${b.name}" title="${b.name}" aria-pressed="${String(b.key === currentAppearance.banner)}"></button>
+        `).join("");
+      }
+    };
+    renderOwnedAppearancePickers();
 
     if (!appearanceControlsBound) {
       appearanceControlsBound = true;
@@ -693,9 +777,9 @@ async function loadPlayerDashboard() {
     } else {
       const notice = document.getElementById("dashboardNotice");
       const latestWarning = securityData?.security_warnings?.[0];
-      if (notice && latestWarning) {
+      if (notice && latestWarning && latestWarning.note && !latestWarning.note.toLowerCase().includes("noob")) {
         notice.hidden = false;
-        notice.textContent = `Security warning: ${latestWarning.note}`;
+        notice.textContent = `Security Notice: ${latestWarning.note}`;
         notice.classList.add("security-warning-notice");
       } else if (notice) {
         notice.hidden = true;
@@ -1061,7 +1145,7 @@ async function openMatchDetail(sessionId) {
       </div>
 
       <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--player-border, #334155); border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
-        <span><strong>🎯 Fair Play Verified Combat:</strong> ${data.shots_hit != null && data.shots_hit > 0 ? `${data.shots_hit} hits / ${data.shots_fired || 0} shots fired (${data.accuracy != null ? Number(data.accuracy).toFixed(1) + '%' : '0.0%'} accuracy)` : 'Full Telemetry Analyzed'}</span>
+        <span><strong>🎯 Fair Play Verified Combat:</strong> Telemetry Analysis (${data.accuracy != null ? Number(data.accuracy).toFixed(1) + '%' : '0.0%'} accuracy rate)</span>
         <span class="badge good" style="font-size: 11px;">Verified</span>
       </div>
 

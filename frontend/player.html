@@ -6,9 +6,9 @@
   <title>SecureFPS | Player Console</title>
   <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg?v=2">
 
-  <link rel="stylesheet" href="css/styles.css?v=20261113_1825">
-  <link rel="stylesheet" href="css/player.css?v=20261113_2300">
-  <link rel="stylesheet" href="css/ui-polish.css?v=20261113_1825">
+  <link rel="stylesheet" href="css/styles.css?v=20261113_2345">
+  <link rel="stylesheet" href="css/player.css?v=20261113_2345">
+  <link rel="stylesheet" href="css/ui-polish.css?v=20261113_2345">
 </head>
 
 <body class="dashboard-page player-page">
@@ -183,7 +183,7 @@
           <article class="stat-card"><span>Total Kills</span><strong id="careerTotalKills">0</strong><small>Enemy eliminations</small></article>
           <article class="stat-card"><span>Total Deaths</span><strong id="careerTotalDeaths">0</strong><small>Combat casualties</small></article>
           <article class="stat-card"><span>Career K/D</span><strong id="careerKd">0.00</strong><small>Kill / death ratio</small></article>
-          <article class="stat-card"><span>Overall Accuracy</span><strong id="careerAccuracy">0.0%</strong><small id="careerShotsSummary">0 hits / 0 shots</small></article>
+          <article class="stat-card"><span>Overall Accuracy</span><strong id="careerAccuracy">0.0%</strong><small id="careerShotsSummary" style="display:none;"></small><small>Weapons accuracy</small></article>
           <article class="stat-card"><span>Total Matches</span><strong id="careerMatches">0</strong><small id="careerWinRate">0 completed</small></article>
         </div>
       </section>
@@ -204,7 +204,7 @@
       <div class="section-title">
         <div><p class="eyebrow">COMMUNITY</p><h2>Performance leaderboard</h2><p class="page-description">Ranked by match performance: kills, K/D ratio, accuracy, and completed matches.</p></div>
       </div>
-      <div class="leaderboard-hero"><div class="leaderboard-hero-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 4h8v4a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5v2a4 4 0 0 0 4 4M16 6h3v2a4 4 0 0 1-4 4M12 12v5m-4 3h8m-7-3h6"/></svg></div><div><strong id="leaderboardRank">—</strong><span>Your current rank</span></div><div><strong id="leaderboardKills">—</strong><span>Total kills</span></div><div><strong id="leaderboardKd">—</strong><span>K/D ratio</span></div><div class="leaderboard-hero-mascot" aria-hidden="true"><span>Good luck!</span><img id="leaderboardMascotSticker" src="public/avatars/chibi-female-2.png" alt=""></div></div>
+      <div class="leaderboard-hero"><div class="leaderboard-hero-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="28" height="28"><defs><linearGradient id="goldCupGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FDE68A"/><stop offset="50%" stop-color="#F59E0B"/><stop offset="100%" stop-color="#D97706"/></linearGradient></defs><path d="M8 4h8v4a4 4 0 0 1-8 0V4Z" fill="url(#goldCupGrad)" stroke="#B45309" stroke-width="1.2"/><path d="M8 6H5v2a4 4 0 0 0 4 4" fill="none" stroke="url(#goldCupGrad)" stroke-width="2" stroke-linecap="round"/><path d="M16 6h3v2a4 4 0 0 1-4 4" fill="none" stroke="url(#goldCupGrad)" stroke-width="2" stroke-linecap="round"/><path d="M12 12v5m-4 3h8m-7-3h6" stroke="url(#goldCupGrad)" stroke-width="2.2" stroke-linecap="round"/></svg></div><div><strong id="leaderboardRank">—</strong><span>Your current rank</span></div><div><strong id="leaderboardKills">—</strong><span>Total kills</span></div><div><strong id="leaderboardKd">—</strong><span>K/D ratio</span></div><div class="leaderboard-hero-mascot" aria-hidden="true"><span>Good luck!</span><img id="leaderboardMascotSticker" src="public/avatars/chibi-female-2.png" alt=""></div></div>
       <section class="leaderboard-card"><div class="dashboard-panel-head"><div><h2>Top performers</h2><span class="dashboard-panel-caption">Kills, K/D, accuracy, completed matches</span></div><button class="play-btn" id="refreshLeaderboard" type="button">Refresh</button></div><div id="leaderboardList" class="leaderboard-list"><div class="empty">Loading leaderboard…</div></div></section>
     </section>
 
@@ -231,7 +231,6 @@
         <article class="game-card featured cyberstrike-card-theme">
           <div class="game-art art-one cyberstrike-art-theme">
             <span>FPS 02</span>
-            <div class="game-art-mascot" aria-hidden="true"><span>3D ARENA</span><img id="gameHubCyberMascot" src="public/avatars/chibi-female-1.png" alt=""></div>
           </div>
           <div class="game-info">
             <span class="tag cyberstrike-tag-theme">NEW 3D BROWSER ARENA</span>
@@ -255,7 +254,6 @@
 
           <div class="game-art art-one">
             <span>FPS 01</span>
-            <div class="game-art-mascot" aria-hidden="true"><span>Ready up!</span><img id="gameHubMascotSticker" src="public/avatars/chibi-male-1.png" alt=""></div>
           </div>
 
           <div class="game-info">
@@ -489,10 +487,9 @@
             </div>
           </div>
           <p style="color: #475569; font-size: 13px; line-height: 1.5;">
-            Export a complete copy of your personal telemetry activity logs (JSON) or permanently delete your player profile and all associated data.
+            Manage your account data under strict GDPR compliance, or permanently erase your player profile and all associated stats.
           </p>
           <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;">
-            <button id="exportPlayerDataBtn" type="button" class="play-btn">Export Activity Data (JSON)</button>
             <button id="selfDeleteAccountBtn" type="button" class="play-btn danger-btn">Delete My Account</button>
           </div>
           <div id="gdprFeedbackMsg" hidden style="margin-top: 10px; font-size: 13px;"></div>
@@ -727,10 +724,10 @@
 
 
   <!-- Existing application logic -->
-  <script src="js/config.js?v=20261113_2300"></script>
-  <script src="js/api.js?v=20261113_2300"></script>
-  <script src="js/player-features.js?v=20261113_2300"></script>
-  <script src="js/player.js?v=20261113_2300"></script>
+  <script src="js/config.js?v=20261113_2345"></script>
+  <script src="js/api.js?v=20261113_2345"></script>
+  <script src="js/player-features.js?v=20261113_2345"></script>
+  <script src="js/player.js?v=20261113_2345"></script>
 
 
   <!-- ============================================================
