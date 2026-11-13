@@ -5,7 +5,7 @@
 import { PollingManager, connectAdminLiveEvents, escapeHtml, formatTimeAgo } from './admin/admin_core.js';
 import { loadAdminOverview } from './admin/admin_overview.js';
 import { initPlayersSection, loadPlayersTable } from './admin/admin_players.js';
-import { initSecuritySection, loadBanAppeals, loadAntiCheatDecisions, loadAuditLogTable } from './admin/admin_security.js';
+import { initSecuritySection, loadBanAppeals, loadAntiCheatDecisions, loadAuditLogTable, loadRecentLoginsTable } from './admin/admin_security.js';
 import { initSupportSection, loadSupportTickets } from './admin/admin_support.js';
 
 let activeSection = 'overview';
@@ -132,7 +132,7 @@ async function refreshCurrentSection(force = false) {
       await loadPlayersTable();
       break;
     case 'security':
-      await Promise.all([loadBanAppeals(), loadAuditLogTable()]);
+      await Promise.all([loadBanAppeals(), loadAuditLogTable(), loadRecentLoginsTable()]);
       break;
     case 'gameplay':
       await loadAntiCheatDecisions();

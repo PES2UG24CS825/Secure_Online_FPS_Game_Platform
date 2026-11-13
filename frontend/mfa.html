@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <script>if (window.location.port === "5500") { window.location.replace(`http://${window.location.hostname}:5000${window.location.pathname.replace(/^\/frontend/, '')}${window.location.search}`); }</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>SecureFPS | MFA Verification</title>
@@ -17,7 +18,6 @@
       <p class="eyebrow">SECOND FACTOR</p>
       <h2>Verify your identity</h2>
       <p>Enter the 6-digit code from your authenticator app.</p>
-      <div id="devMfaHint" class="dev-mfa-badge" style="background: rgba(124, 58, 237, 0.15); border: 1px dashed #7c3aed; color: #a78bfa; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 12px; text-align: center;" hidden></div>
       <form id="mfaForm" class="form">
         <label>Authentication code
           <input id="code" class="otp-input" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required placeholder="000000">

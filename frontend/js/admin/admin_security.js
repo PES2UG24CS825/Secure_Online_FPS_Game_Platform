@@ -27,7 +27,8 @@ export async function initSecuritySection() {
   await Promise.all([
     loadBanAppeals(),
     loadAntiCheatDecisions(),
-    loadAuditLogTable()
+    loadAuditLogTable(),
+    loadRecentLoginsTable()
   ]);
 }
 
@@ -322,5 +323,51 @@ export async function loadAuditLogTable() {
     }).join('');
   } catch (err) {
     console.error('[AdminSecurity] Audit log load failed:', err);
+  }
+}
+
+export async function loadRecentLoginsTable() {
+  const tbody = document.getElementById('recentLogins');
+  if (!tbody) return;
+
+  try {
+    const resp = await fetch('/api/admin/logins?limit=15', {
+      credentials: 'include',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    if (!resp.ok) return;
+
+    const data = await resp.json();
+    const logins = data.logins || [];
+
+    if (logins.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">No sign-in records logged yet.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = logins.map(item => {
+      const isSuccess = item.status === 'success';
+      const statusBadge = isSuccess
+        ? `<span class="status-chip-success">✓ Success</span>`
+        : `<span class="status-chip-failed">✕ ${escapeHtml(item.reason || 'Failed')}</span>`;
+      const riskBadge = item.risk === 'Low'
+        ? `<span class="risk-badge low">Low Risk</span>`
+        : `<span class="risk-badge high">High Risk</span>`;
+
+      return `
+        <tr>
+          <td><strong style="color:#1E1B4B;">${escapeHtml(item.player_name || 'Operator')}</strong><br><small style="color:#64748B;">${escapeHtml(item.identifier || '')}</small></td>
+          <td>${statusBadge}</td>
+          <td><span class="device-badge-slate">${escapeHtml(item.device || 'Desktop / Browser')}</span></td>
+          <td><span style="font-weight:600; color:#4C1D95;">${escapeHtml(item.location || 'Local')}</span></td>
+          <td><span class="ip-badge-purple">${escapeHtml(item.ip || '127.0.0.1')}</span></td>
+          <td>${riskBadge}</td>
+          <td><span style="color:#64748B; font-size:12px;">${formatTimeAgo(item.time)}</span></td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('[AdminSecurity] Error loading recent logins:', err);
+    tbody.innerHTML = `<tr><td colspan="7" class="error-cell">Failed to load sign-in activity: ${escapeHtml(err.message)}</td></tr>`;
   }
 }

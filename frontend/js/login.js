@@ -38,9 +38,6 @@ loginForm.addEventListener("submit", async (event) => {
       });
     }
     if (data.mfa_required) {
-      if (data.dev_totp_code) {
-        sessionStorage.setItem("dev_totp_hint", data.dev_totp_code);
-      }
       const params = new URLSearchParams();
       if (data.replace_other_session) params.set("replace", "1");
       if (nextDestination) params.set("next", nextDestination);

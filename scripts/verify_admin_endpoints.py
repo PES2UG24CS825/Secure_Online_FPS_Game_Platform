@@ -66,19 +66,41 @@ def test_admin(email, password, totp_secret, label, expect_super):
     )
     print(f"Soft delete endpoint test status: {res.status_code} ({res.get_json().get('message')})")
     if expect_super:
-        # Super admin should pass the @require_super_admin check and reach player not found (404)
         if res.status_code != 404:
             print(f"  ERROR: Super admin expected 404 (Player not found), got {res.status_code}")
             return False
         print("  Super admin authorized correctly for administrative delete!")
     else:
-        # Normal admin MUST be blocked by @require_super_admin with 403 Forbidden
         if res.status_code != 403:
             print(f"  ERROR: Normal admin expected 403 Forbidden, got {res.status_code}")
             return False
         print("  Normal admin successfully restricted (403 Forbidden) from soft delete!")
 
-    # 6. Logout
+    # 6. Test /api/admin/logins
+    res = client.get("/api/admin/logins")
+    print(f"Recent logins status: {res.status_code}")
+    if res.status_code == 200:
+        logins = res.get_json().get("logins", [])
+        print(f"  Recent logins returned: {len(logins)} entries")
+    else:
+        print(f"FAILED RECENT LOGINS: {res.get_json()}")
+        return False
+
+    # 7. Test Export CSV endpoint permission
+    res = client.get("/api/admin/export/players")
+    print(f"Export players status: {res.status_code}")
+    if expect_super:
+        if res.status_code != 200:
+            print(f"  ERROR: Super admin expected 200 for export, got {res.status_code}")
+            return False
+        print("  Super admin authorized for database exports!")
+    else:
+        if res.status_code != 403:
+            print(f"  ERROR: Normal admin expected 403 for export, got {res.status_code}")
+            return False
+        print("  Normal admin successfully restricted (403 Forbidden) from database exports!")
+
+    # 8. Logout
     client.post("/api/auth/logout")
     return True
 

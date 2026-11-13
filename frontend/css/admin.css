@@ -678,8 +678,9 @@
   font-size: 12px;
 }
 .health-body .muted {
-  color: #A78BFA !important;
+  color: #E2E8F0 !important;
   font-size: 11px;
+  font-weight: 500;
 }
 
 /* 3. Modern ML Anti-Cheat Review Card */
@@ -696,7 +697,8 @@
   color: #FFFFFF !important;
 }
 .anticheat-meta-card .muted {
-  color: #A78BFA !important;
+  color: #CBD5E1 !important;
+  font-weight: 500;
 }
 .feature-bar-list {
   display: flex;
@@ -813,4 +815,154 @@
   display: flex;
   gap: 10px;
   margin-top: 12px;
+}
+
+/* 5. Modern Royal Purple Bulk Actions Toolbar */
+.bulk-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: linear-gradient(135deg, #1E1B4B 0%, #2E1065 50%, #3B0764 100%) !important;
+  border: 1px solid rgba(139, 92, 246, 0.5) !important;
+  box-shadow: 0 4px 18px rgba(76, 29, 149, 0.25) !important;
+  padding: 12px 18px !important;
+  border-radius: 12px !important;
+  margin-bottom: 16px !important;
+  color: #F8FAFC !important;
+}
+.bulk-toolbar span {
+  font-size: 13px;
+  font-weight: 600;
+  color: #F8FAFC !important;
+}
+.bulk-toolbar strong {
+  color: #FDE68A !important;
+  font-size: 15px;
+}
+.bulk-toolbar .action-btn {
+  border: none !important;
+  padding: 8px 16px !important;
+  border-radius: 8px !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  cursor: pointer !important;
+  transition: transform .15s ease, filter .15s ease !important;
+}
+.bulk-toolbar .action-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+.bulk-toolbar #bulkSuspendBtn {
+  background: #D97706 !important;
+  color: #FFFFFF !important;
+}
+.bulk-toolbar #bulkBanBtn {
+  background: #DC2626 !important;
+  color: #FFFFFF !important;
+}
+.bulk-toolbar #bulkUnsuspendBtn {
+  background: #059669 !important;
+  color: #FFFFFF !important;
+}
+
+/* 6. Admin Tier Privilege Banners */
+.admin-tier-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 22px;
+  border-radius: 14px;
+  margin-bottom: 22px;
+  font-size: 13px;
+}
+.admin-tier-banner.super-tier {
+  background: linear-gradient(135deg, #2E1065 0%, #3B0764 45%, #78350F 100%) !important;
+  border: 1.5px solid #F59E0B !important;
+  color: #FEF3C7 !important;
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.25) !important;
+}
+.admin-tier-banner.super-tier strong {
+  color: #FDE68A !important;
+  font-size: 14px;
+}
+.admin-tier-banner.normal-tier {
+  background: linear-gradient(135deg, #1E1B4B 0%, #2E1065 100%) !important;
+  border: 1px solid rgba(139, 92, 246, 0.4) !important;
+  color: #EDE9FE !important;
+  box-shadow: 0 4px 14px rgba(109, 40, 217, 0.15) !important;
+}
+.admin-tier-banner.normal-tier strong {
+  color: #A78BFA !important;
+  font-size: 14px;
+}
+
+/* 7. Modern Account Access / Recent Logins Table */
+.login-audit-table {
+  background: #FFFFFF;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(109, 40, 217, 0.05);
+}
+.login-audit-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.login-audit-table th {
+  background: #F5F3FF;
+  color: #4C1D95;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 16px;
+  border-bottom: 1px solid #DDD6FE;
+}
+.login-audit-table td {
+  padding: 14px 16px;
+  font-size: 12px;
+  border-bottom: 1px solid #EDE9FE;
+  color: #1E1B4B;
+  vertical-align: middle;
+}
+.login-audit-table tr:hover td {
+  background: #FAF5FF;
+}
+.status-chip-success {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #ECFDF5;
+  color: #059669;
+  border: 1px solid #A7F3D0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 11px;
+}
+.status-chip-failed {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #FEF2F2;
+  color: #DC2626;
+  border: 1px solid #FECACA;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 11px;
+}
+.ip-badge-purple {
+  display: inline-block;
+  background: #F3E8FF;
+  color: #6D28D9;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: 600;
+}
+.device-badge-slate {
+  color: #475569;
+  font-size: 11px;
 }

@@ -112,9 +112,13 @@ function renderPlayersRows(players, tbody) {
     const riskScore = p.risk_score !== null && p.risk_score !== undefined ? p.risk_score : '—';
     const riskClass = (p.risk_score >= 70) ? 'risk-high' : ((p.risk_score >= 40) ? 'risk-med' : 'risk-low');
 
+    const checkboxCell = isSuper
+      ? `<td><input type="checkbox" class="player-select-cb" data-id="${escapeHtml(p.id)}" ${isChecked ? 'checked' : ''}></td>`
+      : `<td style="color:#94A3B8; text-align:center;">•</td>`;
+
     return `
       <tr data-player-id="${escapeHtml(p.id)}" class="${isChecked ? 'row-selected' : ''}">
-        <td><input type="checkbox" class="player-select-cb" data-id="${escapeHtml(p.id)}" ${isChecked ? 'checked' : ''}></td>
+        ${checkboxCell}
         <td>
           <div class="player-cell">
             <strong>${escapeHtml(p.name)}</strong>
@@ -133,20 +137,22 @@ function renderPlayersRows(players, tbody) {
         <td><span class="risk-pill ${riskClass}">${escapeHtml(riskScore)}</span></td>
         <td>${formatTimeAgo(p.created_at)}</td>
         <td class="table-actions">
-          ${status === 'active' ? `
-            <button class="action-btn suspend-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Suspend</button>
-            <button class="action-btn ban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Ban</button>
-          ` : (status === 'suspended' ? `
-            <button class="action-btn unsuspend-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Unsuspend</button>
-            <button class="action-btn ban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Ban</button>
-          ` : (status === 'banned' ? `
-            <button class="action-btn unban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Unban</button>
-          ` : ''))}
-          ${status !== 'deleted' ? (
-            isSuper
-              ? `<button class="action-btn delete-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}" title="Soft delete (anonymize PII)">Soft Delete</button>`
-              : `<span class="badge" style="font-size:10px; background:rgba(148,163,184,0.15); color:#64748B; cursor:not-allowed;" title="Account deletion requires Super Administrator access">🔒 Super Admin</span>`
-          ) : ''}
+          ${isSuper ? (
+            status === 'active' ? `
+              <button class="action-btn suspend-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Suspend</button>
+              <button class="action-btn ban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Ban</button>
+            ` : (status === 'suspended' ? `
+              <button class="action-btn unsuspend-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Unsuspend</button>
+              <button class="action-btn ban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Ban</button>
+            ` : (status === 'banned' ? `
+              <button class="action-btn unban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Unban</button>
+            ` : ''))
+          ) : `
+            <span class="badge" style="background:#F3E8FF; color:#6D28D9; font-weight:600;">Verified Human</span>
+          `}
+          ${isSuper && status !== 'deleted' ? `
+            <button class="action-btn delete-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}" title="Soft delete (anonymize PII)">Soft Delete</button>
+          ` : ''}
         </td>
       </tr>
     `;
@@ -323,6 +329,12 @@ function updateBulkToolbar() {
   const toolbar = document.getElementById('bulkActionsToolbar');
   const countSpan = document.getElementById('selectedPlayersCount');
   if (!toolbar) return;
+
+  const isSuper = Boolean(window.isSuperAdmin || (window.currentAdmin && window.currentAdmin.is_super_admin));
+  if (!isSuper) {
+    toolbar.hidden = true;
+    return;
+  }
 
   const count = selectedPlayerIds.size;
   if (countSpan) countSpan.textContent = count;

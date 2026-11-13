@@ -1069,7 +1069,7 @@ def review_appeal(appeal_id):
 # =========================================================================
 
 @admin_bp.post("/players/bulk")
-@require_admin_write
+@require_super_admin
 def bulk_player_action():
     data = request.get_json(silent=True) or {}
     action = (data.get("action") or "").strip().lower()
@@ -1136,6 +1136,7 @@ def bulk_player_action():
 # =========================================================================
 
 @admin_bp.get("/export/players")
+@require_super_admin
 def export_players_csv():
     output = io.StringIO()
     writer = csv.writer(output)
@@ -1167,6 +1168,7 @@ def export_players_csv():
 
 
 @admin_bp.get("/export/sessions")
+@require_super_admin
 def export_sessions_csv():
     output = io.StringIO()
     writer = csv.writer(output)
@@ -1194,6 +1196,7 @@ def export_sessions_csv():
 
 
 @admin_bp.get("/export/audit-log")
+@require_super_admin
 def export_audit_log_csv():
     output = io.StringIO()
     writer = csv.writer(output)
@@ -1214,6 +1217,52 @@ def export_audit_log_csv():
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=securefps_audit_log.csv"}
     )
+
+
+@admin_bp.get("/logins")
+def list_recent_logins():
+    limit = max(1, min(request.args.get("limit", 20, type=int), 100))
+    offset = max(0, request.args.get("offset", 0, type=int))
+
+    docs = list(login_history.find().sort("created_at", -1).skip(offset).limit(limit))
+    user_ids = [d["user_id"] for d in docs if d.get("user_id")]
+    user_map = {}
+    if user_ids:
+        for u in users.find({"_id": {"$in": user_ids}}, {"name": 1, "email": 1}):
+            user_map[u["_id"]] = u.get("name") or u.get("email") or "Operator"
+            user_map[str(u["_id"])] = user_map[u["_id"]]
+
+    formatted = []
+    for d in docs:
+        uid = d.get("user_id")
+        pname = user_map.get(uid, user_map.get(str(uid) if uid else None, d.get("identifier", "Unknown")))
+        ip = d.get("ip_address", "127.0.0.1")
+        status = d.get("status", "success")
+        is_succ = status == "success" or d.get("type") == "login_success"
+        device_str = d.get("device") or d.get("user_agent") or "Chrome on Windows 11"
+        if len(device_str) > 35:
+            if "Chrome" in device_str:
+                device_str = "Google Chrome (Windows)"
+            elif "Firefox" in device_str:
+                device_str = "Mozilla Firefox"
+            elif "Safari" in device_str:
+                device_str = "Apple Safari"
+            else:
+                device_str = device_str[:32] + "..."
+
+        formatted.append({
+            "id": str(d["_id"]),
+            "player_name": pname,
+            "identifier": d.get("identifier", ""),
+            "status": "success" if is_succ else "failed",
+            "reason": d.get("reason", "None"),
+            "device": device_str,
+            "ip": ip,
+            "location": "Local Host" if ip in ("127.0.0.1", "localhost", "::1") else "Remote Client",
+            "risk": "Low" if is_succ else "High",
+            "time": format_iso(d.get("created_at"))
+        })
+    return jsonify({"logins": formatted, "total": len(formatted)})
 
 
 # =========================================================================
@@ -1359,7 +1408,7 @@ def get_anticheat_decisions():
 
 
 @admin_bp.post("/anticheat/review/<session_id>")
-@require_admin_write
+@require_super_admin
 def review_anticheat_decision(session_id):
     data = request.get_json(silent=True) or {}
     verdict = (data.get("verdict") or "").strip().lower()

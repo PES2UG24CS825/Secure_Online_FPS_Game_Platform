@@ -39,7 +39,7 @@
       background:
         linear-gradient(rgba(245, 243, 255, 0.42), rgba(237, 233, 254, 0.62)),
         var(--player-scene-image) center center / cover fixed,
-        #1E1B4B !important;
+        #EDE9FE !important;
     }
     body.player-page[data-player-banner="default-banner"] { --player-scene-image:url("../public/backgrounds/default-banner.jpg"); }
     body.player-page[data-player-banner="sakura"] { --player-scene-image:url("../public/backgrounds/cosmic-cherry-blossom.jpg"); }
@@ -554,7 +554,7 @@
     }
 
     .match-table thead {
-      background: #0a1728;
+      background: linear-gradient(135deg, #2E1065 0%, #1E1B4B 100%);
     }
 
     .match-table th {

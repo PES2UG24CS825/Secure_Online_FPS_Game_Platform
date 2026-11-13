@@ -200,23 +200,69 @@ function renderRecentEvents(events) {
 export function renderAdminHeaderBadge(admin) {
   if (!admin) return;
   window.currentAdmin = admin;
+  const isSuper = Boolean(admin.is_super_admin);
+  window.isSuperAdmin = isSuper;
+
   const nameEl = document.getElementById('adminName');
   const emailEl = document.getElementById('adminEmail');
   const avatarEl = document.querySelector('.admin-header-card .avatar');
 
-  if (admin.is_super_admin) {
+  // Insert or update Admin Tier Banner
+  let tierBanner = document.getElementById('adminTierBanner');
+  if (!tierBanner) {
+    tierBanner = document.createElement('div');
+    tierBanner.id = 'adminTierBanner';
+    const mainWrap = document.querySelector('.admin-main');
+    if (mainWrap) {
+      mainWrap.insertBefore(tierBanner, mainWrap.children[1]);
+    }
+  }
+
+  // Sidebar link for ML Anti-Cheat
+  const mlNavBtn = document.querySelector('[data-admin-section="gameplay"]');
+
+  if (isSuper) {
     if (nameEl) nameEl.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;"><span>👑</span><strong>Super Administrator</strong></span>`;
-    if (emailEl) emailEl.innerHTML = `<span style="color:#F59E0B; font-weight:700;">Full System Privileges</span> · ${escapeHtml(admin.email || '')}`;
+    if (emailEl) emailEl.innerHTML = `<span style="color:#F59E0B; font-weight:700;">Full System Authority</span> · ${escapeHtml(admin.email || '')}`;
     if (avatarEl) {
       avatarEl.textContent = '👑';
       avatarEl.classList.add('super-admin-avatar');
     }
+    if (tierBanner) {
+      tierBanner.className = 'admin-tier-banner super-tier';
+      tierBanner.innerHTML = `
+        <div>
+          <strong>👑 Super Administrator Executive Session:</strong>
+          <span>Unrestricted authority across all systems: Bulk Sanctions, GDPR Purge, ML Anti-Cheat Tuning, and Database Exports.</span>
+        </div>
+        <span class="badge" style="background:#F59E0B; color:#000; font-weight:800; padding:6px 12px; border-radius:8px;">EXECUTIVE ROOT</span>
+      `;
+    }
+    if (mlNavBtn) {
+      mlNavBtn.style.display = 'flex';
+      mlNavBtn.innerHTML = `<span class="admin-nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5h16M6.5 16V11M12 16V5M17.5 16V8"/></svg></span>Game &amp; ML Anti-Cheat <span style="font-size:10px; background:#F59E0B; color:#000; padding:1px 5px; border-radius:4px; margin-left:auto; font-weight:800;">ROOT</span>`;
+    }
+    document.querySelectorAll('[id*="Export"], [href*="/export/"]').forEach(el => el.style.display = '');
   } else {
     if (nameEl) nameEl.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;"><span>🛡️</span><strong>Security Admin</strong></span>`;
-    if (emailEl) emailEl.innerHTML = `<span style="color:#7C3AED; font-weight:600;">Restricted Ops</span> · ${escapeHtml(admin.email || '')}`;
+    if (emailEl) emailEl.innerHTML = `<span style="color:#A78BFA; font-weight:600;">Tier-1 Operations</span> · ${escapeHtml(admin.email || '')}`;
     if (avatarEl) {
       avatarEl.textContent = 'SA';
       avatarEl.classList.remove('super-admin-avatar');
     }
+    if (tierBanner) {
+      tierBanner.className = 'admin-tier-banner normal-tier';
+      tierBanner.innerHTML = `
+        <div>
+          <strong>🛡️ Operational Moderator Mode (Tier-1):</strong>
+          <span>Authorized for player verification, ban appeals review, and support tickets. Destructive actions, exports, and ML tuning are restricted.</span>
+        </div>
+        <span class="badge" style="background:#7C3AED; color:#fff; font-weight:700; padding:6px 12px; border-radius:8px;">OPERATIONS ONLY</span>
+      `;
+    }
+    if (mlNavBtn) {
+      mlNavBtn.style.display = 'none';
+    }
+    document.querySelectorAll('[id*="Export"], [href*="/export/"]').forEach(el => el.style.display = 'none');
   }
 }
