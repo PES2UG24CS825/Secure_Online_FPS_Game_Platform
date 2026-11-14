@@ -574,21 +574,18 @@ def get_matches():
         {"_id": user_oid},
         {"hacker_profile": 1, "account_type": 1},
     ) or {}
-    user_match_query = {
-        "$or": [
-            {"user_id": user_oid},
-            {"user_id": str(user_oid)},
-            {"user_id": user_id},
-            {"player_id": user_oid},
-            {"player_id": str(user_oid)}
-        ]
-    }
-    player_matches = list(game_sessions.find(user_match_query).sort("started_at", -1).limit(20))
+    session_filter = {"user_id": user_oid, "status": "completed"}
+    total_matches = game_sessions.count_documents(session_filter)
+    player_matches = list(game_sessions.find(session_filter).sort("started_at", -1).limit(20))
     if not player_matches:
-        # Check legacy matches collection
-        player_matches = list(matches.find(user_match_query).sort("created_at", -1).limit(20))
-
-    total_matches = len(player_matches)
+        # Check string user_id or legacy matches
+        alt_filter = {"$or": [{"user_id": str(user_oid)}, {"player_id": str(user_oid)}], "status": "completed"}
+        player_matches = list(game_sessions.find(alt_filter).sort("started_at", -1).limit(20))
+        if player_matches:
+            total_matches = len(player_matches)
+        else:
+            player_matches = list(matches.find({"user_id": user_oid}).sort("created_at", -1).limit(20))
+            total_matches = len(player_matches)
     analyses = {}
     for item in game_events.find(
         {"user_id": user_oid, "analysis_type": "game_session"}
@@ -612,7 +609,9 @@ def get_matches():
         started_at = game_session.get("started_at") or game_session.get("created_at")
         ended_at = game_session.get("ended_at")
         duration = None
-        if started_at and ended_at:
+        if game_session.get("duration") is not None and int(game_session.get("duration", 0)) > 0:
+            duration = int(game_session.get("duration"))
+        elif started_at and ended_at:
             if started_at.tzinfo is None and ended_at.tzinfo is not None:
                 started_at = started_at.replace(tzinfo=ended_at.tzinfo)
             elif ended_at.tzinfo is None and started_at.tzinfo is not None:
@@ -623,14 +622,16 @@ def get_matches():
         shots_ev = event_count(session_id, "weapon_fire")
         hits_ev = event_count(session_id, "enemy_hit")
 
-        kills = kills_ev if kills_ev > 0 else int(game_session.get("kills", 0) or 0)
-        deaths = deaths_ev if deaths_ev > 0 else int(game_session.get("deaths", 0) or 0)
-        shots = shots_ev if shots_ev > 0 else int(game_session.get("shots", 0) or 0)
-        hits = hits_ev if hits_ev > 0 else int(game_session.get("hits", 0) or 0)
+        kills = max(int(game_session.get("kills") or 0), kills_ev)
+        deaths = max(int(game_session.get("deaths") or 0), deaths_ev)
+        shots = max(int(game_session.get("shots") or 0), shots_ev)
+        hits = max(int(game_session.get("hits") or 0), hits_ev)
 
         calc_acc = round((hits / max(1, shots)) * 100, 1) if shots > 0 else round(float(raw.get("accuracy", 0) or game_session.get("accuracy", 0) or 0) * 100, 1)
         auth_created = analysis.get("created_at")
         raw_score = analysis.get("risk_score", result.get("risk_score"))
+        if raw_score is None and game_session.get("risk_score") is not None:
+            raw_score = game_session.get("risk_score")
         clamped_score = clamp_risk_score(raw_score)
         classification = classify_risk_score(clamped_score)
 
@@ -662,7 +663,7 @@ def get_matches():
             "isolation_forest": result.get("isolation_forest") or analysis.get("isolation_forest", "anomaly"),
             "isolation_forest_anomaly_score": result.get("isolation_forest_anomaly_score"),
             "detection_result": analysis.get("enforcement_action") or "none",
-            "analysis_status": analysis.get("status", "pending"),
+            "analysis_status": analysis.get("status") or game_session.get("analysis_status") or "completed",
             "analysis_timestamp": auth_created.isoformat() if auth_created else None,
             "missing_features": analysis.get("missing_features", []),
             "analysis_error": analysis.get("error"),
@@ -716,30 +717,48 @@ def get_leaderboard():
             continue
 
         completed_sessions = list(game_sessions.find(
-            {"user_id": user["_id"], "status": "completed"},
-            {"session_id": 1},
+            {"user_id": user["_id"], "status": "completed"}
         ))
         session_ids = [item.get("session_id") for item in completed_sessions if item.get("session_id")]
-        kills = game_telemetry.count_documents({"user_id": user["_id"], "session_id": {"$in": session_ids}, "event_type": "enemy_killed"}) if session_ids else 0
-        deaths = game_telemetry.count_documents({"user_id": user["_id"], "session_id": {"$in": session_ids}, "event_type": "player_death"}) if session_ids else 0
-        accuracy_values = [
-            float(item.get("raw_features", {}).get("accuracy", 0) or 0)
+        
+        total_kills = 0
+        total_deaths = 0
+        accuracy_values = []
+        for cs in completed_sessions:
+            sid = cs.get("session_id")
+            telem_k = game_telemetry.count_documents({"user_id": user["_id"], "session_id": sid, "event_type": "enemy_killed"}) if sid else 0
+            telem_d = game_telemetry.count_documents({"user_id": user["_id"], "session_id": sid, "event_type": "player_death"}) if sid else 0
+            
+            s_k = max(int(cs.get("kills") or 0), telem_k)
+            s_d = max(int(cs.get("deaths") or 0), telem_d)
+            total_kills += s_k
+            total_deaths += s_d
+            
+            acc = cs.get("accuracy")
+            if acc is not None:
+                acc_f = float(acc)
+                accuracy_values.append(acc_f * 100 if acc_f <= 1.0 else acc_f)
+
+        if not accuracy_values and session_ids:
             for item in game_events.find(
                 {"user_id": user["_id"], "analysis_type": "game_session", "session_id": {"$in": session_ids}},
                 {"raw_features.accuracy": 1},
-            )
-            if item.get("raw_features", {}).get("accuracy") is not None
-        ]
+            ):
+                rf_acc = item.get("raw_features", {}).get("accuracy")
+                if rf_acc is not None:
+                    acc_f = float(rf_acc)
+                    accuracy_values.append(acc_f * 100 if acc_f <= 1.0 else acc_f)
+
         matches_played = len(completed_sessions)
-        kd = round(kills / max(deaths, 1), 2)
-        accuracy = round((sum(accuracy_values) / len(accuracy_values)) * 100, 1) if accuracy_values else 0
-        performance = round((kills * 3) + (kd * 10) + (accuracy * 0.25), 1)
+        kd = round(total_kills / max(total_deaths, 1), 2)
+        accuracy = round((sum(accuracy_values) / len(accuracy_values)), 1) if accuracy_values else 0.0
+        performance = round((total_kills * 3) + (kd * 10) + (accuracy * 0.25), 1)
         players.append({
             "id": str(user["_id"]),
             "name": user.get("name", "Player"),
             "matches": matches_played,
-            "kills": kills,
-            "deaths": deaths,
+            "kills": total_kills,
+            "deaths": total_deaths,
             "kd": kd,
             "accuracy": accuracy,
             "performance": performance,

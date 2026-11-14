@@ -500,12 +500,10 @@ def get_player_details(player_id):
     recent_matches = []
     for s in p_sessions[:10]:
         sid = s.get("session_id", str(s["_id"]))
-        s_kills = s.get("kills")
-        if s_kills is None:
-            s_kills = game_telemetry.count_documents({"user_id": pid, "session_id": sid, "event_type": "enemy_killed"})
-        s_deaths = s.get("deaths")
-        if s_deaths is None:
-            s_deaths = game_telemetry.count_documents({"user_id": pid, "session_id": sid, "event_type": "player_death"})
+        telem_k = game_telemetry.count_documents({"user_id": pid, "session_id": sid, "event_type": "enemy_killed"})
+        telem_d = game_telemetry.count_documents({"user_id": pid, "session_id": sid, "event_type": "player_death"})
+        s_kills = telem_k if telem_k > 0 else int(s.get("kills") or 0)
+        s_deaths = telem_d if telem_d > 0 else int(s.get("deaths") or 0)
         s_ana = game_events.find_one({"session_id": sid, "analysis_type": "game_session"}) or {}
         s_kdr = s.get("kd") or s.get("kdr") or round(s_kills / max(s_deaths, 1), 2)
         s_risk = s.get("risk_score")

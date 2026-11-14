@@ -27,6 +27,7 @@ class AdminPlayerDashboardSecurityTests(unittest.TestCase):
         self.client = app.test_client()
         self.admin_email = "admin1@gmail.com"
         self.admin_password = "Admin@12345"
+        users.update_one({"email": self.admin_email}, {"$set": {"role": "super_admin"}})
 
         # Ensure demo admin exists
         self.demo_admin_email = "demo_admin_test@securefps.local"
