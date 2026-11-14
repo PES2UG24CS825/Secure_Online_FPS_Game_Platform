@@ -52,6 +52,14 @@ form.addEventListener("submit", async (event) => {
     window.location.replace(destination);
   } catch (error) {
     message.textContent = error.message;
+    if (syncBox && syncBox.style.display === "none") {
+      syncBox.style.display = "block";
+      try {
+        const qrData = await api("/auth/mfa-qr");
+        if (mfaQrImg && qrData.qr_data_url) mfaQrImg.src = qrData.qr_data_url;
+        if (mfaSecretText && qrData.secret) mfaSecretText.textContent = qrData.secret;
+      } catch (e) {}
+    }
     if (submitButton) {
       submitButton.disabled = false;
       submitButton.textContent = "Verify & enter dashboard →";

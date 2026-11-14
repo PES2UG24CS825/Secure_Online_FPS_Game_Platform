@@ -459,7 +459,7 @@ export async function openPlayerMatchesModal(id, name, email) {
       const riskClass = (m.risk_score >= 70) ? 'risk-high' : ((m.risk_score >= 40) ? 'risk-med' : 'risk-low');
       return `
         <tr>
-          <td><code style="background:#EDE9FE; color:#5B21B6; padding:2px 6px; border-radius:4px; font-weight:700;">${escapeHtml(m.session_id ? m.session_id.substring(0, 8) : '—')}</code></td>
+          <td><code style="background:#EDE9FE; color:#5B21B6; padding:2px 8px; border-radius:4px; font-weight:700;">${escapeHtml(m.session_id ? (String(m.session_id).startsWith('#') ? m.session_id : '#' + m.session_id) : '—')}</code></td>
           <td><strong>${escapeHtml(m.game || 'CyberStrike 3D')}</strong></td>
           <td>${formatTimeAgo(m.started_at)}</td>
           <td><strong style="color:#059669;">${m.kills ?? 0}</strong></td>
@@ -543,14 +543,16 @@ function updateBulkToolbar() {
   if (!toolbar) return;
 
   const isSuper = Boolean(window.isSuperAdmin || (window.currentAdmin && window.currentAdmin.is_super_admin));
-  if (!isSuper) {
-    toolbar.hidden = true;
-    return;
-  }
-
   const count = selectedPlayerIds.size;
   if (countSpan) countSpan.textContent = count;
-  toolbar.hidden = count === 0;
+  
+  if (!isSuper || count === 0) {
+    toolbar.hidden = true;
+    toolbar.style.display = 'none';
+  } else {
+    toolbar.hidden = false;
+    toolbar.style.display = 'flex';
+  }
 }
 
 function runBulkAction(action) {

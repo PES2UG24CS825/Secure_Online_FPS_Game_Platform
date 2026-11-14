@@ -673,7 +673,16 @@ def start_game():
         )
     )
 
-    session_id = str(uuid.uuid4())
+    # Generate clean sequential numeric session ID (e.g. 1007, 1008...)
+    max_sid = 1006
+    for s in game_sessions.find({"session_id": {"$regex": r"^\d+$"}}, {"session_id": 1}):
+        try:
+            val = int(s.get("session_id", 0))
+            if val > max_sid:
+                max_sid = val
+        except Exception:
+            pass
+    session_id = str(max_sid + 1)
 
     game_token = secrets.token_urlsafe(32)
 

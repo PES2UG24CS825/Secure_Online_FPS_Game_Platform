@@ -156,8 +156,8 @@ async function loadLeaderboard() {
     const current = data.current_player;
     if (current) {
       const rankedCount = Number(data.total_ranked || 0);
-      const rankLabel = rankedCount > 0 && rankedCount < 20
-        ? `Top ${Math.max(1, Math.ceil((current.rank / rankedCount) * 100))}%`
+      const rankLabel = rankedCount > 0
+        ? `#${current.rank} (Top ${Math.max(1, Math.ceil((current.rank / rankedCount) * 100))}%)`
         : `#${current.rank}`;
       document.getElementById("leaderboardRank").textContent = rankLabel;
       document.getElementById("leaderboardKills").textContent = Number(current.kills).toLocaleString();

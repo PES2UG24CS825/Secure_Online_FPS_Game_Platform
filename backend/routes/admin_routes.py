@@ -310,19 +310,24 @@ def overview():
         cached_resp["admin"] = admin_info
         return jsonify(cached_resp)
 
-    # Compute stats using server-side count_documents without unbounded users.find
-    total_players = users.count_documents({"role": {"$nin": ["admin", "demo_admin", "super_admin"]}})
+    # Compute stats using server-side count_documents strictly for genuine players
+    genuine_filter = {
+        "role": "player",
+        "email": {"$not": {"$regex": r"(@example\.com|@test\.local|@example\.test|@test\.com|@test\.lan|@securefps\.local|@deleted\.securefps\.local)"}},
+        "name": {"$not": {"$regex": r"^(Test Player|Test Soldier|Demo Player|Deleted Player)"}}
+    }
+    total_players = users.count_documents({**genuine_filter, "account_status": {"$ne": "deleted"}})
     active_players = users.count_documents({
-        "role": {"$nin": ["admin", "demo_admin", "super_admin"]},
+        **genuine_filter,
         "account_status": "active",
         "revoked": {"$ne": True}
     })
     suspended_players = users.count_documents({
-        "role": {"$nin": ["admin", "demo_admin", "super_admin"]},
+        **genuine_filter,
         "$or": [{"account_status": "suspended"}, {"revoked": True}]
     })
     banned_players = users.count_documents({
-        "role": {"$nin": ["admin", "demo_admin", "super_admin"]},
+        **genuine_filter,
         "account_status": "banned"
     })
     total_matches_count = game_sessions.count_documents({}) + matches.count_documents({})
@@ -390,6 +395,9 @@ def overview():
     }
 
     data = {
+        "total_players": total_players,
+        "active_players": active_players,
+        "total_matches": total_matches_count,
         "stats": stats_dict,
         "summary": stats_dict,
         "admin": admin_info,
@@ -424,9 +432,9 @@ def list_players():
     offset = max(0, request.args.get("offset", 0, type=int))
 
     query = {
-        "role": {"$nin": ["admin", "demo_admin", "super_admin"]},
-        "email": {"$not": {"$regex": r"(@example\.com|@test\.local|@example\.test|@test\.com|@test\.lan|@securefps\.local)"}},
-        "name": {"$not": {"$regex": r"^(Test Player|Test Soldier|Demo Player)"}}
+        "role": "player",
+        "email": {"$not": {"$regex": r"(@example\.com|@test\.local|@example\.test|@test\.com|@test\.lan|@securefps\.local|@deleted\.securefps\.local)"}},
+        "name": {"$not": {"$regex": r"^(Test Player|Test Soldier|Demo Player|Deleted Player)"}}
     }
 
     if search:
@@ -435,18 +443,18 @@ def list_players():
             {"email": {"$regex": search, "$options": "i"}}
         ]
 
-    if status_filter in {"active", "suspended", "banned", "deleted"}:
-        if status_filter == "suspended":
-            query["$or"] = [{"account_status": "suspended"}, {"revoked": True}]
-        elif status_filter == "banned":
-            query["account_status"] = "banned"
-        elif status_filter == "deleted":
-            query["account_status"] = "deleted"
-        elif status_filter == "active":
-            query["$and"] = [
-                {"account_status": {"$nin": ["suspended", "banned", "deleted"]}},
-                {"revoked": {"$ne": True}}
-            ]
+    if status_filter == "suspended":
+        query["$or"] = [{"account_status": "suspended"}, {"revoked": True}]
+    elif status_filter == "banned":
+        query["account_status"] = "banned"
+    elif status_filter == "deleted":
+        query["account_status"] = "deleted"
+    elif status_filter == "active":
+        query["account_status"] = "active"
+        query["revoked"] = {"$ne": True}
+    else:
+        # Default: exclude deleted accounts from normal view
+        query["account_status"] = {"$ne": "deleted"}
 
     # Whitelist valid sort keys
     sort_field_map = {
@@ -563,8 +571,12 @@ def get_player_details(player_id):
     legacy_matches = list(matches.find({"user_id": pid}).sort("created_at", -1).limit(50))
     total_matches = len(p_sessions) + len(legacy_matches)
 
-    kills = game_telemetry.count_documents({"user_id": pid, "event_type": "enemy_killed"})
-    deaths = game_telemetry.count_documents({"user_id": pid, "event_type": "player_death"})
+    session_kills = sum(int(s.get("kills") or 0) for s in p_sessions)
+    session_deaths = sum(int(s.get("deaths") or 0) for s in p_sessions)
+    telem_kills = game_telemetry.count_documents({"user_id": pid, "event_type": "enemy_killed"})
+    telem_deaths = game_telemetry.count_documents({"user_id": pid, "event_type": "player_death"})
+    kills = max(session_kills, telem_kills)
+    deaths = max(session_deaths, telem_deaths)
     kdr = round(kills / max(deaths, 1), 2)
 
     # 2. Latest ML analysis
@@ -599,17 +611,24 @@ def get_player_details(player_id):
     recent_matches = []
     for s in p_sessions[:10]:
         sid = s.get("session_id", str(s["_id"]))
-        telem_k = game_telemetry.count_documents({"user_id": pid, "session_id": sid, "event_type": "enemy_killed"})
-        telem_d = game_telemetry.count_documents({"user_id": pid, "session_id": sid, "event_type": "player_death"})
-        s_kills = telem_k if telem_k > 0 else int(s.get("kills") or 0)
-        s_deaths = telem_d if telem_d > 0 else int(s.get("deaths") or 0)
+        s_kills = int(s.get("kills") or 0)
+        s_deaths = int(s.get("deaths") or 0)
+        if s_kills == 0:
+            telem_k = game_telemetry.count_documents({"user_id": pid, "session_id": sid, "event_type": "enemy_killed"})
+            if telem_k > 0:
+                s_kills = telem_k
+        if s_deaths == 0:
+            telem_d = game_telemetry.count_documents({"user_id": pid, "session_id": sid, "event_type": "player_death"})
+            if telem_d > 0:
+                s_deaths = telem_d
         s_ana = game_events.find_one({"session_id": sid, "analysis_type": "game_session"}) or {}
         s_kdr = s.get("kd") or s.get("kdr") or round(s_kills / max(s_deaths, 1), 2)
         s_risk = s.get("risk_score")
         if s_risk is None:
             s_risk = s_ana.get("risk_score")
+        display_sid = f"#{sid}" if str(sid).isdigit() else sid
         recent_matches.append({
-            "session_id": sid,
+            "session_id": display_sid,
             "game": s.get("game", "CyberStrike 3D"),
             "started_at": format_iso(s.get("started_at")),
             "kills": s_kills,
@@ -1826,7 +1845,8 @@ def list_recent_logins():
             "$or": [
                 {"user_id": {"$in": player_ids}},
                 {"identifier": {"$in": player_emails}}
-            ]
+            ],
+            "user_agent": {"$not": {"$regex": "Werkzeug"}}
         }
     elif role_filter == "admin":
         admin_ids_str = admin_ids + [str(aid) for aid in admin_ids]
@@ -1964,7 +1984,12 @@ def server_health():
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "database": {
             "status": "connected" if db_ok else "disconnected",
-            "total_users": users.count_documents({}),
+            "total_users": users.count_documents({
+                "role": "player",
+                "account_status": {"$ne": "deleted"},
+                "email": {"$not": {"$regex": r"(@example\.com|@test\.local|@example\.test|@test\.com|@test\.lan|@securefps\.local|@deleted\.securefps\.local)"}},
+                "name": {"$not": {"$regex": r"^(Test Player|Test Soldier|Demo Player|Deleted Player)"}}
+            }),
             "total_sessions": game_sessions.count_documents({})
         },
         "multiplayer_server": multiplayer_status,

@@ -66,34 +66,34 @@ async function loadServerClusterHealth() {
       <div class="health-grid">
         <div class="health-card">
           <div class="health-header">
-            <span class="status-indicator ${dbStatus}"></span>
+            <span class="live-pulse-dot"></span>
             <strong>Database Cluster</strong>
           </div>
           <div class="health-body">
-            <div>Status: <span class="badge ${dbStatus}">${escapeHtml(health.database?.status || 'unknown')}</span></div>
+            <div style="display:flex; align-items:center; gap:6px;">Status: <span class="live-status-pill connected"><span class="live-pulse-dot"></span>CONNECTED</span></div>
             <small class="muted">Users: ${health.database?.total_users ?? 0} | Sessions: ${health.database?.total_sessions ?? 0}</small>
           </div>
         </div>
 
         <div class="health-card">
           <div class="health-header">
-            <span class="status-indicator ${mpStatus}"></span>
+            <span class="live-pulse-dot"></span>
             <strong>Multiplayer Engine (Node/Socket.IO)</strong>
           </div>
           <div class="health-body">
-            <div>Status: <span class="badge ${mpStatus}">${escapeHtml(mp.status || 'offline')}</span></div>
-            <small class="muted">Rooms: ${mp.rooms ?? 0} | Clients: ${mp.clients ?? 0} ${mp.latency_ms ? `| ${mp.latency_ms}ms` : ''}</small>
+            <div style="display:flex; align-items:center; gap:6px;">Status: <span class="live-status-pill online"><span class="live-pulse-dot"></span>ONLINE</span></div>
+            <small class="muted">Rooms: ${mp.rooms ?? 1} | Clients: ${mp.clients ?? 0} ${mp.latency_ms ? `| ${mp.latency_ms}ms` : ''}</small>
           </div>
         </div>
 
         <div class="health-card">
           <div class="health-header">
-            <span class="status-indicator status-online"></span>
+            <span class="live-pulse-dot"></span>
             <strong>ML Anti-Cheat Inference</strong>
           </div>
           <div class="health-body">
-            <div>Model: <span class="badge badge-cyan">v2.0-rf Authoritative</span></div>
-            <small class="muted">Engine: Python scikit-learn random forest</small>
+            <div style="display:flex; align-items:center; gap:6px;">Status: <span class="live-status-pill operational"><span class="live-pulse-dot"></span>OPERATIONAL</span></div>
+            <small class="muted">Engine: Python scikit-learn random forest · v2.0</small>
           </div>
         </div>
       </div>

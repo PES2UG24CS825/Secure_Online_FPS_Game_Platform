@@ -645,17 +645,17 @@
   margin-bottom: 20px;
 }
 .health-card {
-  background: linear-gradient(135deg, #090B10 0%, #111622 50%, #161D2B 100%) !important;
-  border: 1px solid rgba(139, 92, 246, 0.35) !important;
+  background: #FFFFFF !important;
+  border: 1px solid #E2E8F0 !important;
   border-radius: 14px !important;
   padding: 18px 20px !important;
-  color: #F8FAFC !important;
-  box-shadow: 0 4px 18px rgba(76, 29, 149, 0.15) !important;
+  color: #1E1B4B !important;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.08) !important;
   transition: transform .18s ease, box-shadow .18s ease;
 }
 .health-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.25) !important;
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.16) !important;
 }
 .health-header {
   display: flex;
@@ -664,8 +664,9 @@
   margin-bottom: 10px;
 }
 .health-header strong {
-  color: #FFFFFF !important;
+  color: #1E1B4B !important;
   font-size: 14px;
+  font-weight: 700;
   letter-spacing: 0.02em;
 }
 .health-body {
@@ -674,23 +675,56 @@
   gap: 6px;
 }
 .health-body div {
-  color: #E2E8F0 !important;
-  font-size: 12px;
+  color: #334155 !important;
+  font-size: 13px;
+  font-weight: 600;
 }
 .health-body .muted {
-  color: #E2E8F0 !important;
+  color: #64748B !important;
   font-size: 11px;
   font-weight: 500;
 }
 
+.live-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.live-status-pill.connected,
+.live-status-pill.online,
+.live-status-pill.operational {
+  background: rgba(16, 185, 129, 0.14) !important;
+  color: #059669 !important;
+  border: 1px solid rgba(16, 185, 129, 0.45) !important;
+}
+.live-pulse-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10B981;
+  box-shadow: 0 0 10px #10B981;
+  animation: liveStatusPulse 1.8s infinite;
+}
+@keyframes liveStatusPulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1.05); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
 /* 3. Modern ML Anti-Cheat Review Card */
 .anticheat-meta-card {
-  background: linear-gradient(135deg, #090B10 0%, #111622 50%, #161D2B 100%) !important;
-  border: 1px solid rgba(139, 92, 246, 0.35) !important;
+  background: #FFFFFF !important;
+  border: 1px solid #E2E8F0 !important;
   border-radius: 14px !important;
   padding: 20px !important;
-  color: #F8FAFC !important;
-  box-shadow: 0 4px 18px rgba(76, 29, 149, 0.15) !important;
+  color: #1E1B4B !important;
+  box-shadow: 0 4px 18px rgba(124, 58, 237, 0.08) !important;
   margin-bottom: 20px;
 }
 .anticheat-meta-card strong {
@@ -817,27 +851,30 @@
   margin-top: 12px;
 }
 
-/* 5. Modern Tactical Cyber Bulk Actions Toolbar (Sleek Charcoal / Navy) */
+/* 5. Modern Tactical Cyber Bulk Actions Toolbar (Sleek Clean Light-Purple) */
 .bulk-toolbar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  background: linear-gradient(135deg, #0F141E 0%, #161D2B 50%, #1A2333 100%) !important;
-  border: 1px solid #232C3D !important;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4) !important;
+  background: #FAF5FF !important;
+  border: 1.5px solid #DDD6FE !important;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.1) !important;
   padding: 12px 18px !important;
   border-radius: 12px !important;
   margin-bottom: 16px !important;
-  color: #F8FAFC !important;
+  color: #4C1D95 !important;
+}
+.bulk-toolbar[hidden] {
+  display: none !important;
 }
 .bulk-toolbar span {
   font-size: 13px;
   font-weight: 600;
-  color: #F8FAFC !important;
+  color: #4C1D95 !important;
 }
 .bulk-toolbar strong {
-  color: #FDE68A !important;
+  color: #6D28D9 !important;
   font-size: 15px;
 }
 .bulk-toolbar .action-btn {
@@ -877,23 +914,23 @@
   font-size: 13px;
 }
 .admin-tier-banner.super-tier {
-  background: linear-gradient(135deg, #111622 0%, #161D2B 45%, #78350F 100%) !important;
+  background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%) !important;
   border: 1.5px solid #F59E0B !important;
-  color: #FEF3C7 !important;
-  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.25) !important;
+  color: #92400E !important;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.15) !important;
 }
 .admin-tier-banner.super-tier strong {
-  color: #FDE68A !important;
+  color: #B45309 !important;
   font-size: 14px;
 }
 .admin-tier-banner.normal-tier {
-  background: linear-gradient(135deg, #090B10 0%, #111622 100%) !important;
-  border: 1px solid rgba(139, 92, 246, 0.4) !important;
-  color: #161D2B !important;
-  box-shadow: 0 4px 14px rgba(109, 40, 217, 0.15) !important;
+  background: linear-gradient(135deg, #FAF5FF 0%, #EDE9FE 100%) !important;
+  border: 1.5px solid #C4B5FD !important;
+  color: #5B21B6 !important;
+  box-shadow: 0 4px 14px rgba(109, 40, 217, 0.1) !important;
 }
 .admin-tier-banner.normal-tier strong {
-  color: #A78BFA !important;
+  color: #6D28D9 !important;
   font-size: 14px;
 }
 
@@ -909,20 +946,20 @@
   border-collapse: collapse;
 }
 .login-audit-table th {
-  background: #0F141E;
-  color: #60A5FA;
+  background: #F8FAFC !important;
+  color: #475569 !important;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 12px 16px;
-  border-bottom: 1px solid #232C3D;
+  border-bottom: 2px solid #E2E8F0 !important;
 }
 .login-audit-table td {
   padding: 14px 16px;
   font-size: 12px;
-  border-bottom: 1px solid #161D2B;
-  color: #090B10;
+  border-bottom: 1px solid #F1F5F9 !important;
+  color: #1E293B !important;
   vertical-align: middle;
 }
 .login-audit-table tr:hover td {
@@ -1102,25 +1139,25 @@
 }
 
 .admin-tier-badge.level-1 {
-  background: #161D2B;
-  color: #2563EB;
-  border: 1px solid #232C3D;
+  background: #EDE9FE;
+  color: #5B21B6;
+  border: 1px solid #C4B5FD;
 }
 
 .admin-tier-badge.level-2 {
-  background: linear-gradient(135deg, #FEF3C7, #161D2B);
+  background: #FEF3C7;
   color: #92400E;
   border: 1px solid #FCD34D;
   box-shadow: 0 1px 3px rgba(245, 158, 11, 0.2);
 }
 
 .command-center-header {
-  background: linear-gradient(135deg, #111622, #090B10);
+  background: linear-gradient(135deg, #1E1B4B 0%, #312E81 100%);
   color: #FFFFFF;
   border-radius: 14px;
   padding: 20px 24px;
   margin-bottom: 24px;
-  border: 1px solid #2563EB;
+  border: 1px solid #4338CA;
   box-shadow: 0 10px 25px rgba(46, 16, 101, 0.2);
   display: flex;
   justify-content: space-between;

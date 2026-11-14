@@ -638,7 +638,7 @@ def get_matches():
         result_matches.append({
             "id": session_id,
             "session_id": session_id,
-            "match_id": session_id[:8] if session_id else str(game_session.get("_id", ""))[-8:],
+            "match_id": f"#{session_id}" if str(session_id).isdigit() else (session_id[:8] if session_id else str(game_session.get("_id", ""))[-8:]),
             "analysis_id": str(analysis.get("_id", "")),
             "model_version": analysis.get("model_version", "v1.2-ensemble-rf-iso"),
             "date": started_at.isoformat() if started_at else None,
@@ -771,7 +771,7 @@ def get_leaderboard():
         item for item in players
         if item["matches"] > 0 or item["id"] == current_id
     ]
-    players.sort(key=lambda item: (-item["performance"], -item["kills"], -item["matches"], item["name"].lower()))
+    players.sort(key=lambda item: (-item["kills"], -item["kd"], -item["accuracy"], item["name"].lower()))
     for rank, player in enumerate(players, start=1):
         player["rank"] = rank
 
