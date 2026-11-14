@@ -1572,3 +1572,257 @@ def self_delete_account():
 
     return jsonify({"success": True, "message": "Your account has been deleted and personal data anonymized."})
 
+
+# =========================================================================
+# FAIR PLAY, SETTINGS, ACTIVE SESSIONS & EXPORT ALIASES (Laptop Overhaul)
+# =========================================================================
+
+@player_bp.get("/data-export")
+def data_export_alias():
+    return export_player_data()
+
+
+@player_bp.post("/delete-account")
+def delete_account_alias():
+    return self_delete_account()
+
+
+@player_bp.get("/fairplay")
+def get_fairplay_overview():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    user_oid = ObjectId(user_id)
+    user = users.find_one({"_id": user_oid})
+    if not user:
+        return jsonify({"message": "User not found."}), 404
+
+    honour_score = int(user.get("honour_score", 100))
+    if honour_score >= 90:
+        honour_tier = "Exemplary"
+        honour_color = "emerald"
+        honour_description = "Full platform privileges, maximum priority matching, bonus XP multiplier."
+    elif honour_score >= 70:
+        honour_tier = "Honourable"
+        honour_color = "purple"
+        honour_description = "Normal matchmaking status. Maintain fair play to reach Exemplary standing."
+    elif honour_score >= 50:
+        honour_tier = "Warning"
+        honour_color = "amber"
+        honour_description = "Reduced rewards. Continued infractions may lead to temporary matchmaking restrictions."
+    else:
+        honour_tier = "Restricted"
+        honour_color = "rose"
+        honour_description = "Matchmaking privileges currently restricted. Fair play review in progress."
+
+    # Fetch honour logs
+    raw_logs = list(honour_history.find(
+        {"$or": [{"user_id": user_oid}, {"player_id": str(user_oid)}]}
+    ).sort("timestamp", -1).limit(20))
+
+    history = []
+    for h in raw_logs:
+        delta = h.get("points_delta", 0)
+        history.append({
+            "id": str(h.get("_id", "")),
+            "date": h.get("timestamp").isoformat() if h.get("timestamp") else None,
+            "change": delta,
+            "change_display": f"+{delta}" if delta > 0 else str(delta),
+            "reason": str(h.get("reason", "Gameplay review")).replace("_", " ").title(),
+            "resulting_score": h.get("new_score", honour_score)
+        })
+
+    # Fetch reviewed / flagged sessions - sanitize to NEVER expose raw ML numbers or thresholds!
+    recent_sessions = list(game_sessions.find(
+        {"user_id": user_oid, "status": "completed"}
+    ).sort("started_at", -1).limit(10))
+
+    reviewed_sessions = []
+    for s in recent_sessions:
+        sid = s.get("session_id", "")
+        analysis = game_events.find_one({"session_id": sid, "analysis_type": "game_session"}) or {}
+        enforce_state = analysis.get("enforcement_state") or s.get("enforcement_state") or "monitoring"
+        risk_score = analysis.get("risk_score") or s.get("risk_score") or 0.0
+
+        if enforce_state in {"banned", "suspended"} or risk_score >= 70:
+            friendly_status = "suspended"
+            friendly_reason = "Elevated behavioral variance detected"
+        elif enforce_state in {"investigating", "review", "quarantine"} or (risk_score >= 40):
+            friendly_status = "under_review"
+            friendly_reason = "Flagged for standard security verification"
+        elif risk_score > 20:
+            friendly_status = "monitoring"
+            friendly_reason = "Active baseline monitoring"
+        else:
+            friendly_status = "cleared"
+            friendly_reason = "Standard fair play check passed"
+
+        started_at = s.get("started_at") or s.get("created_at")
+        reviewed_sessions.append({
+            "session_id": sid[:8] if sid else "—",
+            "full_session_id": sid,
+            "date": started_at.isoformat() if started_at else None,
+            "game": s.get("game", "CyberStrike 3D"),
+            "status": friendly_status,
+            "reason": friendly_reason
+        })
+
+    # Appeal status
+    appeal = ban_appeals.find_one({"user_id": user_oid}, sort=[("created_at", -1)])
+    appeal_info = None
+    if appeal:
+        appeal_info = {
+            "id": str(appeal["_id"]),
+            "status": appeal.get("status", "pending"),
+            "submitted_at": appeal.get("created_at").isoformat() if appeal.get("created_at") else None,
+            "reason": appeal.get("reason", ""),
+            "reviewer_notes": appeal.get("reviewer_notes") or appeal.get("admin_response") or None,
+            "updated_at": appeal.get("updated_at").isoformat() if appeal.get("updated_at") else None
+        }
+
+    return jsonify({
+        "honour_score": honour_score,
+        "honour_tier": honour_tier,
+        "honour_color": honour_color,
+        "honour_description": honour_description,
+        "history": history,
+        "reviewed_sessions": reviewed_sessions,
+        "appeal": appeal_info,
+        "detection_explainer": {
+            "title": "How Server-Authoritative Fair Play Works",
+            "summary": "SecureFPS protects competitive integrity through real-time behavioral telemetry and server-side physics verification. All movement velocities, firing rates, and hit registration are validated on authoritative servers to ensure every participant enjoys a level, cheat-free playing field.",
+            "pillars": [
+                {"title": "Input Pattern Analysis", "description": "Detects robotic or unnatural mouse micro-snaps without tracking private client software."},
+                {"title": "Physics Consistency", "description": "Ensures operator acceleration and weapon recoil adhere strictly to server-governed limits."},
+                {"title": "Non-Invasive Verification", "description": "Zero kernel-level drivers or third-party invasiveness—all protection is behavioral and authoritative."}
+            ]
+        }
+    })
+
+
+DEFAULT_PLAYER_SETTINGS = {
+    "mouse_sensitivity": 1.0,
+    "volume": 80,
+    "graphics_quality": "High",
+    "show_fps": True,
+    "keybindings": {
+        "move_forward": "KeyW",
+        "move_backward": "KeyS",
+        "move_left": "KeyA",
+        "move_right": "KeyD",
+        "jump": "Space",
+        "crouch": "KeyC",
+        "reload": "KeyR",
+        "fire": "Mouse0",
+        "aim": "Mouse1"
+    }
+}
+
+
+@player_bp.get("/settings")
+def get_player_settings():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    user = users.find_one({"_id": ObjectId(user_id)}) or {}
+    saved_settings = user.get("settings") or {}
+    merged = {**DEFAULT_PLAYER_SETTINGS, **saved_settings}
+    if "keybindings" in saved_settings and isinstance(saved_settings["keybindings"], dict):
+        merged["keybindings"] = {**DEFAULT_PLAYER_SETTINGS["keybindings"], **saved_settings["keybindings"]}
+
+    return jsonify({"settings": merged})
+
+
+@player_bp.post("/settings")
+def update_player_settings():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    data = request.get_json(silent=True) or {}
+    sensitivity = data.get("mouse_sensitivity")
+    volume = data.get("volume")
+    graphics_quality = data.get("graphics_quality")
+    show_fps = data.get("show_fps")
+    keybindings = data.get("keybindings")
+
+    updates = {}
+    if sensitivity is not None:
+        try:
+            sens_val = float(sensitivity)
+            if not (0.1 <= sens_val <= 10.0):
+                return jsonify({"message": "Mouse sensitivity must be between 0.1 and 10.0."}), 400
+            updates["settings.mouse_sensitivity"] = round(sens_val, 2)
+        except (ValueError, TypeError):
+            return jsonify({"message": "Invalid mouse sensitivity value."}), 400
+
+    if volume is not None:
+        try:
+            vol_val = int(volume)
+            if not (0 <= vol_val <= 100):
+                return jsonify({"message": "Volume must be between 0 and 100."}), 400
+            updates["settings.volume"] = vol_val
+        except (ValueError, TypeError):
+            return jsonify({"message": "Invalid volume value."}), 400
+
+    if graphics_quality is not None:
+        if graphics_quality not in {"Low", "Medium", "High"}:
+            return jsonify({"message": "Graphics quality must be Low, Medium, or High."}), 400
+        updates["settings.graphics_quality"] = graphics_quality
+
+    if show_fps is not None:
+        updates["settings.show_fps"] = bool(show_fps)
+
+    if keybindings is not None:
+        if not isinstance(keybindings, dict):
+            return jsonify({"message": "Keybindings must be a key-value object."}), 400
+        seen_keys = {}
+        for action, key in keybindings.items():
+            if not isinstance(key, str) or not key.strip():
+                return jsonify({"message": f"Invalid key assigned to {action}."}), 400
+            key_clean = key.strip()
+            if key_clean in seen_keys:
+                return jsonify({
+                    "message": f"Key binding conflict: '{key_clean}' is assigned to both '{seen_keys[key_clean]}' and '{action}'. Each action must have a unique key."
+                }), 400
+            seen_keys[key_clean] = action
+        updates["settings.keybindings"] = keybindings
+
+    if not updates:
+        return jsonify({"message": "No valid settings provided."}), 400
+
+    users.update_one({"_id": ObjectId(user_id)}, {"$set": updates})
+    return jsonify({"success": True, "message": "Player settings saved successfully."})
+
+
+@player_bp.get("/active-sessions")
+def get_player_active_sessions():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    user_oid = ObjectId(user_id)
+    current_session_id = session.get("auth_session_id")
+    active_docs = list(sessions_db.find({"user_id": user_oid, "is_active": True}).sort("last_activity", -1).limit(10))
+
+    results = []
+    for s in active_docs:
+        sid_str = str(s["_id"])
+        is_current = (sid_str == str(current_session_id)) or (s.get("session_id") == str(current_session_id))
+        dev = s.get("device_info") or s.get("device") or s.get("user_agent") or "Desktop Browser"
+        parsed = parse_client_device(dev) if isinstance(dev, str) else {}
+        results.append({
+            "id": sid_str,
+            "ip_address": s.get("ip_address") or s.get("ip") or "127.0.0.1",
+            "browser": s.get("browser") or parsed.get("browser", "Chrome"),
+            "os": s.get("os") or parsed.get("os", "Windows"),
+            "device": s.get("device") or parsed.get("device", "Desktop PC"),
+            "last_activity": s.get("last_activity").isoformat() if s.get("last_activity") else (s.get("created_at").isoformat() if s.get("created_at") else None),
+            "is_current": is_current
+        })
+
+    return jsonify({"sessions": results})
+
+

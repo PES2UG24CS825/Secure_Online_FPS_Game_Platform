@@ -47,7 +47,7 @@ form.addEventListener("submit", async (event) => {
     });
     const identity = await api("/auth/me");
     const role = identity.user?.role;
-    const isAdmin = role === "admin" || role === "super_admin" || identity.user?.is_super_admin === true;
+    const isAdmin = role === "admin" || role === "normal_admin" || role === "super_admin" || identity.user?.is_super_admin === true;
     const destination = nextDestination || (isAdmin ? "admin.html" : "player.html");
     window.location.replace(destination);
   } catch (error) {

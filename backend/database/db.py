@@ -60,6 +60,7 @@ system_config = db["system_config"]
 admin_permissions = db["admin_permissions"]
 model_versions = db["model_versions"]
 system_backups = db["system_backups"]
+admin_approvals = db["admin_approvals"]
 
 
 def seed_two_tier_system():

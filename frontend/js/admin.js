@@ -10,7 +10,7 @@ import { initSupportSection, loadSupportTickets } from './admin/admin_support.js
 import {
   initSuperAdminModules, loadSuperAdmins, loadRolesPermissions, loadMlModelsCatalog,
   loadRiskConfig, loadSecurityCommand, loadSystemControlMetrics, loadSystemBackups,
-  loadPlatformConfig, loadThreatMonitoring, loadReportsAnalytics
+  loadPlatformConfig, loadThreatMonitoring, loadReportsAnalytics, loadApprovalsQueue
 } from './admin/admin_super.js';
 
 let activeSection = 'overview';
@@ -191,6 +191,9 @@ async function refreshCurrentSection(force = false) {
       break;
     case 'support':
       await loadSupportTickets();
+      break;
+    case 'approvals':
+      await loadApprovalsQueue();
       break;
     case 'super_admins':
       await loadSuperAdmins();

@@ -3,6 +3,7 @@
  * Server-side pagination, sorting, search, bulk actions, soft delete, and CSV export.
  */
 import { escapeHtml, formatTimeAgo, promptAdminAction } from './admin_core.js';
+import { openRequestApprovalModal } from './admin_super.js';
 
 let currentPlayersPage = 0;
 const PAGE_SIZE = 15;
@@ -228,18 +229,18 @@ function renderPlayersRows(players, tbody) {
           ${isSuper ? (
             status === 'active' ? `
               <button class="action-btn suspend-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Suspend</button>
-              <button class="action-btn ban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Ban</button>
+              <button class="action-btn ban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">${isSuper ? 'Ban' : 'Request Ban'}</button>
             ` : (status === 'suspended' ? `
               <button class="action-btn unsuspend-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Unsuspend</button>
-              <button class="action-btn ban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Ban</button>
+              <button class="action-btn ban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">${isSuper ? 'Ban' : 'Request Ban'}</button>
             ` : (status === 'banned' ? `
               <button class="action-btn unban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Unban</button>
             ` : ''))
           ) : `
-            <span class="badge" style="background:#F3E8FF; color:#6D28D9; font-weight:600;">Verified</span>
+            <span class="badge" style="background:#1E293B; color:#38BDF8; font-weight:600;">Verified</span>
           `}
-          ${isSuper && status !== 'deleted' ? `
-            <button class="action-btn delete-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}" title="Soft delete (anonymize PII)">Soft Delete</button>
+          ${status !== 'deleted' ? `
+            <button class="action-btn delete-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}" title="${isSuper ? 'Soft delete (anonymize PII)' : 'Request deletion approval'}">${isSuper ? 'Soft Delete' : 'Request Delete'}</button>
           ` : ''}
         </td>
       </tr>
@@ -325,6 +326,10 @@ function handleUnsuspend(id, name) {
 }
 
 function handleBan(id, name) {
+  if (!window.isSuperAdmin) {
+    openRequestApprovalModal(id, name, 'ban');
+    return;
+  }
   promptAdminAction({
     title: `Permanent Ban: ${name}`,
     message: 'Permanent ban revokes all sessions and terminates matchmaking access. Requires admin re-authentication.',
@@ -339,7 +344,13 @@ function handleBan(id, name) {
         body: JSON.stringify(payload)
       });
       const data = await resp.json();
-      if (!resp.ok) throw new Error(data.message || 'Ban failed');
+      if (!resp.ok) {
+        if (data.can_request_approval) {
+          openRequestApprovalModal(id, name, 'ban');
+          return;
+        }
+        throw new Error(data.message || 'Ban failed');
+      }
       await loadPlayersTable();
     }
   });
@@ -465,6 +476,10 @@ export async function openPlayerMatchesModal(id, name, email) {
 }
 
 function handleDelete(id, name) {
+  if (!window.isSuperAdmin) {
+    openRequestApprovalModal(id, name, 'delete');
+    return;
+  }
   promptAdminAction({
     title: `Soft-Delete Account: ${name}`,
     message: 'Soft delete marks account as deleted, revokes sessions, and anonymizes personal identifiable information (PII). Match, honour, and reward records are retained for auditing.',
@@ -479,7 +494,13 @@ function handleDelete(id, name) {
         body: JSON.stringify(payload)
       });
       const data = await resp.json();
-      if (!resp.ok) throw new Error(data.message || 'Delete failed');
+      if (!resp.ok) {
+        if (data.can_request_approval) {
+          openRequestApprovalModal(id, name, 'delete');
+          return;
+        }
+        throw new Error(data.message || 'Delete failed');
+      }
       await loadPlayersTable();
     }
   });

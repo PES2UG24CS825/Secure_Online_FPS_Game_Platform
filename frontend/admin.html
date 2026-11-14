@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <script>if (window.location.port === "5500") { window.location.replace(`http://${window.location.hostname}:5000${window.location.pathname.replace(/^\/frontend/, '')}${window.location.search}`); }</script>
+  <script>if (window.location.port !== "5000" && window.location.port !== "") { window.location.replace(`http://${window.location.hostname}:5000${window.location.pathname.replace(/^\/frontend/, "")}${window.location.search}`); }</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>SecureFPS | Admin Control Center</title>
@@ -14,27 +14,25 @@
   <aside class="admin-sidebar">
     <div class="brand"><img class="brand-lockup" src="public/securefps-logo-crop.png?v=1" alt="SecureFPS Gaming Security"></div>
     <nav id="adminNavigation" aria-label="Admin sections" role="tablist">
+      <!-- Normal Admin Tier 1 (Exactly 6 primary operational sections) -->
       <button class="admin-nav-btn active" type="button" data-admin-section="overview" role="tab" aria-selected="true"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg></span>Overview</button>
       <button class="admin-nav-btn" type="button" data-admin-section="players" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3.5 20v-1.5a5.5 5.5 0 0 1 11 0V20M16 5.2a3.5 3.5 0 0 1 0 6.6M17 14a4.8 4.8 0 0 1 3.5 4.6V20"/></svg></span>Players</button>
-      <button class="admin-nav-btn" type="button" data-admin-section="security" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 19 6v5.2c0 4.5-2.8 7.8-7 9.8-4.2-2-7-5.3-7-9.8V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>Security &amp; Appeals</button>
       <button class="admin-nav-btn" type="button" data-admin-section="threats" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m10.29 3.86-8.6 14.9A2 2 0 0 0 3.42 22h17.16a2 2 0 0 0 1.73-3.24l-8.6-14.9a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>Threat Monitoring</button>
+      <button class="admin-nav-btn" type="button" data-admin-section="security" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 19 6v5.2c0 4.5-2.8 7.8-7 9.8-4.2-2-7-5.3-7-9.8V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>Security &amp; Appeals</button>
       <button class="admin-nav-btn" type="button" data-admin-section="analytics" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>Reports &amp; Analytics</button>
-      <button class="admin-nav-btn" type="button" data-admin-section="gameplay" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19.5h16M6.5 16V11M12 16V5M17.5 16V8"/></svg></span>Game &amp; ML Anti-Cheat</button>
-      <button class="admin-nav-btn" type="button" data-admin-section="support" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="m4.5 7 7.5 5.5L19.5 7"/></svg></span>Customer support</button>
+      <button class="admin-nav-btn" type="button" data-admin-section="support" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="m4.5 7 7.5 5.5L19.5 7"/></svg></span>Customer Support</button>
 
-      <!-- Super Admin Command Center Category (Exclusive to Level 2 Super Admin) -->
+      <!-- Super Admin Command Center Category (Exclusive to Super Admin Tier 2) -->
       <div id="superAdminNavCategory" class="admin-nav-category" hidden>
         <div class="admin-nav-divider">
           <span>👑 COMMAND CENTER</span>
         </div>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="approvals" role="tab" aria-selected="false"><span class="admin-nav-icon">⚖️</span>Approvals Queue <span id="navApprovalBadge" class="nav-badge" style="display:none; margin-left:auto; background:#EF4444; color:#fff; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">0</span></button>
         <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_admins" role="tab" aria-selected="false"><span class="admin-nav-icon">👥</span>Admin Management</button>
-        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_roles" role="tab" aria-selected="false"><span class="admin-nav-icon">🔑</span>Roles &amp; Permissions</button>
-        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_ml" role="tab" aria-selected="false"><span class="admin-nav-icon">🧠</span>AI &amp; ML Models</button>
         <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_risk" role="tab" aria-selected="false"><span class="admin-nav-icon">⚙️</span>Risk Engine Config</button>
-        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_command" role="tab" aria-selected="false"><span class="admin-nav-icon">🚨</span>Security Command</button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_ml" role="tab" aria-selected="false"><span class="admin-nav-icon">🧠</span>AI &amp; ML Models</button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_command" role="tab" aria-selected="false"><span class="admin-nav-icon">🚨</span>Audit &amp; Security</button>
         <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_control" role="tab" aria-selected="false"><span class="admin-nav-icon">🖥️</span>System Control</button>
-        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_backups" role="tab" aria-selected="false"><span class="admin-nav-icon">💾</span>Backup &amp; Recovery</button>
-        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_config" role="tab" aria-selected="false"><span class="admin-nav-icon">🛠️</span>Platform Settings</button>
       </div>
     </nav>
   </aside>
@@ -500,6 +498,51 @@
     <!-- ================================================================= -->
     <!-- SUPER ADMIN COMMAND CENTER EXCLUSIVE MODULES (Level 2 Only) -->
     <!-- ================================================================= -->
+    <!-- SUPER SECTION: APPROVALS QUEUE (Exclusive to Super Admin Tier 2) -->
+    <!-- ================================================================= -->
+    <section class="admin-section" id="admin-approvals" data-admin-view="approvals" role="tabpanel">
+      <div class="command-center-header">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="admin-tier-badge level-2" style="background:#2563EB; color:#fff;">COMMAND CENTER</span>
+            <h2 class="command-center-title">Approvals Queue</h2>
+          </div>
+          <p class="command-center-subtitle">Review, audit, and execute permanent ban and player deletion requests submitted by Normal Administrators.</p>
+        </div>
+        <button id="refreshApprovalsBtn" class="play-btn" type="button" style="background:#2563EB; color:#fff; font-weight:700;">↻ Refresh Queue</button>
+      </div>
+
+      <section class="panel admin-table-panel">
+        <div class="admin-filter-row" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div style="display:flex; gap:8px;">
+            <button class="ghost-btn approval-filter-btn active" data-filter="all" type="button">All Requests</button>
+            <button class="ghost-btn approval-filter-btn" data-filter="pending" type="button">Pending (<span id="approvalPendingBadge">0</span>)</button>
+            <button class="ghost-btn approval-filter-btn" data-filter="approved" type="button">Approved</button>
+            <button class="ghost-btn approval-filter-btn" data-filter="rejected" type="button">Rejected</button>
+          </div>
+          <small class="muted">Realtime synchronization enabled via Security SSE stream</small>
+        </div>
+
+        <div class="admin-table-wrap">
+          <table id="approvalsTable">
+            <thead>
+              <tr>
+                <th>Target Player</th>
+                <th>Action</th>
+                <th>Reason &amp; Evidence</th>
+                <th>Submitted By</th>
+                <th>Submitted At</th>
+                <th>Status</th>
+                <th>Executive Decision</th>
+              </tr>
+            </thead>
+            <tbody id="approvalsTableBody">
+              <tr><td colspan="7" class="empty">Loading approval queue…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
 
     <!-- SUPER SECTION A: ADMINISTRATOR MANAGEMENT -->
     <section class="admin-section" id="admin-super-admins" data-admin-view="super_admins" role="tabpanel">
@@ -1053,6 +1096,83 @@
         <button type="button" id="closePlayerModalFooterBtn" class="play-btn" style="min-width:100px;">Close</button>
       </div>
     </dialog>
+
+    <!-- MODAL: REQUEST APPROVAL (Normal Admin -> Super Admin) -->
+    <div id="requestApprovalModal" class="admin-modal-overlay" hidden>
+      <div class="admin-modal" style="max-width:520px; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:24px; box-shadow:var(--surface-shadow);">
+        <div class="admin-modal-head" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <h3 id="reqApprovalTitle" style="margin:0; font-size:18px;">Submit Approval Request</h3>
+          <button type="button" class="admin-modal-close" id="closeReqApprovalModalBtn" style="background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer;">&times;</button>
+        </div>
+        <form id="requestApprovalForm" class="admin-modal-body">
+          <input type="hidden" id="reqApprovalPlayerId" value="">
+          <input type="hidden" id="reqApprovalAction" value="ban">
+          <div style="margin-bottom:12px;">
+            <label style="font-size:12px; color:var(--muted); font-weight:600;">Target Player</label>
+            <div id="reqApprovalPlayerName" style="font-weight:700; color:var(--text); font-size:14px; margin-top:4px;">—</div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:12px; color:var(--muted); font-weight:600;">Requested Action</label>
+            <div id="reqApprovalActionBadge" style="margin-top:4px; font-weight:800; font-size:13px; color:#EF4444;">Permanent Account Ban</div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <label for="reqApprovalReason" style="font-size:12px; color:var(--muted); font-weight:600;">Justification / Reason (min 10 characters) *</label>
+            <textarea id="reqApprovalReason" rows="3" required minlength="10" placeholder="State specific violations, repeated offences, or telemetry findings..." style="width:100%; margin-top:6px; background:var(--input); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:10px; font-size:12px; outline:none; box-sizing:border-box;"></textarea>
+          </div>
+          <div style="margin-bottom:16px;">
+            <label for="reqApprovalEvidence" style="font-size:12px; color:var(--muted); font-weight:600;">Telemetry / Session Reference (optional)</label>
+            <input id="reqApprovalEvidence" type="text" placeholder="e.g. Session 5f8dfc81 or ML Flick Risk 88%" style="width:100%; margin-top:6px; background:var(--input); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:10px; font-size:12px; outline:none; box-sizing:border-box;">
+          </div>
+          <div id="reqApprovalStatus" class="message" style="margin-bottom:10px;"></div>
+          <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button type="button" class="ghost-btn" id="cancelReqApprovalBtn">Cancel</button>
+            <button type="submit" class="primary-btn" id="submitReqApprovalBtn">Submit for Executive Review →</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: PROCESS APPROVAL DECISION (Super Admin Executive Action) -->
+    <div id="processApprovalModal" class="admin-modal-overlay" hidden>
+      <div class="admin-modal" style="max-width:540px; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:24px; box-shadow:var(--surface-shadow);">
+        <div class="admin-modal-head" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <h3 style="margin:0; font-size:18px;">Executive Review &amp; Enforcement</h3>
+          <button type="button" class="admin-modal-close" id="closeProcessApprovalModalBtn" style="background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer;">&times;</button>
+        </div>
+        <form id="processApprovalForm" class="admin-modal-body">
+          <input type="hidden" id="processApprovalId" value="">
+          <div style="background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:14px; font-size:12px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+              <span>Target: <strong id="procModalPlayerName">—</strong></span>
+              <span id="procModalActionBadge" class="badge bad" style="font-weight:800;">BAN</span>
+            </div>
+            <div style="color:var(--muted); margin-bottom:4px;">Requested by: <strong id="procModalRequestedBy" style="color:var(--text);">—</strong></div>
+            <div style="margin-top:8px;"><strong>Reason:</strong> <span id="procModalReason">—</span></div>
+            <div id="procModalEvidenceRow" style="margin-top:4px; display:none;"><strong>Evidence:</strong> <span id="procModalEvidence">—</span></div>
+          </div>
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px; color:var(--muted); font-weight:600;">Executive Decision *</label>
+            <div style="display:flex; gap:16px; margin-top:8px;">
+              <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:#10B981; cursor:pointer;">
+                <input type="radio" name="procDecision" value="approve" checked> Approve &amp; Execute
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:#EF4444; cursor:pointer;">
+                <input type="radio" name="procDecision" value="reject"> Reject Request
+              </label>
+            </div>
+          </div>
+          <div style="margin-bottom:14px;">
+            <label for="procModalNote" style="font-size:12px; color:var(--muted); font-weight:600;">Executive Review Note</label>
+            <textarea id="procModalNote" rows="2" placeholder="Note explaining rationale for audit log..." style="width:100%; margin-top:6px; background:var(--input); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:10px; font-size:12px; outline:none; box-sizing:border-box;"></textarea>
+          </div>
+          <div id="procModalStatus" class="message" style="margin-bottom:10px;"></div>
+          <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button type="button" class="ghost-btn" id="cancelProcApprovalBtn">Cancel</button>
+            <button type="submit" class="primary-btn" id="confirmProcApprovalBtn">Confirm Decision</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
   </main>
   <div id="playerMatchesHoverCard" class="admin-hover-popover" hidden aria-hidden="true"></div>

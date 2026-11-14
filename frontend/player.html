@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <script>if (window.location.port === "5500") { window.location.replace(`http://${window.location.hostname}:5000${window.location.pathname.replace(/^\/frontend/, '')}${window.location.search}`); }</script>
+  <script>if (window.location.port !== "5000" && window.location.port !== "") { window.location.replace(`http://${window.location.hostname}:5000${window.location.pathname.replace(/^\/frontend/, "")}${window.location.search}`); }</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SecureFPS | Player Console</title>
@@ -15,44 +15,80 @@
 <body class="dashboard-page player-page">
 
   <!-- ============================================================
-       SIDEBAR
+       LAPTOP / DESKTOP ONLY NOTICE BANNER (<1024px) (Item 1)
+  ============================================================ -->
+  <div id="laptopNotice" class="laptop-only-banner" role="alert" aria-live="assertive">
+    <div class="laptop-notice-card">
+      <div class="laptop-icon" aria-hidden="true">💻</div>
+      <h2>Please use a laptop or desktop browser</h2>
+      <p>SecureFPS Gaming Security is engineered strictly for laptop and desktop screens with a minimum width of 1024px.</p>
+      <span class="laptop-hint">Minimum 1024px width required (Desktop / Laptop only)</span>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       SIDEBAR (Fixed 250px with scrollable nav & sticky bottom)
   ============================================================ -->
 
   <aside class="sidebar">
 
     <div class="brand">
       <img class="brand-lockup" src="public/securefps-logo-crop.png?v=1" alt="SecureFPS Gaming Security">
+      <button id="collapseSidebarBtn" class="sidebar-collapse-btn" type="button" aria-label="Toggle sidebar collapse" title="Collapse / Expand sidebar">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
+      </button>
     </div>
 
-    <nav id="playerNavigation">
+    <nav id="playerNavigation" aria-label="Player navigation">
 
       <a class="active" href="#overview" data-section="overview" aria-current="page">
-        Overview
+        <span class="nav-icon" aria-hidden="true">📊</span>
+        <span class="nav-label">Overview</span>
       </a>
 
       <a href="#matches" data-section="matches">
-        Matches
+        <span class="nav-icon" aria-hidden="true">🎯</span>
+        <span class="nav-label">Matches</span>
       </a>
+
       <a href="#leaderboard" data-section="leaderboard">
-        Leaderboard
+        <span class="nav-icon" aria-hidden="true">🏆</span>
+        <span class="nav-label">Leaderboard</span>
       </a>
+
       <a href="#games" data-section="games">
-        Game Hub
+        <span class="nav-icon" aria-hidden="true">🎮</span>
+        <span class="nav-label">Game Hub</span>
       </a>
+
       <a href="#rewards" data-section="rewards">
-        Rewards
+        <span class="nav-icon" aria-hidden="true">🎁</span>
+        <span class="nav-label">Rewards</span>
+      </a>
+
+      <a href="#fairplay" data-section="fairplay">
+        <span class="nav-icon" aria-hidden="true">🛡️</span>
+        <span class="nav-label">Fair Play</span>
       </a>
 
       <a href="#security" data-section="security">
-        Account Security
+        <span class="nav-icon" aria-hidden="true">🔒</span>
+        <span class="nav-label">Account Security</span>
+      </a>
+
+      <a href="#settings" data-section="settings">
+        <span class="nav-icon" aria-hidden="true">⚙️</span>
+        <span class="nav-label">Settings</span>
       </a>
 
       <a href="#support" data-section="support">
-        Help &amp; support
+        <span class="nav-icon" aria-hidden="true">💬</span>
+        <span class="nav-label">Help &amp; support</span>
       </a>
 
       <a href="#profile" data-section="profile">
-        Profile
+        <span class="nav-icon" aria-hidden="true">👤</span>
+        <span class="nav-label">Profile</span>
       </a>
 
     </nav>
@@ -111,6 +147,32 @@
       </div>
     </div>
 
+    <!-- Persistent Laptop Topbar (Accessible across all tabs) -->
+    <header class="player-topbar" role="banner">
+      <div class="topbar-left">
+        <span id="topbarBreadcrumb" class="topbar-breadcrumb">Overview</span>
+      </div>
+      <div class="topbar-right">
+        <!-- Live SSE status pill -->
+        <span class="status-pill" id="playerLiveStatus" role="status">Connecting…</span>
+        
+        <!-- Notification Center Bell (Item 3) -->
+        <div class="notif-bell-wrap">
+          <button id="notificationBellBtn" class="notif-bell-btn" type="button" aria-label="Notifications" aria-expanded="false" aria-controls="notifDrawer">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+            <span id="notifBadge" class="notif-badge-pill" hidden>0</span>
+          </button>
+          <div id="notifDrawer" class="notif-drawer-dropdown" hidden>
+            <div class="notif-drawer-head">
+              <strong>Notifications</strong>
+              <button id="markNotifsReadBtn" class="ghost-btn" style="font-size:11px; padding:2px 8px;" type="button">Mark all read</button>
+            </div>
+            <div id="notifList"><div class="empty">No new notifications.</div></div>
+          </div>
+        </div>
+      </div>
+    </header>
+
     <!-- ==========================================================
          OVERVIEW
     =========================================================== -->
@@ -119,23 +181,6 @@
 
       <div class="overview-masthead">
         <div><p class="eyebrow">PLAYER CONSOLE</p><h1 id="welcome">Welcome back</h1></div>
-        <div style="display:flex; align-items:center;">
-          <!-- Notification Center Bell (Item 14) -->
-          <div class="notif-bell-wrap">
-            <button id="notificationBellBtn" class="notif-bell-btn" type="button" aria-label="Notifications">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-              <span id="notifBadge" class="notif-badge-pill" hidden>0</span>
-            </button>
-            <div id="notifDrawer" class="notif-drawer-dropdown" hidden>
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                <strong>Notifications</strong>
-                <button id="markNotifsReadBtn" class="ghost-btn" style="font-size:11px; padding:2px 6px;">Mark all read</button>
-              </div>
-              <div id="notifList"><div class="empty">No new notifications.</div></div>
-            </div>
-          </div>
-          <span class="status-pill" id="playerLiveStatus" role="status">Connecting…</span>
-        </div>
       </div>
 
       <section class="overview-glance" aria-label="Platform at a glance">
@@ -457,22 +502,38 @@
           <div id="recoveryCodesMsg" hidden></div>
         </article>
 
-        <!-- Session Security Card -->
+        <!-- Session Security Card (Item 6) -->
         <article class="profile-card security-card-theme">
           <div class="dashboard-panel-head">
             <div>
               <h3>Active Session Protection</h3>
-              <span class="dashboard-panel-caption">Manage signed-in devices</span>
+              <span class="dashboard-panel-caption">Manage connected browser sessions across your laptop and desktop devices</span>
             </div>
+            <button id="refreshSessionsBtn" class="ghost-btn" type="button">Refresh Sessions</button>
           </div>
           <p>
-            SecureFPS strictly enforces single-session integrity. If you suspect an unauthorized device is connected, terminate all other active sign-ins immediately.
+            SecureFPS strictly enforces session integrity. Below are your currently authenticated sessions. If you recognize an unfamiliar sign-in, revoke other devices immediately.
           </p>
-          <button id="revokeOtherSessionsBtn" type="button" class="play-btn danger-btn">Revoke All Other Sessions</button>
-          <div id="revokeSessionsMsg" hidden></div>
+          <div class="overview-table-wrap" style="margin: 12px 0;">
+            <table class="overview-recent-table">
+              <thead>
+                <tr>
+                  <th>Device / Browser</th>
+                  <th>IP Address</th>
+                  <th>Last Active</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="activeSessionsRows">
+                <tr><td colspan="4">Loading active sessions…</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <button id="revokeOtherSessionsBtn" type="button" class="play-btn danger-btn">Sign Out All Other Devices</button>
+          <div id="revokeSessionsMsg" hidden style="margin-top: 10px; font-size: 13px;"></div>
         </article>
 
-        <!-- Player Privacy & Zero-Download Security Card (Requirement 2) -->
+        <!-- Player Privacy & Zero-Download Security Card (Requirement 2 & 6) -->
         <article class="profile-card security-card-theme">
           <div class="dashboard-panel-head">
             <div>
@@ -488,10 +549,11 @@
             </div>
           </div>
           <p style="color: #475569; font-size: 13px; line-height: 1.5;">
-            Manage your account data under strict GDPR compliance, or permanently erase your player profile and all associated stats.
+            Manage your account data under strict GDPR compliance, download a full export of your personal combat records and transactions, or permanently erase your player profile.
           </p>
-          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;">
-            <button id="selfDeleteAccountBtn" type="button" class="play-btn danger-btn">Delete My Account</button>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 14px;">
+            <button id="downloadMyDataBtn" type="button" class="play-btn" style="background: #F3E8FF; color: #6D28D9; border: 1px solid #DDD6FE;">📥 Download My Data (JSON)</button>
+            <button id="selfDeleteAccountBtn" type="button" class="play-btn danger-btn">🗑️ Delete My Account</button>
           </div>
           <div id="gdprFeedbackMsg" hidden style="margin-top: 10px; font-size: 13px;"></div>
         </article>
@@ -703,7 +765,329 @@
 
     </section>
 
+    <!-- ============================================================
+         FAIR PLAY TAB (Requirement 2)
+    ============================================================ -->
+    <section id="fairplay" class="player-view" hidden>
+      <div class="section-title">
+        <div>
+          <p class="eyebrow">INTEGRITY &amp; FAIR PLAY</p>
+          <h2>Fair Play &amp; Account Standing</h2>
+          <p class="page-description">Server-authoritative behavioral monitoring, honour ratings, and review status.</p>
+        </div>
+        <div class="section-mascot" aria-hidden="true">
+          <span>Play fair, win clean!</span>
+          <img id="fairplayMascotSticker" src="public/avatars/chibi-female-2.png" alt="">
+        </div>
+      </div>
+
+      <!-- Fair Play Glance: Honour Score Progress Ring -->
+      <div class="fairplay-overview-grid">
+        <article class="profile-card fairplay-ring-card">
+          <div class="fairplay-ring-container">
+            <svg class="honour-progress-ring" viewBox="0 0 160 160" width="160" height="160">
+              <circle class="ring-bg" cx="80" cy="80" r="70" stroke-width="12" fill="none" />
+              <circle id="honourRingProgress" class="ring-fg" cx="80" cy="80" r="70" stroke-width="12" fill="none" stroke-dasharray="440" stroke-dashoffset="44" />
+            </svg>
+            <div class="ring-center-content">
+              <span class="ring-score" id="fairplayHonourScore">90</span>
+              <small class="ring-total">/ 100</small>
+            </div>
+          </div>
+          <div class="fairplay-ring-details">
+            <div class="fairplay-tier-badge" id="fairplayTierBadge">Exemplary Standing</div>
+            <h3>Honour Rating</h3>
+            <p id="fairplayTierDescription" class="fairplay-tier-desc">Full platform privileges, maximum priority matching, bonus XP multiplier.</p>
+            <div class="fairplay-meta-pills">
+              <span class="meta-pill">🛡️ Server Verified</span>
+              <span class="meta-pill">⚡ Priority Queue</span>
+              <span class="meta-pill">⭐ +15% Match XP</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- "How Detection Works" Explainer Card -->
+        <article class="profile-card detection-explainer-card">
+          <div class="dashboard-panel-head">
+            <div>
+              <h3>How Server-Authoritative Detection Works</h3>
+              <span class="dashboard-panel-caption">Non-invasive behavioral verification with zero kernel drivers</span>
+            </div>
+          </div>
+          <div class="explainer-pillars">
+            <div class="pillar-item">
+              <span class="pillar-icon">🎯</span>
+              <div>
+                <strong>Input Pattern Analysis</strong>
+                <p>Verifies human micro-movement rhythms and kinematic smoothing without scanning your private background applications.</p>
+              </div>
+            </div>
+            <div class="pillar-item">
+              <span class="pillar-icon">⚖️</span>
+              <div>
+                <strong>Authoritative Physics</strong>
+                <p>Operator acceleration, firing intervals, and projectile paths are validated on the server. Desynced states are corrected in real time.</p>
+              </div>
+            </div>
+            <div class="pillar-item">
+              <span class="pillar-icon">🔒</span>
+              <div>
+                <strong>Client-Safe Execution</strong>
+                <p>Everything runs sandboxed in your browser. No third-party drivers or invasive rootkits are ever required or installed.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <!-- Flagged / Reviewed Sessions Table (Never show raw ML scores) -->
+      <section class="profile-card fairplay-table-card">
+        <div class="dashboard-panel-head">
+          <div>
+            <h3>Recent Session Reviews</h3>
+            <span class="dashboard-panel-caption">Security checks on your completed competitive and bot matches</span>
+          </div>
+          <button id="refreshFairplayBtn" class="ghost-btn" type="button">Refresh Standing</button>
+        </div>
+        <div class="overview-table-wrap">
+          <table class="overview-recent-table">
+            <thead>
+              <tr>
+                <th>Match ID</th>
+                <th>Game Arena</th>
+                <th>Date</th>
+                <th>Review Status</th>
+                <th>Security Assessment</th>
+              </tr>
+            </thead>
+            <tbody id="fairplaySessionsRows">
+              <tr><td colspan="5">Loading session reviews…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Honour History Log -->
+      <section class="profile-card fairplay-table-card">
+        <div class="dashboard-panel-head">
+          <div>
+            <h3>Honour Score History</h3>
+            <span class="dashboard-panel-caption">Audit trail of honour awards, clean play bonuses, and abandonments</span>
+          </div>
+        </div>
+        <div class="overview-table-wrap">
+          <table class="overview-recent-table">
+            <thead>
+              <tr>
+                <th>Date &amp; Time</th>
+                <th>Point Adjustment</th>
+                <th>Reason</th>
+                <th>Resulting Score</th>
+              </tr>
+            </thead>
+            <tbody id="fairplayHonourRows">
+              <tr><td colspan="4">Loading honour history…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Appeal Status Card -->
+      <section class="profile-card appeal-status-card" id="appealStatusCard">
+        <div class="dashboard-panel-head">
+          <div>
+            <h3>Security Appeal Status</h3>
+            <span class="dashboard-panel-caption">Status of your formal security reviews and restriction appeals</span>
+          </div>
+        </div>
+        <div id="appealStatusContent" style="padding: 10px 0;">
+          <p style="color: var(--player-muted, #64748b); font-size: 13px;">No active restrictions or pending appeals on your account. Your record is in good standing.</p>
+        </div>
+      </section>
+    </section>
+
+    <!-- ============================================================
+         SETTINGS TAB (Requirement 5)
+    ============================================================ -->
+    <section id="settings" class="player-view" hidden>
+      <div class="section-title">
+        <div>
+          <p class="eyebrow">CONTROLS &amp; PREFERENCES</p>
+          <h2>Player Settings</h2>
+          <p class="page-description">Configure mouse sensitivity, key bindings, graphics quality, and HUD indicators.</p>
+        </div>
+        <div class="section-mascot" aria-hidden="true">
+          <span>Tune your setup!</span>
+          <img id="settingsMascotSticker" src="public/avatars/chibi-female-2.png" alt="">
+        </div>
+      </div>
+
+      <div class="settings-grid">
+        <!-- Input & Mouse Settings -->
+        <article class="profile-card settings-card">
+          <div class="dashboard-panel-head">
+            <div>
+              <h3>Mouse &amp; Audio</h3>
+              <span class="dashboard-panel-caption">Tune pointer sensitivity and volume (Desktop / Laptop only)</span>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label-row">
+              <label for="mouseSensitivityInput">Mouse Sensitivity</label>
+              <span id="mouseSensDisplay" class="setting-val-badge">1.00</span>
+            </div>
+            <input type="range" id="mouseSensitivityInput" min="0.1" max="5.0" step="0.05" value="1.0" class="setting-range">
+            <small class="setting-hint">Adjusts crosshair aiming speed in CyberStrike 3D and FPS Microgame.</small>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-label-row">
+              <label for="volumeInput">Master Volume</label>
+              <span id="volumeDisplay" class="setting-val-badge">80%</span>
+            </div>
+            <input type="range" id="volumeInput" min="0" max="100" step="1" value="80" class="setting-range">
+            <small class="setting-hint">Audio volume for weapon fire, combat effects, and UI alerts.</small>
+          </div>
+        </article>
+
+        <!-- Graphics & Display Settings -->
+        <article class="profile-card settings-card">
+          <div class="dashboard-panel-head">
+            <div>
+              <h3>Display &amp; Graphics Preset</h3>
+              <span class="dashboard-panel-caption">Balance visual fidelity and framerate on your laptop display</span>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <label for="graphicsQualitySelect" style="font-size:13.5px; font-weight:700; color:#1E1B4B; display:block; margin-bottom:6px;">Graphics Quality Preset</label>
+            <select id="graphicsQualitySelect" class="form-input" style="width:100%; padding:8px 12px; border-radius:8px; border:1px solid #DDD6FE;">
+              <option value="High">High (Full Shadows &amp; Post-Processing)</option>
+              <option value="Medium">Medium (Balanced Framerate)</option>
+              <option value="Low">Low (Maximum Performance / Integrated GPU)</option>
+            </select>
+            <small class="setting-hint">Loaded dynamically when starting CyberStrike 3D.</small>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-toggle-row">
+              <div>
+                <strong>Show Performance HUD (FPS / Ping)</strong>
+                <p>Display live framerate and server ping in the game viewport.</p>
+              </div>
+              <input type="checkbox" id="showFpsToggle" checked class="setting-checkbox">
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <div class="fullscreen-tip-box">
+              <span class="tip-icon">💡</span>
+              <div>
+                <strong>Laptop Fullscreen Immersion</strong>
+                <p>Press <kbd>F11</kbd> in your browser for seamless Pointer Lock control and borderless view.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Key Bindings with Conflict Detection -->
+        <article class="profile-card settings-card full-width">
+          <div class="dashboard-panel-head">
+            <div>
+              <h3>Keyboard &amp; Mouse Bindings</h3>
+              <span class="dashboard-panel-caption">Click any binding and press a key to reassign. Automatic conflict detection prevents duplicate keys.</span>
+            </div>
+            <button id="resetKeybindingsBtn" class="ghost-btn" type="button">Reset to Defaults</button>
+          </div>
+
+          <div id="keybindingConflictAlert" class="alert-box error" hidden style="margin: 10px 0; padding:10px 14px; background:#FEE2E2; border:1px solid #FCA5A5; border-radius:8px; color:#B91C1C; font-size:12.5px;"></div>
+          <div id="settingsFeedback" class="alert-box success" hidden style="margin: 10px 0; padding:10px 14px; background:#DCFCE7; border:1px solid #86EFAC; border-radius:8px; color:#15803D; font-size:12.5px;"></div>
+
+          <div class="keybindings-grid" id="keybindingsGrid">
+            <!-- Bound dynamically -->
+          </div>
+
+          <div class="settings-actions">
+            <button id="saveSettingsBtn" type="button" class="play-btn">Save Preferences</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
   </main>
+
+  <!-- ============================================================
+       GAME PRE-CHECKS MODAL (Requirement 7)
+  ============================================================ -->
+  <div id="gamePreCheckModal" class="player-modal-backdrop" hidden>
+    <div class="player-modal-card">
+      <div class="modal-head">
+        <h2>🎮 Hardware &amp; Browser Pre-Check</h2>
+        <button id="closePreCheckModalBtn" class="close-modal-btn" type="button" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="precheck-intro" style="font-size:13px; color:#475569; margin-bottom:14px;">Validating laptop GPU acceleration and pointer capture APIs before loading 3D arena…</p>
+        
+        <div class="precheck-list">
+          <div class="precheck-item" id="chkWebGL">
+            <span class="chk-icon" id="chkWebGLIcon">⏳</span>
+            <div>
+              <strong>WebGL 2.0 Hardware Acceleration</strong>
+              <small id="chkWebGLMsg">Testing graphics subsystem…</small>
+            </div>
+          </div>
+          <div class="precheck-item" id="chkPointerLock">
+            <span class="chk-icon" id="chkPointerLockIcon">⏳</span>
+            <div>
+              <strong>Mouse Pointer Lock API</strong>
+              <small id="chkPointerLockMsg">Testing input capture support…</small>
+            </div>
+          </div>
+          <div class="precheck-item" id="chkGpuPreset">
+            <span class="chk-icon" id="chkGpuPresetIcon">⚡</span>
+            <div>
+              <strong>Recommended Preset for Your Device</strong>
+              <small id="chkGpuPresetMsg">Evaluating GPU capabilities…</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="fullscreen-reminder">
+          <span style="font-size:16px;">💡</span>
+          <div>
+            <strong>Press F11 for Fullscreen</strong>
+            <p style="margin:2px 0 0; font-size:11.5px;">Maximizes your field of view and ensures your mouse cursor stays locked to the crosshairs.</p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button id="cancelPreCheckBtn" type="button" class="ghost-btn">Cancel</button>
+        <button id="confirmLaunchGameBtn" type="button" class="play-btn">Launch Combat Arena →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Account Password Confirmation Modal (Requirement 6) -->
+  <div id="deleteAccountModal" class="player-modal-backdrop" hidden>
+    <div class="player-modal-card">
+      <div class="modal-head" style="background:#FEF2F2; border-bottom:1px solid #FCA5A5;">
+        <h2 style="color:#B91C1C;">⚠️ Delete Account &amp; Erase Data</h2>
+        <button id="closeDeleteModalBtn" class="close-modal-btn" type="button" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px; color:#475569; line-height:1.5;">This will permanently soft-delete and anonymize your account under GDPR guidelines. All your match history, ranking, and coins will be permanently unlinked.</p>
+        <div style="margin:16px 0;">
+          <label for="deleteAccountPassword" style="display:block; font-size:12.5px; font-weight:700; color:#1E1B4B; margin-bottom:6px;">Enter your password to confirm:</label>
+          <input type="password" id="deleteAccountPassword" class="form-input" style="width:100%; padding:8px 12px; border:1px solid #DDD6FE; border-radius:8px;" placeholder="Your current account password" required autocomplete="current-password">
+        </div>
+        <div id="deleteAccountError" class="alert-box error" hidden style="padding:8px 12px; background:#FEE2E2; border:1px solid #FCA5A5; border-radius:6px; color:#B91C1C; font-size:12px;"></div>
+      </div>
+      <div class="modal-foot">
+        <button id="cancelDeleteAccountBtn" type="button" class="ghost-btn">Cancel</button>
+        <button id="confirmDeleteAccountBtn" type="button" class="play-btn danger-btn">Permanently Erase My Account</button>
+      </div>
+    </div>
+  </div>
 
   <div id="detectionInfoModal" class="detection-modal-backdrop" hidden>
     <section class="detection-modal" role="dialog" aria-modal="true" aria-labelledby="detectionInfoTitle">

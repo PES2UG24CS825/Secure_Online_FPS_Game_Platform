@@ -218,12 +218,9 @@ export function renderAdminHeaderBadge(admin) {
     }
   }
 
-  // Sidebar link for ML Anti-Cheat
-  const mlNavBtn = document.querySelector('[data-admin-section="gameplay"]');
-
   if (isSuper) {
     if (nameEl) nameEl.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;"><span>👑</span><strong>Super Administrator</strong></span>`;
-    if (emailEl) emailEl.innerHTML = `<span style="color:#F59E0B; font-weight:700;">Full System Authority</span> · ${escapeHtml(admin.email || '')}`;
+    if (emailEl) emailEl.innerHTML = `<span style="color:#2563EB; font-weight:700;">Full System Authority</span> · ${escapeHtml(admin.email || '')}`;
     if (avatarEl) {
       avatarEl.textContent = '👑';
       avatarEl.classList.add('super-admin-avatar');
@@ -232,42 +229,50 @@ export function renderAdminHeaderBadge(admin) {
       tierBanner.className = 'admin-tier-banner super-tier';
       tierBanner.innerHTML = `
         <div>
-          <strong>👑 Super Administrator Command Center (Level 2):</strong>
-          <span>Full executive platform authority: Administrator Management, Granular RBAC, AI/ML Model Rollback &amp; Tuning, Emergency Lockdown, Backups &amp; Disaster Recovery.</span>
+          <strong>👑 Super Administrator Command Center:</strong>
+          <span>Full platform authority: Approvals Queue, Administrator Provisioning, Risk Engine Configuration, AI/ML Models, Platform Lockdown, and System Control.</span>
         </div>
-        <span class="admin-tier-badge level-2">EXECUTIVE ROOT (L2)</span>
+        <span class="admin-tier-badge level-2" style="background:#2563EB; color:#fff;">SUPER ADMIN</span>
       `;
-    }
-    if (mlNavBtn) {
-      mlNavBtn.style.display = 'flex';
-      mlNavBtn.innerHTML = `<span class="admin-nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5h16M6.5 16V11M12 16V5M17.5 16V8"/></svg></span>Game &amp; ML Anti-Cheat <span style="font-size:10px; background:#F59E0B; color:#000; padding:1px 5px; border-radius:4px; margin-left:auto; font-weight:800;">ROOT</span>`;
     }
     document.querySelectorAll('[id*="Export"], [href*="/export/"]').forEach(el => el.style.display = '');
 
     const superCat = document.getElementById('superAdminNavCategory');
     if (superCat) superCat.hidden = false;
+
+    // Check approvals queue count
+    fetch('/api/admin/approvals?status=pending', { credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return;
+        const pCount = d.pending_count || 0;
+        const navBadge = document.getElementById('navApprovalBadge');
+        const badge = document.getElementById('approvalPendingBadge');
+        if (navBadge) {
+          navBadge.textContent = pCount;
+          navBadge.style.display = pCount > 0 ? 'inline-block' : 'none';
+        }
+        if (badge) badge.textContent = pCount;
+      })
+      .catch(() => {});
   } else {
-    if (nameEl) nameEl.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;"><span>🛡️</span><strong>Security Admin</strong></span>`;
-    if (emailEl) emailEl.innerHTML = `<span style="color:#A78BFA; font-weight:600;">Normal Administrator (Level 1)</span> · ${escapeHtml(admin.email || '')}`;
+    if (nameEl) nameEl.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;"><span>🛡️</span><strong>Normal Administrator</strong></span>`;
+    if (emailEl) emailEl.innerHTML = `<span style="color:#60A5FA; font-weight:600;">Operational Console</span> · ${escapeHtml(admin.email || '')}`;
     if (avatarEl) {
-      avatarEl.textContent = 'SA';
+      avatarEl.textContent = 'NA';
       avatarEl.classList.remove('super-admin-avatar');
     }
     if (tierBanner) {
       tierBanner.className = 'admin-tier-banner normal-tier';
       tierBanner.innerHTML = `
         <div>
-          <strong>🛡️ Normal Administrator Console (Level 1):</strong>
-          <span>Operational console for Player Management, Threat Monitoring, Ban Appeals review, and Customer Support.</span>
+          <strong>🛡️ Normal Administrator Console:</strong>
+          <span>Operational monitoring: Player Profiles, Suspensions (up to 7 days), Threat Monitoring, Security &amp; Appeals, Reports, and Support Tickets. Permanent bans and account erasures require Super Admin approval.</span>
         </div>
-        <span class="admin-tier-badge level-1">OPERATIONAL (L1)</span>
+        <span class="admin-tier-badge level-1" style="background:#1E293B; color:#94A3B8;">NORMAL ADMIN</span>
       `;
     }
-    if (mlNavBtn) {
-      mlNavBtn.style.display = 'flex';
-      mlNavBtn.innerHTML = `<span class="admin-nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5h16M6.5 16V11M12 16V5M17.5 16V8"/></svg></span>Game &amp; ML Anti-Cheat`;
-    }
-    document.querySelectorAll('[id*="Export"], [href*="/export/"]').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('[id*="Export"], [href*="/export/"]').forEach(el => el.style.display = '');
 
     const superCat = document.getElementById('superAdminNavCategory');
     if (superCat) superCat.hidden = true;

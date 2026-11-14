@@ -1,22 +1,22 @@
 :root{
-  --bg:#DEDCEE; --panel:#E9E7F5; --panel2:#D6D3EA; --line:#C3BFE0;
-  --text:#1B1730; --muted:#53507A; --accent:#6D28D9; --accent2:#4C1D95;
-  --success:#15803D; --warning:#B45309; --danger:#B91C1C; --mint:#6D28D9;
-  --brand-tint:#CFC6F2; --input:#F0EFF9; --on-brand:#F3F0FF;
-  --surface-shadow:0 18px 48px rgba(27,23,48,.12);
+  --bg:#090B10; --panel:#111622; --panel2:#161D2B; --line:#232C3D;
+  --text:#F1F5F9; --muted:#94A3B8; --accent:#2563EB; --accent2:#1D4ED8;
+  --success:#10B981; --warning:#F59E0B; --danger:#EF4444; --mint:#06B6D4;
+  --brand-tint:#1A2333; --input:#0D111A; --on-brand:#FFFFFF;
+  --surface-shadow:0 18px 48px rgba(0,0,0,.6);
 }
 *{box-sizing:border-box}
 body{margin:0;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text)}
 a{color:inherit;text-decoration:none}
 button,input{font:inherit}
-.auth-page{min-height:100vh;display:grid;place-items:center;background:linear-gradient(rgba(222,220,238,.88),rgba(222,220,238,.88)),url("../public/backgrounds/sakura-frontline.jpg") center/cover fixed,var(--bg)}
-.mfa-page{min-height:100vh;background:url("../public/mfa-background-hq.jpg") center center/cover fixed,var(--bg)}
+.auth-page{min-height:100vh;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 20%, rgba(37,99,235,0.14), transparent 70%), linear-gradient(rgba(9,11,16,0.92), rgba(9,11,16,0.95)), var(--bg)}
+.mfa-page{min-height:100vh;background:radial-gradient(ellipse at 50% 20%, rgba(6,182,212,0.14), transparent 70%), linear-gradient(rgba(9,11,16,0.92), rgba(9,11,16,0.95)), var(--bg)}
 .auth-shell{width:min(1050px,92vw);display:grid;grid-template-columns:1fr 440px;gap:70px;align-items:center}
 .auth-shell.single{width:min(440px,92vw);grid-template-columns:minmax(0,440px);justify-content:center}
 .auth-shell.single .auth-card{min-width:0;width:100%}
 .auth-brand h1{font-size:54px;line-height:1.03;margin:0 0 14px}
 .auth-brand>p:not(.eyebrow){color:var(--muted);max-width:560px;font-size:17px;line-height:1.7}
-.brand-mark{display:block;width:46px;height:46px;flex:0 0 46px;object-fit:contain;filter:drop-shadow(0 5px 8px rgba(76,29,149,.18))}
+.brand-mark{display:block;width:46px;height:46px;flex:0 0 46px;object-fit:contain;filter:drop-shadow(0 5px 8px rgba(37,99,235,.2))}
 .brand-lockup{display:block;width:200px;max-width:100%;height:auto;object-fit:contain}
 .auth-logo-lockup .brand-lockup{width:245px}
 .auth-logo-lockup{display:flex;align-items:center;gap:14px;margin-bottom:24px}
@@ -24,18 +24,18 @@ button,input{font:inherit}
 .brand-wordmark{color:var(--text);font-size:24px;font-weight:800;letter-spacing:.055em;line-height:1}
 .brand-wordmark span{color:var(--accent)}
 .brand-caption{display:block;margin-top:6px;color:var(--muted);font-size:9px;font-weight:700;letter-spacing:.32em;line-height:1.2}
-.eyebrow{font-size:11px;letter-spacing:.18em;color:var(--accent);font-weight:800;margin:0}
+.eyebrow{font-size:11px;letter-spacing:.18em;color:var(--mint);font-weight:800;margin:0}
 .security-points{display:grid;gap:12px;margin-top:28px;color:var(--muted);font-size:13px}
-.auth-card{background:rgba(233,231,245,.94);border:1px solid var(--line);border-radius:24px;padding:34px;box-shadow:var(--surface-shadow);backdrop-filter:blur(16px)}
+.auth-card{background:rgba(17,22,34,.95);border:1px solid var(--line);border-radius:24px;padding:34px;box-shadow:var(--surface-shadow);backdrop-filter:blur(16px)}
 .card-head h2{font-size:30px;margin:7px 0}.card-head p:last-child{color:var(--muted);font-size:13px}
-.welcome-back-row{display:flex;align-items:center;justify-content:flex-start;gap:10px;min-height:38px}.welcome-sticker{display:inline-flex;align-items:center;gap:3px;color:var(--accent2);font-size:10px;font-weight:750}.welcome-sticker-greeting{padding:4px 7px;border:1px solid rgba(109,40,217,.18);border-radius:999px;background:rgba(207,198,242,.72)}.welcome-sticker img{width:40px;height:42px;object-fit:contain;filter:drop-shadow(0 4px 6px rgba(76,29,149,.16))}
+.welcome-back-row{display:flex;align-items:center;justify-content:flex-start;gap:10px;min-height:38px}.welcome-sticker{display:inline-flex;align-items:center;gap:3px;color:var(--mint);font-size:10px;font-weight:750}.welcome-sticker-greeting{padding:4px 7px;border:1px solid rgba(6,182,212,.2);border-radius:999px;background:rgba(26,35,51,.72)}.welcome-sticker img{width:40px;height:42px;object-fit:contain;filter:drop-shadow(0 4px 6px rgba(0,0,0,.3))}
 .form{display:grid;gap:16px;margin-top:24px}
 .form label{font-size:12px;color:var(--muted);font-weight:600}
 .form input{display:block;width:100%;margin-top:8px;background:var(--input);border:1px solid var(--line);color:var(--text);border-radius:11px;padding:13px 14px;outline:none}
-.form input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(109,40,217,.14)}
+.form input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.18)}
 .password-field{position:relative;display:flex;align-items:center}.password-field input{padding-right:44px}.password-toggle{position:absolute;right:8px;top:calc(50% + 4px);transform:translateY(-50%);border:0;background:transparent;color:var(--muted);cursor:pointer;padding:6px;line-height:1}.password-toggle:hover{color:white}
 .password-field input{width:100%;min-width:0}.password-field .password-toggle{display:grid!important;place-items:center;width:28px!important;height:28px!important;margin:0!important;z-index:2}
-.primary-btn{border:0;border-radius:11px;padding:13px 16px;background:linear-gradient(135deg,#6D28D9,#4C1D95);color:#F3F0FF;font-weight:750;cursor:pointer;text-align:center;box-shadow:0 8px 22px rgba(76,29,149,.18);transition:transform .18s ease,filter .18s ease,box-shadow .18s ease}
+.primary-btn{border:0;border-radius:11px;padding:13px 16px;background:linear-gradient(135deg,#2563EB,#1D4ED8);color:#FFFFFF;font-weight:750;cursor:pointer;text-align:center;box-shadow:0 8px 22px rgba(37,99,235,.22);transition:transform .18s ease,filter .18s ease,box-shadow .18s ease}
 .primary-btn:hover{filter:brightness(1.08)}
 .switch{text-align:center;color:var(--muted);font-size:12px;margin-top:20px}.switch a,.text-link{color:var(--mint)}
 .forgot-link{text-align:right;font-size:12px;margin:14px 0 0}.forgot-link a{color:var(--mint)}

@@ -14,7 +14,8 @@ from database.db import (
     users, matches, security_events, login_history, sessions_db,
     game_sessions, game_events, game_telemetry, honour_history,
     reward_transactions, ban_appeals, player_notifications, db,
-    system_config, admin_permissions, model_versions, system_backups
+    system_config, admin_permissions, model_versions, system_backups,
+    admin_approvals
 )
 from services.risk_scoring import clamp_risk_score, classify_risk_score
 from services.auth_security import log_admin_action, admin_audit_log
@@ -46,13 +47,85 @@ def current_admin():
     try:
         admin = users.find_one({
             "_id": ObjectId(admin_id),
-            "role": {"$in": ["admin", "demo_admin", "super_admin"]}
+            "role": {"$in": ["admin", "normal_admin", "demo_admin", "super_admin"]}
         })
         g.current_admin_user = admin
         return admin
     except Exception:
         g.current_admin_user = None
         return None
+
+
+# =========================================================================
+# TWO-TIER RBAC PERMISSIONS MATRIX & DECORATORS
+# =========================================================================
+
+PERMISSIONS_MAP = {
+    # Tier 1 (Normal Admin & Super Admin)
+    "view_overview": ["normal_admin", "admin", "super_admin"],
+    "view_players": ["normal_admin", "admin", "super_admin"],
+    "view_threats": ["normal_admin", "admin", "super_admin"],
+    "view_security": ["normal_admin", "admin", "super_admin"],
+    "view_analytics": ["normal_admin", "admin", "super_admin"],
+    "view_support": ["normal_admin", "admin", "super_admin"],
+    "suspend_player": ["normal_admin", "admin", "super_admin"],
+    "unsuspend_player": ["normal_admin", "admin", "super_admin"],
+    "warn_player": ["normal_admin", "admin", "super_admin"],
+    "handle_support": ["normal_admin", "admin", "super_admin"],
+    "review_appeal": ["normal_admin", "admin", "super_admin"],
+    "review_alert": ["normal_admin", "admin", "super_admin"],
+    "export_reports": ["normal_admin", "admin", "super_admin"],
+    "submit_approval": ["normal_admin", "admin", "super_admin"],
+    "view_own_audit_log": ["normal_admin", "admin", "super_admin"],
+
+    # Tier 2 (Super Admin Command Center Exclusive)
+    "ban_player": ["super_admin"],
+    "delete_player": ["super_admin"],
+    "purge_player": ["super_admin"],
+    "manage_admins": ["super_admin"],
+    "manage_roles": ["super_admin"],
+    "manage_ml": ["super_admin"],
+    "manage_risk_engine": ["super_admin"],
+    "security_lockdown": ["super_admin"],
+    "system_control": ["super_admin"],
+    "manage_backups": ["super_admin"],
+    "view_all_audit_logs": ["super_admin"],
+    "manage_approvals": ["super_admin"],
+}
+
+
+def require_permission(perm_name):
+    """
+    Two-Tier Route-level Authorization Decorator.
+    Denies by default. Enforces role-based permissions matrix.
+    Returns HTTP 403 with clear explanation and escalation paths.
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            admin = current_admin()
+            if not admin:
+                return jsonify({"message": "Admin authorization required."}), 401
+            raw_role = admin.get("role", "normal_admin")
+            is_super = raw_role == "super_admin" or admin.get("is_super_admin") is True
+            canonical_role = "super_admin" if is_super else "normal_admin"
+            allowed_roles = PERMISSIONS_MAP.get(perm_name, ["super_admin"])
+            if canonical_role not in allowed_roles:
+                if perm_name in {"ban_player", "delete_player"}:
+                    return jsonify({
+                        "message": f"Normal administrators cannot execute '{perm_name}' directly. Please submit an Approval Request to the Super Admin Command Center.",
+                        "permission_denied": perm_name,
+                        "can_request_approval": True,
+                        "required_role": "super_admin"
+                    }), 403
+                return jsonify({
+                    "message": f"Access forbidden: operation requires elevated Super Admin permissions ('{perm_name}').",
+                    "permission_denied": perm_name,
+                    "required_role": "super_admin"
+                }), 403
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 
 def require_admin_write(f):
@@ -181,6 +254,32 @@ def check_admin_access():
     admin = current_admin()
     if not admin:
         return jsonify({"message": "Admin authorization required."}), 403
+
+
+# =========================================================================
+# ADMIN IDENTITY & PERMISSIONS
+# =========================================================================
+
+@admin_bp.get("/me")
+def get_admin_me():
+    admin = current_admin()
+    if not admin:
+        return jsonify({"message": "Admin authorization required."}), 401
+    raw_role = admin.get("role", "normal_admin")
+    is_super = raw_role == "super_admin" or admin.get("is_super_admin") is True
+    canonical_role = "super_admin" if is_super else "normal_admin"
+    perms = [p for p, roles in PERMISSIONS_MAP.items() if canonical_role in roles]
+    return jsonify({
+        "admin": {
+            "id": str(admin["_id"]),
+            "email": admin.get("email"),
+            "name": admin.get("name", "Administrator"),
+            "role": canonical_role,
+            "raw_role": raw_role,
+            "is_super_admin": is_super,
+            "permissions": perms
+        }
+    }), 200
 
 
 # =========================================================================
@@ -647,6 +746,9 @@ def suspend_player(player_id):
         return jsonify({"message": reason_or_msg}), 400
 
     admin = current_admin()
+    admin_role = admin.get("role", "normal_admin")
+    is_super = admin_role == "super_admin" or admin.get("is_super_admin") is True
+
     suspended_until = data.get("suspended_until")
     parsed_until = None
     if suspended_until:
@@ -656,6 +758,18 @@ def suspend_player(player_id):
             return jsonify({"message": "Invalid suspended_until date format. Use ISO format."}), 400
 
     now = datetime.now(timezone.utc)
+
+    # Two-Tier Restriction: Normal admin can suspend for a maximum of 7 days
+    if not is_super:
+        max_normal_until = now + timedelta(days=7, hours=1)
+        if not parsed_until:
+            parsed_until = now + timedelta(days=7)
+        elif parsed_until > max_normal_until:
+            return jsonify({
+                "message": "Normal administrators can suspend accounts for up to 7 days only. Longer suspensions or permanent bans require Super Admin approval.",
+                "can_request_approval": True,
+                "max_days": 7
+            }), 403
     update_doc = {
         "account_status": "suspended",
         "revoked": True,
@@ -755,12 +869,24 @@ def ban_player(player_id):
     if err_resp:
         return err_resp, code
 
+    admin = current_admin()
+    admin_role = admin.get("role", "normal_admin")
+    is_super = admin_role == "super_admin" or admin.get("is_super_admin") is True
+
+    # Two-Tier Restriction: Permanent bans can ONLY be executed by Super Admin
+    if not is_super:
+        return jsonify({
+            "message": "Normal administrators cannot execute permanent bans directly. Please submit an Approval Request to the Super Admin Command Center.",
+            "permission_denied": "ban_player",
+            "can_request_approval": True,
+            "required_role": "super_admin"
+        }), 403
+
     data = request.get_json(silent=True) or {}
     is_valid, reason_or_msg = validate_reason(data.get("reason"), min_length=10)
     if not is_valid:
         return jsonify({"message": reason_or_msg}), 400
 
-    admin = current_admin()
     reauth_pw = data.get("reauth_password")
     mfa_code = data.get("mfa_code")
     if not verify_admin_reauth(admin, reauth_password=reauth_pw, mfa_code=mfa_code):
@@ -969,6 +1095,240 @@ def purge_player(player_id):
         "success": True,
         "message": f"Player {target.get('name')} record permanently purged from database."
     })
+
+
+# =========================================================================
+# TWO-TIER APPROVAL WORKFLOWS (Normal Admin Requests -> Super Admin Approves)
+# =========================================================================
+
+@admin_bp.post("/approvals/request")
+@require_permission("submit_approval")
+def request_approval():
+    data = request.get_json(silent=True) or {}
+    player_id = data.get("player_id")
+    action = (data.get("action") or "").strip().lower()
+    reason = (data.get("reason") or "").strip()
+    evidence = (data.get("evidence") or "").strip()
+
+    if action not in ["ban", "delete"]:
+        return jsonify({"message": "Invalid action. Supported actions: 'ban', 'delete'."}), 400
+
+    if not player_id:
+        return jsonify({"message": "Target player ID is required."}), 400
+
+    try:
+        pid = ObjectId(player_id)
+    except Exception:
+        return jsonify({"message": "Invalid player ID format."}), 400
+
+    target, err_resp, code = _verify_target_not_admin(pid)
+    if err_resp:
+        return err_resp, code
+
+    is_valid, reason_or_msg = validate_reason(reason, min_length=10)
+    if not is_valid:
+        return jsonify({"message": reason_or_msg}), 400
+
+    admin = current_admin()
+    now = datetime.now(timezone.utc)
+
+    # Check if there is already a pending approval for this target and action
+    existing = admin_approvals.find_one({
+        "player_id": str(pid),
+        "action": action,
+        "status": "pending"
+    })
+    if existing:
+        return jsonify({
+            "message": f"A pending {action} approval request for this player already exists in the queue.",
+            "approval_id": str(existing["_id"])
+        }), 409
+
+    doc = {
+        "player_id": str(pid),
+        "player_name": target.get("name") or target.get("username", "Unknown"),
+        "player_email": target.get("email"),
+        "action": action,
+        "reason": reason_or_msg,
+        "evidence": evidence,
+        "requested_by_id": str(admin["_id"]),
+        "requested_by_email": admin.get("email"),
+        "requested_by_name": admin.get("name", "Normal Admin"),
+        "status": "pending",
+        "created_at": now,
+        "updated_at": now
+    }
+    res = admin_approvals.insert_one(doc)
+    doc["_id"] = str(res.inserted_id)
+    doc["id"] = str(res.inserted_id)
+    doc["created_at"] = doc["created_at"].isoformat()
+    doc["updated_at"] = doc["updated_at"].isoformat()
+
+    log_admin_action(
+        admin["_id"],
+        admin["email"],
+        pid,
+        f"request_{action}_approval",
+        details={"reason": reason_or_msg, "approval_id": str(res.inserted_id)}
+    )
+
+    return jsonify({
+        "success": True,
+        "message": f"Approval request to {action} player '{target.get('name')}' submitted to Super Admin Command Center.",
+        "approval": doc
+    }), 201
+
+
+@admin_bp.get("/approvals")
+@require_admin_write
+def get_approvals():
+    admin = current_admin()
+    raw_role = admin.get("role", "normal_admin")
+    is_super = raw_role == "super_admin" or admin.get("is_super_admin") is True
+
+    # Super admin sees all requests; normal admin sees only requests they submitted
+    query = {} if is_super else {"requested_by_id": str(admin["_id"])}
+    status_filter = request.args.get("status")
+    if status_filter in ["pending", "approved", "rejected"]:
+        query["status"] = status_filter
+
+    items = list(admin_approvals.find(query).sort("created_at", -1).limit(100))
+    for it in items:
+        it["id"] = str(it["_id"])
+        it["_id"] = str(it["_id"])
+        it["created_at"] = format_iso(it.get("created_at"))
+        it["updated_at"] = format_iso(it.get("updated_at"))
+        it["reviewed_at"] = format_iso(it.get("reviewed_at"))
+
+    pending_count = admin_approvals.count_documents({"status": "pending"})
+
+    return jsonify({
+        "approvals": items,
+        "pending_count": pending_count,
+        "is_super_admin": is_super
+    }), 200
+
+
+@admin_bp.post("/approvals/<approval_id>/action")
+@require_super_admin
+def process_approval(approval_id):
+    try:
+        aid = ObjectId(approval_id)
+    except Exception:
+        return jsonify({"message": "Invalid approval request ID format."}), 400
+
+    approval_req = admin_approvals.find_one({"_id": aid})
+    if not approval_req:
+        return jsonify({"message": "Approval request not found."}), 404
+
+    if approval_req.get("status") != "pending":
+        return jsonify({"message": f"Request has already been {approval_req.get('status')}."}), 400
+
+    data = request.get_json(silent=True) or {}
+    decision = (data.get("decision") or "").strip().lower()
+    review_note = (data.get("note") or "").strip()
+
+    if decision not in ["approve", "reject"]:
+        return jsonify({"message": "Decision must be 'approve' or 'reject'."}), 400
+
+    admin = current_admin()
+    now = datetime.now(timezone.utc)
+    pid = ObjectId(approval_req["player_id"])
+    target = users.find_one({"_id": pid})
+
+    if not target:
+        return jsonify({"message": "Target player no longer exists."}), 404
+
+    action = approval_req.get("action")
+
+    if decision == "approve":
+        if action == "ban":
+            users.update_one(
+                {"_id": pid},
+                {"$set": {
+                    "account_status": "banned",
+                    "revoked": True,
+                    "banned_at": now,
+                    "ban_reason": f"[Approved Request] {approval_req['reason']}"
+                }}
+            )
+            sessions_db.update_many({"user_id": pid}, {"$set": {"is_active": False, "revoked_at": now}})
+            security_events.insert_one({
+                "type": "account_banned",
+                "user_id": pid,
+                "severity": "critical",
+                "description": f"Permanent ban approved by Super Admin ({admin['email']}) following request by ({approval_req['requested_by_email']}).",
+                "created_at": now
+            })
+        elif action == "delete":
+            anon_email = f"deleted_{pid}@deleted.securefps.local"
+            users.update_one(
+                {"_id": pid},
+                {"$set": {
+                    "account_status": "deleted",
+                    "is_deleted": True,
+                    "deleted_at": now,
+                    "email": anon_email,
+                    "name": "Deleted Player",
+                    "username": f"deleted_{pid}",
+                    "revoked": True
+                }, "$unset": {"password_hash": "", "mfa_secret": ""}}
+            )
+            sessions_db.update_many({"user_id": pid}, {"$set": {"is_active": False, "revoked_at": now}})
+
+        admin_approvals.update_one(
+            {"_id": aid},
+            {"$set": {
+                "status": "approved",
+                "reviewed_by_id": str(admin["_id"]),
+                "reviewed_by_email": admin.get("email"),
+                "reviewed_at": now,
+                "review_note": review_note,
+                "updated_at": now
+            }}
+        )
+
+        log_admin_action(
+            admin["_id"],
+            admin["email"],
+            pid,
+            f"approve_{action}",
+            details={"approval_id": str(aid), "note": review_note}
+        )
+
+        return jsonify({
+            "success": True,
+            "message": f"Approval request approved. Player {target.get('name')} {action} executed successfully.",
+            "status": "approved"
+        }), 200
+
+    else:
+        # Rejected
+        admin_approvals.update_one(
+            {"_id": aid},
+            {"$set": {
+                "status": "rejected",
+                "reviewed_by_id": str(admin["_id"]),
+                "reviewed_by_email": admin.get("email"),
+                "reviewed_at": now,
+                "review_note": review_note or "Declined by Super Administrator",
+                "updated_at": now
+            }}
+        )
+
+        log_admin_action(
+            admin["_id"],
+            admin["email"],
+            pid,
+            f"reject_{action}",
+            details={"approval_id": str(aid), "note": review_note}
+        )
+
+        return jsonify({
+            "success": True,
+            "message": f"Approval request for {action} has been rejected.",
+            "status": "rejected"
+        }), 200
 
 
 # =========================================================================

@@ -7,6 +7,7 @@ import { escapeHtml, formatTimeAgo } from './admin_core.js';
 
 export function initSuperAdminModules() {
   setupSuperEventListeners();
+  initApprovalsSection();
 }
 
 function setupSuperEventListeners() {
@@ -785,3 +786,254 @@ export async function loadReportsAnalytics() {
     console.error('[AdminAnalytics] Load failed:', err);
   }
 }
+
+// =========================================================================
+// APPROVALS QUEUE (Tier 2 Command Center Workflows)
+// =========================================================================
+
+let currentApprovalFilter = 'all';
+
+export async function loadApprovalsQueue(statusFilter = currentApprovalFilter) {
+  currentApprovalFilter = statusFilter;
+  const tbody = document.getElementById('approvalsTableBody');
+  const badge = document.getElementById('approvalPendingBadge');
+  const navBadge = document.getElementById('navApprovalBadge');
+  if (!tbody) return;
+
+  try {
+    const query = statusFilter && statusFilter !== 'all' ? `?status=${statusFilter}` : '';
+    const res = await fetch(`/api/admin/approvals${query}`, { credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const approvals = data.approvals || [];
+    const pendingCount = data.pending_count || 0;
+
+    if (badge) badge.textContent = pendingCount;
+    if (navBadge) {
+      navBadge.textContent = pendingCount;
+      navBadge.style.display = pendingCount > 0 ? 'inline-block' : 'none';
+    }
+
+    if (!approvals.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">No approval requests found for this filter.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = approvals.map(a => {
+      const isPending = a.status === 'pending';
+      const actionBadge = a.action === 'ban' 
+        ? '<span class="badge bad" style="font-weight:800;">PERM BAN</span>' 
+        : '<span class="badge warn" style="font-weight:800;">DELETE ACCOUNT</span>';
+      const statusBadge = a.status === 'approved' 
+        ? '<span class="badge good">APPROVED</span>' 
+        : a.status === 'rejected' 
+        ? '<span class="badge bad">REJECTED</span>' 
+        : '<span class="badge warn">PENDING REVIEW</span>';
+
+      const actionButtons = isPending && window.isSuperAdmin ? `
+        <button class="play-btn review-approval-btn" data-id="${a.id}" data-action="approve" style="padding:4px 10px; font-size:11px; background:#10B981; color:#fff;">Approve</button>
+        <button class="ghost-btn review-approval-btn" data-id="${a.id}" data-action="reject" style="padding:4px 10px; font-size:11px; color:#EF4444; border-color:#EF4444;">Reject</button>
+      ` : (a.reviewed_by_email ? `<small class="muted">Reviewed: ${escapeHtml(a.reviewed_by_email)}</small>` : '<small class="muted">—</small>');
+
+      return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(a.player_name || 'Player')}</strong>
+            <small style="display:block; color:var(--muted); font-size:11px;">${escapeHtml(a.player_email || '')}</small>
+          </td>
+          <td>${actionBadge}</td>
+          <td>
+            <div style="font-size:12px; font-weight:600;">${escapeHtml(a.reason || '—')}</div>
+            ${a.evidence ? `<small style="color:var(--mint); display:block; margin-top:2px;">Evidence: ${escapeHtml(a.evidence)}</small>` : ''}
+            ${a.review_note ? `<small style="color:var(--muted); display:block; margin-top:2px;">Note: ${escapeHtml(a.review_note)}</small>` : ''}
+          </td>
+          <td>
+            <span style="font-size:12px; font-weight:600;">${escapeHtml(a.requested_by_email || 'Normal Admin')}</span>
+          </td>
+          <td><small class="muted">${formatTimeAgo(a.created_at)}</small></td>
+          <td>${statusBadge}</td>
+          <td><div style="display:flex; gap:6px; align-items:center;">${actionButtons}</div></td>
+        </tr>
+      `;
+    }).join('');
+
+    // Wire review buttons
+    tbody.querySelectorAll('.review-approval-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.id;
+        const initialDecision = btn.dataset.action;
+        const req = approvals.find(x => x.id === id);
+        if (req) openProcessApprovalModal(req, initialDecision);
+      });
+    });
+
+  } catch (err) {
+    console.error('Error loading approvals:', err);
+    tbody.innerHTML = '<tr><td colspan="7" class="empty" style="color:var(--danger);">Failed to load approval requests.</td></tr>';
+  }
+}
+
+export function openRequestApprovalModal(playerId, playerName, action = 'ban') {
+  const modal = document.getElementById('requestApprovalModal');
+  if (!modal) return;
+  document.getElementById('reqApprovalPlayerId').value = playerId;
+  document.getElementById('reqApprovalAction').value = action;
+  document.getElementById('reqApprovalPlayerName').textContent = playerName || playerId;
+  
+  const badge = document.getElementById('reqApprovalActionBadge');
+  const title = document.getElementById('reqApprovalTitle');
+  if (action === 'ban') {
+    if (title) title.textContent = 'Request Permanent Ban Approval';
+    if (badge) {
+      badge.textContent = 'Permanent Account Ban';
+      badge.style.color = '#EF4444';
+    }
+  } else {
+    if (title) title.textContent = 'Request Account Erasure Approval';
+    if (badge) {
+      badge.textContent = 'Soft Delete & GDPR Erasure';
+      badge.style.color = '#F59E0B';
+    }
+  }
+
+  document.getElementById('reqApprovalReason').value = '';
+  document.getElementById('reqApprovalEvidence').value = '';
+  const statusEl = document.getElementById('reqApprovalStatus');
+  if (statusEl) statusEl.textContent = '';
+  modal.hidden = false;
+}
+
+export function openProcessApprovalModal(req, defaultDecision = 'approve') {
+  const modal = document.getElementById('processApprovalModal');
+  if (!modal) return;
+  document.getElementById('processApprovalId').value = req.id;
+  document.getElementById('procModalPlayerName').textContent = `${req.player_name || 'Player'} (${req.player_email || ''})`;
+  document.getElementById('procModalRequestedBy').textContent = req.requested_by_email || 'Normal Admin';
+  document.getElementById('procModalReason').textContent = req.reason || '—';
+  
+  const evRow = document.getElementById('procModalEvidenceRow');
+  const evText = document.getElementById('procModalEvidence');
+  if (req.evidence) {
+    evText.textContent = req.evidence;
+    evRow.style.display = 'block';
+  } else {
+    evRow.style.display = 'none';
+  }
+
+  const badge = document.getElementById('procModalActionBadge');
+  if (badge) {
+    badge.textContent = req.action.toUpperCase();
+    badge.className = req.action === 'ban' ? 'badge bad' : 'badge warn';
+  }
+
+  const radios = document.getElementsByName('procDecision');
+  radios.forEach(r => { r.checked = (r.value === defaultDecision); });
+
+  document.getElementById('procModalNote').value = '';
+  const statusEl = document.getElementById('procModalStatus');
+  if (statusEl) statusEl.textContent = '';
+  modal.hidden = false;
+}
+
+export function initApprovalsSection() {
+  // Filter buttons
+  document.querySelectorAll('.approval-filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.approval-filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      loadApprovalsQueue(btn.dataset.filter);
+    });
+  });
+
+  const refreshBtn = document.getElementById('refreshApprovalsBtn');
+  if (refreshBtn) refreshBtn.addEventListener('click', () => loadApprovalsQueue());
+
+  // Request modal cancel/close
+  document.getElementById('closeReqApprovalModalBtn')?.addEventListener('click', () => {
+    document.getElementById('requestApprovalModal').hidden = true;
+  });
+  document.getElementById('cancelReqApprovalBtn')?.addEventListener('click', () => {
+    document.getElementById('requestApprovalModal').hidden = true;
+  });
+
+  // Request form submission
+  document.getElementById('requestApprovalForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const playerId = document.getElementById('reqApprovalPlayerId').value;
+    const action = document.getElementById('reqApprovalAction').value;
+    const reason = document.getElementById('reqApprovalReason').value.trim();
+    const evidence = document.getElementById('reqApprovalEvidence').value.trim();
+    const statusEl = document.getElementById('reqApprovalStatus');
+    const submitBtn = document.getElementById('submitReqApprovalBtn');
+
+    if (reason.length < 10) {
+      statusEl.textContent = 'Reason must be at least 10 characters.';
+      return;
+    }
+
+    try {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting request…';
+      const res = await fetch('/api/admin/approvals/request', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        body: JSON.stringify({ player_id: playerId, action, reason, evidence })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Submission failed');
+
+      alert(`✅ ${data.message}`);
+      document.getElementById('requestApprovalModal').hidden = true;
+      if (window.loadApprovalsQueue) loadApprovalsQueue();
+    } catch (err) {
+      statusEl.textContent = err.message;
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Submit for Executive Review →';
+    }
+  });
+
+  // Process modal cancel/close
+  document.getElementById('closeProcessApprovalModalBtn')?.addEventListener('click', () => {
+    document.getElementById('processApprovalModal').hidden = true;
+  });
+  document.getElementById('cancelProcApprovalBtn')?.addEventListener('click', () => {
+    document.getElementById('processApprovalModal').hidden = true;
+  });
+
+  // Process form submission
+  document.getElementById('processApprovalForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const approvalId = document.getElementById('processApprovalId').value;
+    const radios = document.getElementsByName('procDecision');
+    let decision = 'approve';
+    for (const r of radios) { if (r.checked) decision = r.value; }
+    const note = document.getElementById('procModalNote').value.trim();
+    const statusEl = document.getElementById('procModalStatus');
+    const submitBtn = document.getElementById('confirmProcApprovalBtn');
+
+    try {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Processing…';
+      const res = await fetch(`/api/admin/approvals/${approvalId}/action`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        body: JSON.stringify({ decision, note })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Action failed');
+
+      alert(`✅ ${data.message}`);
+      document.getElementById('processApprovalModal').hidden = true;
+      loadApprovalsQueue();
+    } catch (err) {
+      statusEl.textContent = err.message;
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Confirm Decision';
+    }
+  });
+}
+
