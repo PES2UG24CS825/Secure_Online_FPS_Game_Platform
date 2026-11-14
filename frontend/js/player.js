@@ -1245,39 +1245,75 @@ if (exportPlayerDataBtn) {
   });
 }
 
+const deleteAccountModal = document.getElementById("deleteAccountModal");
+const closeDeleteModalBtn = document.getElementById("closeDeleteModalBtn");
+const cancelDeleteAccountBtn = document.getElementById("cancelDeleteAccountBtn");
+const confirmDeleteAccountBtn = document.getElementById("confirmDeleteAccountBtn");
+const deleteAccountPassword = document.getElementById("deleteAccountPassword");
+const deleteAccountError = document.getElementById("deleteAccountError");
+
+const closeDeleteModal = () => {
+  if (deleteAccountModal) {
+    deleteAccountModal.hidden = true;
+    deleteAccountModal.style.display = "none";
+  }
+  if (deleteAccountPassword) deleteAccountPassword.value = "";
+  if (deleteAccountError) {
+    deleteAccountError.hidden = true;
+    deleteAccountError.textContent = "";
+  }
+};
+
 const selfDeleteAccountBtn = document.getElementById("selfDeleteAccountBtn");
 if (selfDeleteAccountBtn) {
-  selfDeleteAccountBtn.addEventListener("click", async () => {
-    const feedback = document.getElementById("gdprFeedbackMsg");
-    const password = prompt(
-      "PERMANENT ACCOUNT DELETION CONFIRMATION\n\n" +
-      "This will revoke all active sessions and permanently anonymize your personal account data.\n" +
-      "Matches and security audit history are retained in anonymized format.\n\n" +
-      "To proceed, please enter your password:"
-    );
-    if (!password) return;
+  selfDeleteAccountBtn.addEventListener("click", () => {
+    if (deleteAccountModal) {
+      deleteAccountModal.hidden = false;
+      deleteAccountModal.style.display = "flex";
+      if (deleteAccountPassword) deleteAccountPassword.focus();
+    }
+  });
+}
+
+if (closeDeleteModalBtn) closeDeleteModalBtn.addEventListener("click", closeDeleteModal);
+if (cancelDeleteAccountBtn) cancelDeleteAccountBtn.addEventListener("click", closeDeleteModal);
+if (deleteAccountModal) {
+  deleteAccountModal.addEventListener("click", (e) => {
+    if (e.target === deleteAccountModal) closeDeleteModal();
+  });
+}
+
+if (confirmDeleteAccountBtn) {
+  confirmDeleteAccountBtn.addEventListener("click", async () => {
+    const password = deleteAccountPassword ? deleteAccountPassword.value.trim() : "";
+    if (!password) {
+      if (deleteAccountError) {
+        deleteAccountError.hidden = false;
+        deleteAccountError.textContent = "Please enter your password to confirm deletion.";
+      }
+      return;
+    }
+
+    confirmDeleteAccountBtn.disabled = true;
+    confirmDeleteAccountBtn.textContent = "Erasing account…";
 
     try {
       const res = await api("/player/account/delete", {
         method: "POST",
         body: JSON.stringify({ password })
       });
-      if (feedback) {
-        feedback.hidden = false;
-        feedback.style.color = "#10b981";
-        feedback.textContent = res.message || "Account deleted. Logging out...";
-      }
+      closeDeleteModal();
       alert(res.message || "Account successfully deleted.");
       setTimeout(() => {
         window.location.href = "login.html";
-      }, 1000);
+      }, 500);
     } catch (err) {
-      if (feedback) {
-        feedback.hidden = false;
-        feedback.style.color = "#ef4444";
-        feedback.textContent = err.message || "Could not delete account.";
+      if (deleteAccountError) {
+        deleteAccountError.hidden = false;
+        deleteAccountError.textContent = err.message || "Could not delete account.";
       }
-      alert(err.message || "Account deletion failed.");
+      confirmDeleteAccountBtn.disabled = false;
+      confirmDeleteAccountBtn.textContent = "Permanently Erase My Account";
     }
   });
 }
