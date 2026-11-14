@@ -29,11 +29,11 @@ button,
   height: 36px !important;
   min-height: 36px;
   padding: 0 !important;
-  color: #60A5FA !important;
+  color: #8B5CF6 !important;
 }
 
 .ghost-btn {
-  color: #60A5FA;
+  color: #8B5CF6;
   border-color: #9D8ED2;
   background: transparent;
 }
@@ -49,7 +49,7 @@ button,
 .section-title a {
   border: 0;
   background: transparent;
-  color: #60A5FA;
+  color: #8B5CF6;
   font-size: 13px;
   font-weight: 700;
   text-decoration: none;
@@ -60,7 +60,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 a:focus-visible {
-  outline: 3px solid #2563EB;
+  outline: 3px solid #7C3AED;
   outline-offset: 2px;
 }
 
@@ -93,7 +93,7 @@ a:focus-visible {
   box-sizing: border-box;
   padding: 12px 16px;
   border: 1px solid #9D8ED2;
-  border-left: 4px solid #2563EB;
+  border-left: 4px solid #7C3AED;
   border-radius: 10px;
   background: #FFFFFF;
   color:#1E1B4B;

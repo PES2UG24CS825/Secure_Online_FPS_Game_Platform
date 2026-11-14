@@ -11,12 +11,12 @@
     }
 
     .nav-btn:hover {
-      color: #60A5FA;
+      color: #8B5CF6;
       background: rgba(207, 198, 242, 0.55);
     }
 
     .nav-btn.active {
-      color: #60A5FA;
+      color: #8B5CF6;
       background: #1E293B;
       font-weight: 600;
     }
@@ -38,10 +38,10 @@
     .honour-report-table .honour-player-summary td { font-weight:600; }
     .honour-report-table .honour-player-detail td:first-child { width:42px; }
     .honour-player-cell { display:flex; align-items:center; gap:10px; min-width:180px; }
-    .honour-group-toggle { display:inline-grid; place-items:center; flex:0 0 28px; width:28px; height:28px; padding:0; border:0; border-radius:50%; background:transparent; color:#2563EB; cursor:pointer; transition:background .16s ease, transform .16s ease; }
+    .honour-group-toggle { display:inline-grid; place-items:center; flex:0 0 28px; width:28px; height:28px; padding:0; border:0; border-radius:50%; background:transparent; color:#7C3AED; cursor:pointer; transition:background .16s ease, transform .16s ease; }
     .honour-group-toggle svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
     .honour-group-toggle:hover { background:rgba(109,40,217,.1); }
-    .honour-group-toggle:focus-visible { outline:3px solid #2563EB; outline-offset:2px; }
+    .honour-group-toggle:focus-visible { outline:3px solid #7C3AED; outline-offset:2px; }
     .honour-score-meter { display:grid; gap:5px; min-width:138px; }
     .honour-score-meter strong { font-size:12px; font-weight:700; }
     .honour-score-track { height:7px; overflow:hidden; border-radius:999px; background:#D7D3E8; }
@@ -94,7 +94,7 @@
     .action-btn {
       background: none;
       border: 1px solid #DDD6FE;
-      color: #2563EB;
+      color: #7C3AED;
       padding: 4px 8px;
       border-radius: 4px;
       cursor: pointer;
@@ -105,7 +105,7 @@
 
     .action-btn:hover {
       background: #1E293B;
-      border-color: #2563EB;
+      border-color: #7C3AED;
     }
 
     .action-btn.danger {
@@ -210,7 +210,7 @@
     .review-note-dialog textarea { display:block; width:100%; box-sizing:border-box; min-height:100px; border:1px solid #BBAFE5; border-radius:10px; padding:11px; resize:vertical; font:inherit; background:#fff; color:#1E1B4B; }
     .review-note-dialog select { display:block; width:100%; box-sizing:border-box; margin:8px 0 14px; min-height:40px; border:1px solid #BBAFE5; border-radius:8px; padding:8px 10px; font:inherit; color:#1E1B4B; background:#fff; }
     .review-note-dialog select[hidden] { display:none; }
-    .review-note-dialog textarea:focus, .review-note-dialog select:focus { outline:3px solid rgba(109,40,217,.2); border-color:#2563EB; }
+    .review-note-dialog textarea:focus, .review-note-dialog select:focus { outline:3px solid rgba(109,40,217,.2); border-color:#7C3AED; }
     .review-note-dialog textarea[aria-invalid="true"] { border-color:#B91C1C; }
     .review-note-dialog .review-note-error { margin:7px 0 0; color:#B91C1C; font-size:12px; }
     .review-note-dialog .review-note-error[hidden] { display:none; }
@@ -304,10 +304,10 @@
 
     /* Admin visual polish: quieter navigation, clearer actions, and restrained status colors. */
     .admin-page .admin-nav-btn { border-radius:9px; transition:background-color .16s ease,color .16s ease,border-color .16s ease; }
-    .admin-page .admin-nav-btn.active { background:#F4F1FC; border-color:#DED8EF; box-shadow:inset 3px 0 #2563EB; }
+    .admin-page .admin-nav-btn.active { background:#F4F1FC; border-color:#DED8EF; box-shadow:inset 3px 0 #7C3AED; }
     .admin-page .admin-nav-icon { background:transparent; color:#746B91; }
     .admin-page .admin-nav-btn.active .admin-nav-icon,
-    .admin-page .admin-nav-btn:hover .admin-nav-icon { color:#2563EB; }
+    .admin-page .admin-nav-btn:hover .admin-nav-icon { color:#7C3AED; }
     .admin-page .admin-nav-icon svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
     .admin-page .panel,
     .admin-page .stat-card { border-color:#D5D0E5; border-radius:14px; box-shadow:0 8px 24px rgba(35,25,67,.045); }
@@ -410,7 +410,7 @@
       letter-spacing: 0.02em;
     }
     .admin-page .risk-band-badge.normal { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
-    .admin-page .risk-band-badge.monitoring { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+    .admin-page .risk-band-badge.monitoring { background: #dbeafe; color: #5B21B6; border: 1px solid #bfdbfe; }
     .admin-page .risk-band-badge.suspicious { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
     .admin-page .risk-band-badge.high-risk { background: #fed7aa; color: #9a3412; border: 1px solid #fdba74; }
     .admin-page .risk-band-badge.critical-risk { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
@@ -445,7 +445,7 @@
   padding: 1px 5px;
   border-radius: 4px;
   background: #FAF5FF;
-  color: #2563EB;
+  color: #7C3AED;
   font-weight: 600;
 }
 .account-sec-badge {
@@ -605,15 +605,15 @@
   border-radius: 8px;
   border: 1px solid #DDD6FE;
   background: #FFFFFF;
-  color: #60A5FA;
+  color: #8B5CF6;
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 .admin-page .ghost-btn:hover {
   background: #FAF5FF;
-  border-color: #2563EB;
-  color: #60A5FA;
+  border-color: #7C3AED;
+  color: #8B5CF6;
 }
 .admin-page .topbar {
   display: flex;
@@ -643,7 +643,7 @@
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #2563EB, #5B21B6);
+  background: linear-gradient(135deg, #7C3AED, #5B21B6);
   color: #FFFFFF;
   display: grid;
   place-items: center;
@@ -781,7 +781,7 @@
 }
 .feat-fill {
   height: 100%;
-  background: linear-gradient(90deg, #38BDF8, #06B6D4) !important;
+  background: linear-gradient(90deg, #A78BFA, #06B6D4) !important;
   border-radius: 999px;
   box-shadow: 0 0 8px rgba(6, 182, 212, 0.5);
 }
@@ -789,7 +789,7 @@
   width: 44px;
   text-align: right;
   font-weight: 700;
-  color: #38BDF8 !important;
+  color: #A78BFA !important;
 }
 
 /* 4. Professional Customer Support Ticket Card */
@@ -826,7 +826,7 @@
 }
 .support-ticket-card .ticket-message {
   background: #FAF5FF;
-  border-left: 3px solid #2563EB;
+  border-left: 3px solid #7C3AED;
   padding: 12px 16px;
   border-radius: 0 8px 8px 0;
   font-size: 13px;
@@ -1012,7 +1012,7 @@
 .ip-badge-purple {
   display: inline-block;
   background: #F3E8FF;
-  color: #2563EB;
+  color: #7C3AED;
   padding: 2px 8px;
   border-radius: 6px;
   font-family: monospace;
@@ -1050,7 +1050,7 @@
 .modal-close-btn {
   background: #F3E8FF;
   border: none;
-  color: #2563EB;
+  color: #7C3AED;
   font-size: 16px;
   font-weight: 700;
   width: 32px;
@@ -1090,7 +1090,7 @@
 .modal-stat-box strong {
   display: block;
   font-size: 18px;
-  color: #60A5FA;
+  color: #8B5CF6;
 }
 .modal-match-table {
   width: 100%;
@@ -1098,7 +1098,7 @@
 }
 .modal-match-table th {
   background: #FAF5FF;
-  color: #60A5FA;
+  color: #8B5CF6;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -1126,7 +1126,7 @@
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.08em;
-  color: #2563EB;
+  color: #7C3AED;
   text-transform: uppercase;
 }
 
@@ -1327,7 +1327,7 @@ table.threat-table td:first-child {
 }
 .player-audit-card:hover,
 .player-audit-card.active {
-  border-color: #2563EB;
+  border-color: #7C3AED;
   background: #FAF8FF;
   box-shadow: 0 4px 18px rgba(124, 58, 237, 0.16);
   transform: translateY(-2px);
@@ -1340,7 +1340,7 @@ table.threat-table td:first-child {
   transform: translateX(-50%);
   border-width: 8px 8px 0;
   border-style: solid;
-  border-color: #2563EB transparent transparent;
+  border-color: #7C3AED transparent transparent;
   display: block;
   width: 0;
 }
@@ -1353,7 +1353,7 @@ table.threat-table td:first-child {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #2563EB, #A78BFA);
+  background: linear-gradient(135deg, #7C3AED, #A78BFA);
   color: #fff;
   font-weight: 700;
   font-size: 14px;

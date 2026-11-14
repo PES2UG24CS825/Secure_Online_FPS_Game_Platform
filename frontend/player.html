@@ -7,9 +7,9 @@
   <title>SecureFPS | Player Console</title>
   <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg?v=2">
 
-  <link rel="stylesheet" href="css/styles.css?v=20261114_0345">
-  <link rel="stylesheet" href="css/player.css?v=20261114_0345">
-  <link rel="stylesheet" href="css/ui-polish.css?v=20261114_0345">
+  <link rel="stylesheet" href="css/styles.css?v=20261114_0415">
+  <link rel="stylesheet" href="css/player.css?v=20261114_0415">
+  <link rel="stylesheet" href="css/ui-polish.css?v=20261114_0415">
 </head>
 
 <body class="dashboard-page player-page">
@@ -1109,10 +1109,10 @@
 
 
   <!-- Existing application logic -->
-  <script src="js/config.js?v=20261114_0345"></script>
-  <script src="js/api.js?v=20261114_0345"></script>
-  <script src="js/player-features.js?v=20261114_0345"></script>
-  <script src="js/player.js?v=20261114_0345"></script>
+  <script src="js/config.js?v=20261114_0415"></script>
+  <script src="js/api.js?v=20261114_0415"></script>
+  <script src="js/player-features.js?v=20261114_0415"></script>
+  <script src="js/player.js?v=20261114_0415"></script>
 
 
   <!-- ============================================================
@@ -1179,6 +1179,23 @@
         if (selectedButton) {
           selectedButton.classList.add("active");
           selectedButton.setAttribute("aria-current", "page");
+        }
+
+        const sectionTitles = {
+          overview: "Overview",
+          matches: "Matches & Performance History",
+          leaderboard: "Community Leaderboard",
+          games: "Game Hub & FPS Arenas",
+          rewards: "Rewards & Customization",
+          fairplay: "Fair Play & Anti-Cheat Review",
+          security: "Account Security & 2FA",
+          settings: "Game Settings & Controls",
+          support: "Customer Support & FAQs",
+          profile: "Player Profile & Privacy"
+        };
+        const breadcrumb = document.getElementById("topbarBreadcrumb");
+        if (breadcrumb) {
+          breadcrumb.textContent = sectionTitles[sectionId] || (sectionId.charAt(0).toUpperCase() + sectionId.slice(1));
         }
 
         if (updateHash) {

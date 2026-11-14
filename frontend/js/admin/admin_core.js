@@ -14,19 +14,18 @@ export function escapeHtml(str) {
 }
 
 export function formatTimeAgo(dateInput) {
-  if (!dateInput) return 'Never';
+  if (!dateInput) return '—';
   const date = new Date(dateInput);
   if (isNaN(date.getTime())) return String(dateInput);
-  const now = new Date();
-  const diffSec = Math.floor((now - date) / 1000);
-  if (diffSec < 5) return 'just now';
-  if (diffSec < 60) return `${diffSec}s ago`;
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
+  const pad = (n) => String(n).padStart(2, '0');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const day = pad(date.getDate());
+  const month = months[date.getMonth()];
+  const year = date.getFullYear();
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  const seconds = pad(date.getSeconds());
+  return `${day} ${month} ${year}, ${hours}:${minutes}:${seconds}`;
 }
 
 class AdminPollingManager {
