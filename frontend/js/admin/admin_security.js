@@ -339,50 +339,171 @@ export async function loadAuditLogTable() {
   }
 }
 
+let currentAuditAccounts = [];
+let currentAuditLogins = [];
+let activeAuditAccount = null;
+
 export async function loadRecentLoginsTable() {
   const tbody = document.getElementById('recentLogins');
+  const cardsGrid = document.getElementById('playerAuditCardsGrid');
   if (!tbody) return;
 
   const roleFilter = document.getElementById('loginAuditRoleFilter')?.value || 'player';
 
   try {
-    const resp = await fetch(`/api/admin/logins?role=${encodeURIComponent(roleFilter)}&limit=20`, {
+    const resp = await fetch(`/api/admin/logins?role=${encodeURIComponent(roleFilter)}&limit=100`, {
       credentials: 'include',
       headers: { 'X-Requested-With': 'XMLHttpRequest' }
     });
     if (!resp.ok) return;
 
     const data = await resp.json();
-    const logins = data.logins || [];
+    currentAuditLogins = data.logins || [];
+    currentAuditAccounts = data.accounts || [];
 
-    if (logins.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty">No sign-in records logged yet.</td></tr>';
-      return;
+    // Render 4 Player Cards
+    if (cardsGrid) {
+      if (currentAuditAccounts.length === 0) {
+        cardsGrid.innerHTML = '<div class="empty" style="grid-column: 1 / -1;">No matching accounts found.</div>';
+      } else {
+        cardsGrid.innerHTML = currentAuditAccounts.map((acc, idx) => {
+          const initial = (acc.name || 'P').charAt(0).toUpperCase();
+          const isHighRisk = (acc.risk_score || 0) >= 65;
+          const riskClass = isHighRisk ? 'risk-high' : 'risk-low';
+          const riskLabel = isHighRisk ? `Risk: ${acc.risk_score}` : `Risk: ${acc.risk_score} (Normal)`;
+          const honourLabel = `Honour: ${acc.honour_score ?? 100} / 100`;
+
+          return `
+            <div class="player-audit-card ${idx === 0 ? 'active' : ''}" data-account-id="${acc.id}">
+              <div class="player-audit-card-head">
+                <div class="player-audit-card-avatar">${initial}</div>
+                <div class="player-audit-card-info">
+                  <strong>${escapeHtml(acc.name)}</strong>
+                  <small>${escapeHtml(acc.email)}</small>
+                </div>
+              </div>
+              <div class="player-audit-card-badges">
+                <span class="player-audit-pill honour">${honourLabel}</span>
+                <span class="player-audit-pill mfa">${acc.mfa_enabled ? 'MFA: On' : 'MFA: Off'}</span>
+                <span class="player-audit-pill ${riskClass}">${riskLabel}</span>
+              </div>
+              <div class="player-audit-card-meta">
+                <span>${acc.login_count} recorded session(s)</span>
+                <span style="color:#7C3AED; font-weight:600;">Hover to inspect →</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // Attach cursor hover / move and click listeners to each card
+        cardsGrid.querySelectorAll('.player-audit-card').forEach(card => {
+          const accId = card.dataset.accountId;
+          const acc = currentAuditAccounts.find(a => a.id === accId);
+          if (!acc) return;
+
+          card.addEventListener('mouseenter', () => selectAuditAccount(acc));
+          card.addEventListener('mousemove', () => {
+            if (activeAuditAccount?.id !== acc.id) selectAuditAccount(acc);
+          });
+          card.addEventListener('click', () => {
+            selectAuditAccount(acc);
+            if (window.openPlayerMatchesModal) {
+              window.openPlayerMatchesModal(acc.id, acc.name, acc.email);
+            }
+          });
+        });
+      }
     }
 
-    tbody.innerHTML = logins.map(item => {
-      const isSuccess = item.status === 'success';
-      const statusBadge = isSuccess
-        ? `<span class="status-chip-success">✓ Success</span>`
-        : `<span class="status-chip-failed">✕ ${escapeHtml(item.reason || 'Failed')}</span>`;
-      const riskBadge = item.risk === 'Low'
-        ? `<span class="risk-badge low">Low Risk</span>`
-        : `<span class="risk-badge high">High Risk</span>`;
-
-      return `
-        <tr>
-          <td><strong style="color:#1E1B4B;">${escapeHtml(item.player_name || 'Operator')}</strong><br><small style="color:#64748B;">${escapeHtml(item.identifier || '')}</small></td>
-          <td>${statusBadge}</td>
-          <td><span class="device-badge-slate">${escapeHtml(item.device || 'Desktop / Browser')}</span></td>
-          <td><span style="font-weight:600; color:#4C1D95;">${escapeHtml(item.location || 'Local')}</span></td>
-          <td><span class="ip-badge-purple">${escapeHtml(item.ip || '127.0.0.1')}</span></td>
-          <td>${riskBadge}</td>
-          <td><span style="color:#64748B; font-size:12px;">${formatTimeAgo(item.time)}</span></td>
-        </tr>
-      `;
-    }).join('');
+    // Default select first account
+    if (currentAuditAccounts.length > 0) {
+      selectAuditAccount(currentAuditAccounts[0]);
+    } else {
+      renderLoginsTable(currentAuditLogins);
+    }
   } catch (err) {
     console.error('[AdminSecurity] Error loading recent logins:', err);
-    tbody.innerHTML = `<tr><td colspan="7" class="error-cell">Failed to load sign-in activity: ${escapeHtml(err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="error-cell">Failed to load sign-in activity: ${escapeHtml(err.message)}</td></tr>`;
   }
+}
+
+function selectAuditAccount(acc) {
+  activeAuditAccount = acc;
+
+  // Highlight active card
+  document.querySelectorAll('#playerAuditCardsGrid .player-audit-card').forEach(card => {
+    card.classList.toggle('active', card.dataset.accountId === acc.id);
+  });
+
+  // Update header info
+  const avatarEl = document.getElementById('auditActiveAvatar');
+  const nameEl = document.getElementById('auditActiveName');
+  const emailEl = document.getElementById('auditActiveEmail');
+  const honourEl = document.getElementById('auditActiveHonour');
+  const secEl = document.getElementById('auditActiveSecurity');
+  const riskEl = document.getElementById('auditActiveRisk');
+  const inspectBtn = document.getElementById('auditInspectPlayerBtn');
+
+  if (avatarEl) avatarEl.textContent = (acc.name || 'P').charAt(0).toUpperCase();
+  if (nameEl) nameEl.textContent = acc.name || 'Operator';
+  if (emailEl) emailEl.textContent = acc.email || '';
+  if (honourEl) honourEl.textContent = `Honour: ${acc.honour_score ?? 100} / 100`;
+  if (secEl) {
+    secEl.textContent = acc.mfa_enabled ? 'MFA: Active' : 'MFA: Disabled';
+    secEl.style.background = acc.mfa_enabled ? '#EDE9FE' : '#FEE2E2';
+    secEl.style.color = acc.mfa_enabled ? '#5B21B6' : '#991B1B';
+  }
+  if (riskEl) {
+    const isHigh = (acc.risk_score || 0) >= 65;
+    riskEl.textContent = isHigh ? `Risk: ${acc.risk_score} (High Risk)` : `Risk: ${acc.risk_score} (Normal)`;
+    riskEl.style.background = isHigh ? '#FEE2E2' : '#F3F4F6';
+    riskEl.style.color = isHigh ? '#B91C1C' : '#374151';
+  }
+  if (inspectBtn) {
+    inspectBtn.onclick = () => {
+      if (window.openPlayerMatchesModal) {
+        window.openPlayerMatchesModal(acc.id, acc.name, acc.email);
+      }
+    };
+  }
+
+  // Filter logins for this specific account
+  const accEmail = (acc.email || '').toLowerCase();
+  const accId = acc.id;
+  const filteredLogins = currentAuditLogins.filter(l => {
+    return (l.user_id && l.user_id === accId) || (l.identifier && l.identifier.toLowerCase() === accEmail);
+  });
+
+  renderLoginsTable(filteredLogins);
+}
+
+function renderLoginsTable(logins) {
+  const tbody = document.getElementById('recentLogins');
+  if (!tbody) return;
+
+  if (logins.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No recent sign-in events recorded for this player.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = logins.map(item => {
+    const isSuccess = item.status === 'success';
+    const statusBadge = isSuccess
+      ? `<span class="status-chip-success">✓ Success</span>`
+      : `<span class="status-chip-failed">✕ ${escapeHtml(item.reason || 'Failed')}</span>`;
+    const riskBadge = item.risk === 'Low'
+      ? `<span class="risk-badge low">Low Risk</span>`
+      : `<span class="risk-badge high">High Risk</span>`;
+
+    return `
+      <tr>
+        <td>${statusBadge}</td>
+        <td><span class="device-badge-slate">${escapeHtml(item.device || 'Desktop / Browser')}</span></td>
+        <td><span class="ip-badge-purple">${escapeHtml(item.ip || '127.0.0.1')}</span></td>
+        <td><span style="font-weight:600; color:#4C1D95;">${escapeHtml(item.location || 'Local')}</span></td>
+        <td>${riskBadge}</td>
+        <td><span style="color:#64748B; font-size:12px;">${formatTimeAgo(item.time)}</span></td>
+      </tr>
+    `;
+  }).join('');
 }

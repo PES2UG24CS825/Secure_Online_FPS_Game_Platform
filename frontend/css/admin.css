@@ -1203,3 +1203,171 @@
   justify-content: space-between;
 }
 
+/* =========================================================================
+   SIDEBAR MASCOT SUPPRESSION & OVERLAP REMOVAL
+   ========================================================================= */
+.admin-sidebar-mascots {
+  display: none !important;
+}
+
+/* =========================================================================
+   THREAT MONITORING COMPACT AUTO-FIT TABLES
+   ========================================================================= */
+.threat-table-wrap {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+}
+table.threat-table {
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed !important;
+}
+table.threat-table th,
+table.threat-table td {
+  padding: 10px 12px !important;
+  font-size: 12px !important;
+  vertical-align: middle !important;
+}
+table.threat-table td:first-child {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* =========================================================================
+   ACCOUNT ACCESS AUDIT - 4 GENUINE PLAYERS INTERACTIVE CARDS & HOVER
+   ========================================================================= */
+.player-audit-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-top: 12px;
+}
+@media (max-width: 1100px) {
+  .player-audit-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 640px) {
+  .player-audit-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.player-audit-card {
+  background: #FFFFFF;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.player-audit-card:hover,
+.player-audit-card.active {
+  border-color: #7C3AED;
+  background: #FAF8FF;
+  box-shadow: 0 4px 18px rgba(124, 58, 237, 0.16);
+  transform: translateY(-2px);
+}
+.player-audit-card.active::after {
+  content: "";
+  position: absolute;
+  bottom: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 8px 8px 0;
+  border-style: solid;
+  border-color: #7C3AED transparent transparent;
+  display: block;
+  width: 0;
+}
+.player-audit-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.player-audit-card-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7C3AED, #A78BFA);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.player-audit-card-info {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.player-audit-card-info strong {
+  display: block;
+  font-size: 13px;
+  color: #1E1B4B;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.player-audit-card-info small {
+  display: block;
+  font-size: 11px;
+  color: #64748B;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.player-audit-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.player-audit-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.player-audit-pill.honour {
+  background: #DCFCE7;
+  color: #15803D;
+  border: 1px solid #BBF7D0;
+}
+.player-audit-pill.mfa {
+  background: #EDE9FE;
+  color: #5B21B6;
+  border: 1px solid #DDD6FE;
+}
+.player-audit-pill.risk-low {
+  background: #F3F4F6;
+  color: #374151;
+  border: 1px solid #E5E7EB;
+}
+.player-audit-pill.risk-high {
+  background: #FEE2E2;
+  color: #B91C1C;
+  border: 1px solid #FECACA;
+}
+.player-audit-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #64748B;
+  border-top: 1px solid #F1F5F9;
+  padding-top: 8px;
+}
+
+

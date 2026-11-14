@@ -1508,6 +1508,7 @@ def list_recent_logins():
 
         formatted.append({
             "id": str(d["_id"]),
+            "user_id": str(uid) if uid else "",
             "player_name": pname,
             "identifier": d.get("identifier", ""),
             "status": "success" if is_succ else "failed",
@@ -1518,7 +1519,42 @@ def list_recent_logins():
             "risk": "Low" if is_succ else "High",
             "time": format_iso(d.get("created_at"))
         })
-    return jsonify({"logins": formatted, "total": len(formatted)})
+
+    target_role_query = (
+        {"role": "player"} if role_filter == "player"
+        else ({"role": {"$in": ["admin", "super_admin"]}} if role_filter == "admin"
+        else {"role": {"$in": ["player", "admin", "super_admin"]}})
+    )
+    accounts_list = []
+    for u in users.find({**target_role_query, "account_status": {"$ne": "deleted"}}).sort("created_at", 1):
+        u_email = (u.get("email") or "").lower()
+        u_id = u["_id"]
+        cnt = login_history.count_documents({
+            "$or": [
+                {"user_id": u_id},
+                {"user_id": str(u_id)},
+                {"identifier": u_email}
+            ]
+        })
+        last_l = login_history.find_one(
+            {"$or": [{"user_id": u_id}, {"user_id": str(u_id)}, {"identifier": u_email}]},
+            sort=[("created_at", -1)]
+        )
+        accounts_list.append({
+            "id": str(u_id),
+            "name": u.get("name") or u_email.split("@")[0],
+            "email": u.get("email"),
+            "role": u.get("role", "player"),
+            "honour_score": u.get("honour_score", 100),
+            "risk_score": round(float(u.get("risk_score") or 0), 2),
+            "mfa_enabled": bool(u.get("mfa_enabled")),
+            "account_status": u.get("account_status", "active"),
+            "login_count": cnt,
+            "last_login_time": format_iso(last_l.get("created_at")) if last_l else None,
+            "last_login_device": last_l.get("device") if last_l else "Google Chrome (Windows 11)"
+        })
+
+    return jsonify({"logins": formatted, "accounts": accounts_list, "total": len(formatted)})
 
 
 # =========================================================================

@@ -678,7 +678,7 @@ export async function loadThreatMonitoring() {
             <td><strong>${escapeHtml(p.name)}</strong><br><small class="muted">${escapeHtml(p.email)}</small></td>
             <td><strong style="color:#DC2626;">${p.risk_score} / 100</strong></td>
             <td><span class="badge ${p.status === 'banned' ? 'badge-danger' : 'badge-warning'}">${escapeHtml(p.status)}</span></td>
-            <td><button class="play-btn inspect-threat-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}" style="min-width:auto; height:28px; padding:0 10px; font-size:11px;">Inspect</button></td>
+            <td><button class="play-btn inspect-threat-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}" data-email="${escapeHtml(p.email || '')}" style="min-width:auto; height:28px; padding:0 10px; font-size:11px;">Inspect</button></td>
           </tr>
         `).join('');
       }
@@ -695,11 +695,23 @@ export async function loadThreatMonitoring() {
             <td><strong>${escapeHtml(v.name)}</strong><br><small class="muted">${escapeHtml(v.email)}</small></td>
             <td><span class="badge badge-danger">${v.violations} Infractions</span></td>
             <td><strong>${v.risk_score}</strong></td>
-            <td><button class="ghost-btn inspect-threat-btn" data-id="${v.id}" data-name="${escapeHtml(v.name)}" style="min-width:auto; height:28px; padding:0 10px; font-size:11px;">View</button></td>
+            <td><button class="ghost-btn inspect-threat-btn" data-id="${v.id}" data-name="${escapeHtml(v.name)}" data-email="${escapeHtml(v.email || '')}" style="min-width:auto; height:28px; padding:0 10px; font-size:11px;">View</button></td>
           </tr>
         `).join('');
       }
     }
+
+    // Attach click listeners to inspect/view buttons
+    document.querySelectorAll('.inspect-threat-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = e.currentTarget.dataset.id;
+        const name = e.currentTarget.dataset.name;
+        const email = e.currentTarget.dataset.email || '';
+        if (window.openPlayerMatchesModal) {
+          window.openPlayerMatchesModal(id, name, email);
+        }
+      });
+    });
 
     // Suspicious Logins Table
     const tbodyLog = document.getElementById('threatSuspiciousLoginsTableBody');

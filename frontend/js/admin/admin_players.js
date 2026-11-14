@@ -13,6 +13,7 @@ let currentSortDir = 'desc';
 let selectedPlayerIds = new Set();
 
 export async function initPlayersSection() {
+  window.openPlayerMatchesModal = openPlayerMatchesModal;
   const searchInput = document.getElementById('playerSearch');
   if (searchInput) {
     let debounceTimer;
@@ -364,6 +365,7 @@ function handleUnban(id, name) {
 }
 
 export async function openPlayerMatchesModal(id, name, email) {
+  window.openPlayerMatchesModal = openPlayerMatchesModal;
   const modal = document.getElementById('playerMatchesModal');
   if (!modal) return;
 

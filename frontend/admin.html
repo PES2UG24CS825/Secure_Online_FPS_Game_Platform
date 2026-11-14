@@ -37,9 +37,6 @@
         <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_config" role="tab" aria-selected="false"><span class="admin-nav-icon">🛠️</span>Platform Settings</button>
       </div>
     </nav>
-    <div class="admin-sidebar-mascots" aria-hidden="true">
-      <img src="public/admin-characters.png?v=2" alt="">
-    </div>
   </aside>
   <div class="admin-main-wrapper">
   <main class="dashboard-main admin-main">
@@ -196,9 +193,14 @@
         </div>
       </section>
 
-      <section class="panel admin-table-panel">
+      <!-- SECTION: Player Sign-In Activity & Account Access Audit -->
+      <section class="panel admin-table-panel" id="playerSignInActivitySection">
         <div class="section-title">
-          <div><p class="eyebrow">ACCOUNT ACCESS AUDIT</p><h2>Player sign-in activity</h2></div>
+          <div>
+            <p class="eyebrow">ACCOUNT ACCESS AUDIT</p>
+            <h2>Player sign-in activity</h2>
+            <p class="muted" style="margin:2px 0 0; font-size:12px;">Move cursor over any player card to immediately reveal their complete verified sign-in &amp; device history.</p>
+          </div>
           <div style="display:flex; align-items:center; gap:10px;">
             <select id="loginAuditRoleFilter" class="admin-modal-input" style="width:auto; padding:6px 12px; font-size:12px;">
               <option value="player">Genuine Players Only</option>
@@ -208,11 +210,46 @@
             <button id="refreshLoginsBtn" class="play-btn" type="button" style="min-width:auto; height:36px; padding:0 14px; font-size:12px;">Refresh</button>
           </div>
         </div>
-        <div class="admin-table-wrap login-audit-table">
-          <table>
-            <thead><tr><th>Player</th><th>Result</th><th>Device / user agent</th><th>Location</th><th>IP address</th><th>Risk</th><th>Time</th></tr></thead>
-            <tbody id="recentLogins" aria-live="polite"><tr><td colspan="7">Loading sign-in activity…</td></tr></tbody>
-          </table>
+
+        <!-- Interactive Player Cards Grid -->
+        <div id="playerAuditCardsGrid" class="player-audit-grid">
+          <div class="empty">Loading accounts…</div>
+        </div>
+
+        <!-- Dynamic History View for Hovered/Selected Player -->
+        <div class="player-audit-detail-panel" style="margin-top:16px;">
+          <div class="player-audit-detail-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:12px 16px; background:#F5F3FF; border:1px solid #DDD6FE; border-radius:10px 10px 0 0;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div id="auditActiveAvatar" class="avatar" style="width:34px; height:34px; font-size:13px; background:#7C3AED; color:#fff; display:flex; align-items:center; justify-content:center; border-radius:50%; font-weight:700;">S</div>
+              <div>
+                <strong id="auditActiveName" style="color:#1E1B4B; font-size:13px;">sudh</strong>
+                <small id="auditActiveEmail" style="color:#6B7280; font-size:11px; margin-left:6px;">sudh@gmail.com</small>
+              </div>
+            </div>
+            <div id="auditActiveBadges" style="display:flex; align-items:center; gap:8px;">
+              <span id="auditActiveHonour" class="badge" style="background:#DCFCE7; color:#15803D; font-weight:700;">Honour: 90 / 100</span>
+              <span id="auditActiveSecurity" class="badge" style="background:#EDE9FE; color:#5B21B6; font-weight:700;">MFA: Active</span>
+              <span id="auditActiveRisk" class="badge" style="background:#F3F4F6; color:#374151;">Risk: 16.61 (Low)</span>
+              <button type="button" id="auditInspectPlayerBtn" class="play-btn" style="min-width:auto; height:28px; padding:0 12px; font-size:11px;">Inspect Account</button>
+            </div>
+          </div>
+          <div class="admin-table-wrap login-audit-table" style="border:1px solid #DDD6FE; border-top:none; border-radius:0 0 10px 10px;">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:18%;">Result</th>
+                  <th style="width:28%;">Device / Browser</th>
+                  <th style="width:18%;">IP Address</th>
+                  <th style="width:14%;">Location</th>
+                  <th style="width:10%;">Security Risk</th>
+                  <th style="width:12%;">Time</th>
+                </tr>
+              </thead>
+              <tbody id="recentLogins" aria-live="polite">
+                <tr><td colspan="6">Loading sign-in activity…</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
     </section>
@@ -321,10 +358,10 @@
           <div class="section-title">
             <div><p class="eyebrow">PRIORITY INTERVENTION</p><h2>High-Risk Players</h2></div>
           </div>
-          <div class="admin-table-wrap">
-            <table>
+          <div class="admin-table-wrap threat-table-wrap">
+            <table class="threat-table">
               <thead>
-                <tr><th>Player</th><th>Risk Score</th><th>Status</th><th>Action</th></tr>
+                <tr><th style="width:40%;">Player</th><th style="width:22%;">Risk Score</th><th style="width:20%;">Status</th><th style="width:18%;">Action</th></tr>
               </thead>
               <tbody id="threatHighRiskTableBody">
                 <tr><td colspan="4" class="empty">Loading high-risk players…</td></tr>
@@ -338,10 +375,10 @@
           <div class="section-title">
             <div><p class="eyebrow">INFRACTION LOGS</p><h2>Repeat Violators</h2></div>
           </div>
-          <div class="admin-table-wrap">
-            <table>
+          <div class="admin-table-wrap threat-table-wrap">
+            <table class="threat-table">
               <thead>
-                <tr><th>Player</th><th>Violations</th><th>Risk Score</th><th>Inspect</th></tr>
+                <tr><th style="width:40%;">Player</th><th style="width:24%;">Violations</th><th style="width:18%;">Risk</th><th style="width:18%;">Inspect</th></tr>
               </thead>
               <tbody id="threatRepeatViolatorsTableBody">
                 <tr><td colspan="4" class="empty">Loading repeat violators…</td></tr>
