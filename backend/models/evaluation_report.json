@@ -1,0 +1,104 @@
+{
+  "held_out_metrics": {
+    "precision": 0.9145,
+    "recall": 0.858,
+    "f1": 0.8854,
+    "roc_auc": 0.9729,
+    "pr_auc": 0.9552,
+    "fpr_on_normal_test": 0.0314,
+    "confusion_matrix": [
+      [
+        401,
+        13
+      ],
+      [
+        23,
+        139
+      ]
+    ]
+  },
+  "per_cheat_type_recall": {
+    "hard_aimbot": 1.0,
+    "recoil_script": 1.0,
+    "smooth_aimbot": 0.3704,
+    "speedhack": 0.8571,
+    "wallhack": 0.9722
+  },
+  "per_strength_recall": {
+    "0.25": 0.75,
+    "0.4": 0.8621,
+    "0.6": 0.9643,
+    "0.8": 0.8824,
+    "1.0": 0.8571
+  },
+  "isolation_forest": {
+    "heldout_cheats_detection_rate": 0.7531,
+    "unseen_cheat_detection_rate": 0.5414
+  },
+  "unseen_cheat_evaluation": {
+    "cheat_type": "triggerbot",
+    "sessions_count": 266,
+    "supervised_detection_rate": 0.1053,
+    "isolation_forest_detection_rate": 0.5414
+  },
+  "ablation_study_without_fire_rate_and_kdr": {
+    "pr_auc": 0.9582,
+    "roc_auc": 0.9754,
+    "pr_auc_delta": 0.0031
+  },
+  "feature_permutation_importance": {
+    "accuracy": -0.0026,
+    "headshot_ratio": -0.00625,
+    "reaction_time_median": 0.04653,
+    "reaction_time_min": 0.02309,
+    "fire_rate": 0.0099,
+    "fire_interval_cv": 0.00747,
+    "burst_length_mean": 0.00521,
+    "movement_speed_mean": 0.03698,
+    "movement_speed_max": 0.01285,
+    "movement_speed_std": 0.00104,
+    "aim_speed_mean": -0.00104,
+    "aim_speed_std": 0.00226,
+    "aim_speed_max": 0.00104,
+    "flick_rate": 0.00017,
+    "aim_error_at_fire_mean": 0.00521,
+    "aim_error_at_fire_std": -0.00278,
+    "snap_to_hit_ratio": -0.00069,
+    "wall_aim_ratio": 0.08611,
+    "kdr": -0.00417,
+    "time_to_kill_median": -0.00295,
+    "shots_per_kill": 0.00278
+  },
+  "learning_curve": [
+    {
+      "train_fraction": 0.2,
+      "train_samples": 471,
+      "train_pr_auc": 0.9937,
+      "test_pr_auc": 0.945
+    },
+    {
+      "train_fraction": 0.4,
+      "train_samples": 942,
+      "train_pr_auc": 0.9933,
+      "test_pr_auc": 0.9486
+    },
+    {
+      "train_fraction": 0.6,
+      "train_samples": 1414,
+      "train_pr_auc": 0.9925,
+      "test_pr_auc": 0.9482
+    },
+    {
+      "train_fraction": 0.8,
+      "train_samples": 1885,
+      "train_pr_auc": 0.991,
+      "test_pr_auc": 0.9501
+    },
+    {
+      "train_fraction": 1.0,
+      "train_samples": 2358,
+      "train_pr_auc": 0.9893,
+      "test_pr_auc": 0.9557
+    }
+  ]
+}

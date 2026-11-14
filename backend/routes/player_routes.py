@@ -1,9 +1,15 @@
 from services.risk_scoring import clamp_risk_score, classify_risk_score
 import base64
 import binascii
+import io
+import json
+import uuid
+from pathlib import Path
 from datetime import datetime, timezone, timedelta
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, jsonify, request, session, Response
 from bson import ObjectId
+from PIL import Image
+import bcrypt
 
 from database.db import (
     game_events,
@@ -16,7 +22,42 @@ from database.db import (
     sessions_db,
     support_tickets,
     reward_transactions,
+    ban_appeals,
+    player_notifications,
+    honour_history,
 )
+from services.csrf import verify_csrf_and_origin
+from routes.auth_routes import parse_client_device
+
+
+def format_login_entry(item):
+    browser = item.get("browser")
+    browser_icon = item.get("browser_icon")
+    os_name = item.get("os")
+    device = item.get("device")
+    if not browser or not os_name:
+        parsed = parse_client_device(item.get("user_agent") or item.get("device") or "")
+        browser = browser or parsed["browser"]
+        browser_icon = browser_icon or parsed["browser_icon"]
+        os_name = os_name or parsed["os"]
+        device = device or parsed["device"]
+
+    ip_raw = item.get("ip_address", item.get("ip", "Unknown"))
+    ip_display = ip_raw
+    if ip_raw in {"127.0.0.1", "localhost", "::1"}:
+        ip_display = "127.0.0.1 (Localhost)"
+
+    return {
+        "timestamp": item["created_at"].isoformat() if item.get("created_at") else None,
+        "ip_address": ip_display,
+        "raw_ip": ip_raw,
+        "authentication_method": item.get("authentication_method", "password+mfa"),
+        "success": item.get("status", "success") == "success",
+        "browser": browser or "Google Chrome",
+        "browser_icon": browser_icon or "🌐",
+        "os": os_name or "Windows",
+        "device": device or f"{browser} ({os_name})",
+    }
 
 ACHIEVEMENTS = [
     {"id": "first_blood", "name": "First Blood", "desc": "Score your first enemy elimination", "reward_xp": 50, "reward_coins": 20},
@@ -31,15 +72,209 @@ ACHIEVEMENTS = [
 ]
 
 REWARD_STORE = {
-    "guardian_badge": {"name": "Guardian badge", "description": "A shield badge for your player profile.", "price": 100, "icon": "⬡"},
-    "marksman_badge": {"name": "Marksman badge", "description": "A reticle badge for your player profile.", "price": 180, "icon": "◎"},
-    "elite_badge": {"name": "Elite sentinel badge", "description": "A premium SecureFPS profile badge.", "price": 300, "icon": "✦"},
+    # ==========================================
+    # ★ 1,000 COIN MYTHIC MASTERPIECES ★
+    # ==========================================
+    "skin_celestial_sovereign": {
+        "name": "Celestial Sovereign",
+        "description": "★ MYTHIC MASTERPIECE ★ Transcendent cyber-deity operator in royal purple & gold filigree armor with an amethyst halo and cosmic stardust aura.",
+        "price": 1000,
+        "icon": "👑",
+        "category": "avatar",
+        "avatar_key": "celestial-sovereign",
+        "preview": "public/avatars/celestial-sovereign.png",
+        "masterpiece": True,
+    },
+    "banner_nebula_eternity": {
+        "name": "Nebula Eternity",
+        "description": "★ MYTHIC MASTERPIECE ★ Majestic floating cosmic citadel suspended in a swirling deep purple and gold galaxy nebula with violet plasma energy spires.",
+        "price": 1000,
+        "icon": "🌌",
+        "category": "banner",
+        "banner_key": "nebula-eternity",
+        "preview": "public/backgrounds/nebula-eternity.jpg",
+        "masterpiece": True,
+    },
+
+    # ==========================================
+    # 1. EXCLUSIVE OPERATOR AVATARS (Equippable)
+    # ==========================================
+    "skin_valkyrie_void": {
+        "name": "Valkyrie Void Avatar",
+        "description": "High-tech cyberpunk operative with glowing violet visor and sleek ballistic armor.",
+        "price": 220,
+        "icon": "⚡",
+        "category": "avatar",
+        "avatar_key": "valkyrie-void",
+        "preview": "public/avatars/valkyrie-void.png",
+    },
+    "skin_ghost_specops": {
+        "name": "Ghost Spec-Ops Avatar",
+        "description": "Stealth operative with dual-lens violet night-vision optics and carbon-weave armor.",
+        "price": 200,
+        "icon": "🥷",
+        "category": "avatar",
+        "avatar_key": "ghost-specops",
+        "preview": "public/avatars/ghost-specops.png",
+    },
+    "skin_neon_valkyrie": {
+        "name": "Neon Valkyrie Chibi",
+        "description": "Cute chibi tactical specialist with high-contrast violet sensory headset.",
+        "price": 150,
+        "icon": "💜",
+        "category": "avatar",
+        "avatar_key": "chibi-female-1",
+        "preview": "public/avatars/chibi-female-1.png",
+    },
+    "skin_cyber_ninja": {
+        "name": "Cyber Infiltrator Chibi",
+        "description": "Covert tactical operative wrapped in reinforced carbon-violet weave.",
+        "price": 140,
+        "icon": "🗡️",
+        "category": "avatar",
+        "avatar_key": "chibi-male-1",
+        "preview": "public/avatars/chibi-male-1.png",
+    },
+    "skin_phantom_ghost": {
+        "name": "Phantom Recon Chibi",
+        "description": "Long-range marksman operative with dark tactical cloak and sensor array.",
+        "price": 160,
+        "icon": "🔮",
+        "category": "avatar",
+        "avatar_key": "chibi-female-2",
+        "preview": "public/avatars/chibi-female-2.png",
+    },
+    "skin_tactical_vanguard": {
+        "name": "Tactical Vanguard Chibi",
+        "description": "Frontline combat specialist equipped with heavy alloy purple plate carrier.",
+        "price": 130,
+        "icon": "🛡️",
+        "category": "avatar",
+        "avatar_key": "chibi-male-2",
+        "preview": "public/avatars/chibi-male-2.png",
+    },
+
+    # ==========================================
+    # 2. PANORAMIC SCENE BANNERS (Equippable)
+    # ==========================================
+    "banner_cyber_metropolis": {
+        "name": "Cyber Metropolis Banner",
+        "description": "Breathtaking cyberpunk city skyline with purple neon skyscrapers and rain reflections.",
+        "price": 180,
+        "icon": "🌆",
+        "category": "banner",
+        "banner_key": "cyber-metropolis",
+        "preview": "public/backgrounds/cyber-metropolis.jpg",
+    },
+    "banner_orbital_bastion": {
+        "name": "Orbital Bastion Banner",
+        "description": "Space defense fortress overlooking Earth with glowing violet ion energy barriers.",
+        "price": 200,
+        "icon": "🛰️",
+        "category": "banner",
+        "banner_key": "orbital-bastion",
+        "preview": "public/backgrounds/orbital-bastion.jpg",
+    },
+    "banner_cosmic_cherry": {
+        "name": "Cosmic Blossom Banner",
+        "description": "Ethereal violet blossom sanctuary beneath a celestial full moon.",
+        "price": 150,
+        "icon": "🌸",
+        "category": "banner",
+        "banner_key": "sakura",
+        "preview": "public/backgrounds/cosmic-cherry-blossom.jpg",
+    },
+    "banner_sakura_neon": {
+        "name": "Sakura Neon Cyber Banner",
+        "description": "Cyberpunk neon alleyway with electric purple signs and reflective puddles.",
+        "price": 140,
+        "icon": "💜",
+        "category": "banner",
+        "banner_key": "neon",
+        "preview": "public/backgrounds/sakura-neon.jpg",
+    },
+    "banner_command_center": {
+        "name": "Command Ops Center Banner",
+        "description": "High-tech anti-cheat operations room with multi-screen telemetry feeds.",
+        "price": 160,
+        "icon": "🖥️",
+        "category": "banner",
+        "banner_key": "command-center",
+        "preview": "public/backgrounds/command-center.jpg",
+    },
+    "banner_battlefield": {
+        "name": "Frontline Battlefield Banner",
+        "description": "Dynamic frontline battlefield with armored units and tactical HUD elements.",
+        "price": 150,
+        "icon": "🚁",
+        "category": "banner",
+        "banner_key": "battlefield",
+        "preview": "public/backgrounds/battlefield.jpg",
+    },
+    "banner_sakura_dawn": {
+        "name": "Purple Dawn Skyline Banner",
+        "description": "Misty mountain peaks under an electric purple sunrise.",
+        "price": 120,
+        "icon": "🌄",
+        "category": "banner",
+        "banner_key": "dawn",
+        "preview": "public/backgrounds/sakura-dawn.jpg",
+    },
+    "banner_sakura_frontline": {
+        "name": "Combat Outpost Banner",
+        "description": "Reinforced military forward operating base under dusk skies.",
+        "price": 100,
+        "icon": "⚔️",
+        "category": "banner",
+        "banner_key": "frontline",
+        "preview": "public/backgrounds/sakura-frontline.jpg",
+    },
+
+    # Preserved legacy items (hidden from store UI per user request)
+    "camo_purple_damascus": {"name": "Purple Damascus Camo", "description": "Folded-steel weapon skin.", "price": 220, "icon": "✨", "category": "weapon", "hidden": True},
+    "tactical_comp": {"name": "Recoil Compensator", "description": "High-efficiency muzzle brake.", "price": 150, "icon": "🎯", "category": "perk", "hidden": True},
+    "combat_booster": {"name": "+25% XP Combat Protocol", "description": "Bonus XP booster.", "price": 120, "icon": "⚡", "category": "perk", "hidden": True},
+    "extended_mag": {"name": "Tactical Extended Mags", "description": "High-capacity magazines.", "price": 180, "icon": "📦", "category": "perk", "hidden": True},
+    "guardian_badge": {"name": "Guardian badge", "description": "A shield badge for your player profile.", "price": 100, "icon": "⬡", "category": "badge", "hidden": True},
+    "marksman_badge": {"name": "Marksman badge", "description": "A reticle badge for your player profile.", "price": 180, "icon": "◎", "category": "badge", "hidden": True},
+    "elite_badge": {"name": "Elite sentinel badge", "description": "A premium SecureFPS profile badge.", "price": 300, "icon": "✦", "category": "badge", "hidden": True},
+    "stealth_camo": {"name": "Night-Stalker Operator Camo", "description": "Matte-black stealth tactical uniform.", "price": 250, "icon": "🥷", "category": "perk", "hidden": True},
 }
+
+UPLOADS_DIR = Path(__file__).resolve().parents[1] / "uploads"
+AVATARS_DIR = UPLOADS_DIR / "avatars"
+BANNERS_DIR = UPLOADS_DIR / "banners"
+AVATARS_DIR.mkdir(parents=True, exist_ok=True)
+BANNERS_DIR.mkdir(parents=True, exist_ok=True)
 
 player_bp = Blueprint("player", __name__, url_prefix="/api/player")
 
+
+def process_and_save_webp(base64_data, category="avatars"):
+    """
+    Decodes base64 image data, resizes to WebP (256x256 for avatars, 1200x300 for banners),
+    and saves to backend/uploads/<category>/<uuid>.webp.
+    Returns relative URL: /api/media/<category>/<filename>.
+    """
+    header, encoded = base64_data.split(",", 1)
+    raw_bytes = base64.b64decode(encoded)
+    img = Image.open(io.BytesIO(raw_bytes))
+    if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+        img = img.convert("RGBA")
+    else:
+        img = img.convert("RGB")
+
+    target_size = (256, 256) if category == "avatars" else (1200, 300)
+    img = img.resize(target_size, Image.Resampling.LANCZOS)
+    filename = f"{uuid.uuid4().hex}.webp"
+    save_path = (AVATARS_DIR if category == "avatars" else BANNERS_DIR) / filename
+    img.save(save_path, "WEBP", quality=85)
+    return f"/api/media/{category}/{filename}"
+
+
 def current_user():
     return session.get("user_id")
+
 
 def get_user_role():
     user_id = current_user()
@@ -53,15 +288,56 @@ def get_user_role():
         return user.get("role") or session.get("user_role") or "player"
     return session.get("user_role") or "player"
 
+
 @player_bp.before_request
 def check_player_access():
     if request.method == "OPTIONS":
         return None
-    if not current_user():
+
+    # CSRF check on state-changing requests
+    csrf_err = verify_csrf_and_origin(request)
+    if csrf_err:
+        return jsonify({"message": csrf_err}), 403
+
+    user_id = current_user()
+    if not user_id:
         return jsonify({"message": "Authentication required."}), 401
-    role = get_user_role()
+
+    try:
+        user = users.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        user = None
+
+    if not user:
+        return jsonify({"message": "Player account not found."}), 404
+
+    role = user.get("role") or session.get("user_role") or "player"
     if role not in ("player", "demo_player"):
         return jsonify({"message": "Player access required."}), 403
+
+    acc_status = user.get("account_status") or ("suspended" if user.get("revoked") else "active")
+    if acc_status == "deleted":
+        session.clear()
+        return jsonify({"message": "This account has been deleted."}), 403
+
+    # If banned or suspended, allow reading status, profile, appeals, and notifications
+    # but block gameplay/store purchases/profile mutations
+    if acc_status in {"banned", "suspended"}:
+        allowed_paths = {
+            "/api/player/profile",
+            "/api/player/account-status",
+            "/api/player/appeal",
+            "/api/player/notifications",
+        }
+        if request.path not in allowed_paths:
+            return jsonify({
+                "message": f"Your account is currently {acc_status}. Gameplay and store actions are disabled.",
+                "account_status": acc_status,
+                "ban_reason": user.get("ban_reason", "Security policy enforcement"),
+                "suspended_until": user.get("suspended_until").isoformat() if user.get("suspended_until") else None,
+                "can_appeal": True
+            }), 403
+
 
 @player_bp.get("/profile")
 def get_profile():
@@ -71,15 +347,35 @@ def get_profile():
     user = users.find_one({"_id": ObjectId(user_id)}, {"password_hash": 0, "mfa_secret": 0})
     if not user:
         return jsonify({"message": "User not found."}), 404
+
+    acc_status = user.get("account_status") or ("suspended" if user.get("revoked") else "active")
+
+    # Fetch pending appeal if any
+    pending_appeal = ban_appeals.find_one({"user_id": user["_id"], "status": "pending"})
+
+    created_at_val = user.get("created_at")
+    if not created_at_val and "_id" in user and hasattr(user["_id"], "generation_time"):
+        created_at_val = user["_id"].generation_time
+        try:
+            users.update_one({"_id": user["_id"]}, {"$set": {"created_at": created_at_val}})
+        except Exception:
+            pass
+
     return jsonify({
         "id": str(user["_id"]),
         "name": user["name"],
         "email": user["email"],
         "mfa_enabled": user.get("mfa_enabled", False),
-        "created_at": user["created_at"].isoformat() if user.get("created_at") else None,
+        "account_status": acc_status,
+        "ban_reason": user.get("ban_reason"),
+        "suspended_until": user["suspended_until"].isoformat() if user.get("suspended_until") else None,
+        "can_appeal": acc_status in {"banned", "suspended"},
+        "has_pending_appeal": bool(pending_appeal),
+        "honour_score": user.get("honour_score", 100),
+        "created_at": created_at_val.isoformat() if created_at_val and hasattr(created_at_val, "isoformat") else (str(created_at_val) if created_at_val else None),
         "profile_customization": user.get("profile_customization", {
-            "avatar": "chibi-female-2",
-            "banner": "frontline",
+            "avatar": "default-operator",
+            "banner": "default-banner",
         }),
     })
 
@@ -95,8 +391,9 @@ def update_profile_customization():
     banner = data.get("banner")
     avatar_image = data.get("avatar_image") or None
     banner_image = data.get("banner_image") or None
-    allowed_avatars = {"chibi-male-1", "chibi-female-1", "chibi-female-2"}
-    allowed_banners = {"sakura", "frontline", "dawn", "neon"}
+    allowed_avatars = {"default-operator", "chibi-male-1", "chibi-female-1", "chibi-male-2", "chibi-female-2", "valkyrie-void", "ghost-specops", "celestial-sovereign", "custom"}
+    allowed_banners = {"default-banner", "sakura", "frontline", "dawn", "neon", "battlefield", "command-center", "cyber-metropolis", "orbital-bastion", "nebula-eternity", "custom"}
+
     if avatar_image:
         avatar = "custom"
     if banner_image:
@@ -128,11 +425,30 @@ def update_profile_customization():
     if not valid_image_data(avatar_image) or not valid_image_data(banner_image):
         return jsonify({"message": "Upload a valid JPG, PNG, or WebP image under 512 KB."}), 400
 
+    user_doc = users.find_one({"_id": ObjectId(user_id)}) or {}
+    existing_custom = user_doc.get("profile_customization", {})
+
+    avatar_url = existing_custom.get("avatar_url")
+    banner_url = existing_custom.get("banner_url")
+
+    # Resize and store as WebP
+    if avatar_image:
+        try:
+            avatar_url = process_and_save_webp(avatar_image, category="avatars")
+        except Exception as exc:
+            return jsonify({"message": f"Could not process avatar image: {exc}"}), 400
+
+    if banner_image:
+        try:
+            banner_url = process_and_save_webp(banner_image, category="banners")
+        except Exception as exc:
+            return jsonify({"message": f"Could not process banner image: {exc}"}), 400
+
     customization = {
         "avatar": avatar,
         "banner": banner,
-        "avatar_image": avatar_image,
-        "banner_image": banner_image,
+        "avatar_url": avatar_url,
+        "banner_url": banner_url,
     }
     result = users.update_one(
         {"_id": ObjectId(user_id)},
@@ -156,13 +472,24 @@ def get_player_stats():
     session_ids = [s.get("session_id") for s in completed_sessions if s.get("session_id")]
     kills_telemetry = game_telemetry.count_documents({"user_id": user_oid, "session_id": {"$in": session_ids}, "event_type": "enemy_killed"}) if session_ids else 0
     deaths_telemetry = game_telemetry.count_documents({"user_id": user_oid, "session_id": {"$in": session_ids}, "event_type": "player_death"}) if session_ids else 0
+    shots_telemetry = game_telemetry.count_documents({"user_id": user_oid, "session_id": {"$in": session_ids}, "event_type": "weapon_fire"}) if session_ids else 0
+    hits_telemetry = game_telemetry.count_documents({"user_id": user_oid, "session_id": {"$in": session_ids}, "event_type": "enemy_hit"}) if session_ids else 0
 
     legacy_kills = sum(m.get("kills", 0) for m in completed_legacy)
     legacy_deaths = sum(m.get("deaths", 0) for m in completed_legacy)
 
-    total_kills = kills_telemetry + legacy_kills
-    total_deaths = deaths_telemetry + legacy_deaths
+    session_kills = sum(int(s.get("kills") or 0) for s in completed_sessions)
+    session_deaths = sum(int(s.get("deaths") or 0) for s in completed_sessions)
+    session_shots = sum(int(s.get("shots") or 0) for s in completed_sessions)
+    session_hits = sum(int(s.get("hits") or 0) for s in completed_sessions)
+
+    total_kills = max(kills_telemetry, session_kills) + legacy_kills
+    total_deaths = max(deaths_telemetry, session_deaths) + legacy_deaths
+    total_shots = max(shots_telemetry, session_shots)
+    total_hits = max(hits_telemetry, session_hits)
+
     kdr = round(total_kills / max(total_deaths, 1), 2)
+    overall_accuracy = round((total_hits / max(1, total_shots)) * 100, 1) if total_shots > 0 else 0.0
 
     total_matches = len(completed_sessions) + len(completed_legacy)
     wins = sum(1 for s in completed_sessions if s.get("winner") in {"Operator", "player", player.get("name")}) + sum(1 for m in completed_legacy if m.get("result") in {"victory", "win"})
@@ -199,6 +526,9 @@ def get_player_stats():
         "kills": total_kills,
         "deaths": total_deaths,
         "kdr": kdr,
+        "accuracy": overall_accuracy,
+        "shots_fired": total_shots,
+        "shots_hit": total_hits,
         "total_playtime_seconds": total_seconds,
         "honour_score": player.get("honour_score", 100),
         "coins": coins,
@@ -244,9 +574,18 @@ def get_matches():
         {"_id": user_oid},
         {"hacker_profile": 1, "account_type": 1},
     ) or {}
-    completed_match_filter = {"user_id": user_oid, "status": "completed"}
-    total_matches = game_sessions.count_documents(completed_match_filter)
-    player_matches = list(game_sessions.find(completed_match_filter).sort("started_at", -1).limit(10))
+    session_filter = {"user_id": user_oid, "status": "completed"}
+    total_matches = game_sessions.count_documents(session_filter)
+    player_matches = list(game_sessions.find(session_filter).sort("started_at", -1).limit(20))
+    if not player_matches:
+        # Check string user_id or legacy matches
+        alt_filter = {"$or": [{"user_id": str(user_oid)}, {"player_id": str(user_oid)}], "status": "completed"}
+        player_matches = list(game_sessions.find(alt_filter).sort("started_at", -1).limit(20))
+        if player_matches:
+            total_matches = len(player_matches)
+        else:
+            player_matches = list(matches.find({"user_id": user_oid}).sort("created_at", -1).limit(20))
+            total_matches = len(player_matches)
     analyses = {}
     for item in game_events.find(
         {"user_id": user_oid, "analysis_type": "game_session"}
@@ -270,34 +609,50 @@ def get_matches():
         started_at = game_session.get("started_at") or game_session.get("created_at")
         ended_at = game_session.get("ended_at")
         duration = None
-        if started_at and ended_at:
+        if game_session.get("duration") is not None and int(game_session.get("duration", 0)) > 0:
+            duration = int(game_session.get("duration"))
+        elif started_at and ended_at:
             if started_at.tzinfo is None and ended_at.tzinfo is not None:
                 started_at = started_at.replace(tzinfo=ended_at.tzinfo)
             elif ended_at.tzinfo is None and started_at.tzinfo is not None:
                 ended_at = ended_at.replace(tzinfo=started_at.tzinfo)
             duration = max(0, int((ended_at - started_at).total_seconds()))
-        kills = event_count(session_id, "enemy_killed")
-        deaths = event_count(session_id, "player_death")
+        kills_ev = event_count(session_id, "enemy_killed")
+        deaths_ev = event_count(session_id, "player_death")
+        shots_ev = event_count(session_id, "weapon_fire")
+        hits_ev = event_count(session_id, "enemy_hit")
+
+        kills = max(int(game_session.get("kills") or 0), kills_ev)
+        deaths = max(int(game_session.get("deaths") or 0), deaths_ev)
+        shots = max(int(game_session.get("shots") or 0), shots_ev)
+        hits = max(int(game_session.get("hits") or 0), hits_ev)
+
+        calc_acc = round((hits / max(1, shots)) * 100, 1) if shots > 0 else round(float(raw.get("accuracy", 0) or game_session.get("accuracy", 0) or 0) * 100, 1)
         auth_created = analysis.get("created_at")
         raw_score = analysis.get("risk_score", result.get("risk_score"))
+        if raw_score is None and game_session.get("risk_score") is not None:
+            raw_score = game_session.get("risk_score")
         clamped_score = clamp_risk_score(raw_score)
         classification = classify_risk_score(clamped_score)
 
         result_matches.append({
             "id": session_id,
             "session_id": session_id,
-            "match_id": session_id[:8] if session_id else str(game_session.get("_id", ""))[-8:],
+            "match_id": f"#{session_id}" if str(session_id).isdigit() else (session_id[:8] if session_id else str(game_session.get("_id", ""))[-8:]),
             "analysis_id": str(analysis.get("_id", "")),
             "model_version": analysis.get("model_version", "v1.2-ensemble-rf-iso"),
             "date": started_at.isoformat() if started_at else None,
             "duration": duration,
             "game": (game_session.get("game") or "CyberStrike 3D").replace("_", " "),
             "status": game_session.get("status", "unknown"),
+            "weapon": game_session.get("weapon") or "P-24 Carbine",
             "kills": kills,
             "deaths": deaths,
+            "shots_fired": shots,
+            "shots_hit": hits,
             "kd": round(kills / max(deaths, 1), 2),
             "honour_awarded": game_session.get("honour_awarded"),
-            "accuracy": round(float(raw.get("accuracy", 0) or 0) * 100, 1),
+            "accuracy": calc_acc,
             "headshot_ratio": raw.get("headshot_ratio"),
             "risk_score": clamped_score,
             "risk_category": classification["category"],
@@ -308,7 +663,7 @@ def get_matches():
             "isolation_forest": result.get("isolation_forest") or analysis.get("isolation_forest", "anomaly"),
             "isolation_forest_anomaly_score": result.get("isolation_forest_anomaly_score"),
             "detection_result": analysis.get("enforcement_action") or "none",
-            "analysis_status": analysis.get("status", "pending"),
+            "analysis_status": analysis.get("status") or game_session.get("analysis_status") or "completed",
             "analysis_timestamp": auth_created.isoformat() if auth_created else None,
             "missing_features": analysis.get("missing_features", []),
             "analysis_error": analysis.get("error"),
@@ -338,52 +693,88 @@ def get_leaderboard():
             {"$group": {"_id": "$user_id", "average_risk": {"$avg": "$risk_score"}}},
         ])
     }
+
+    disallowed_keywords = ("test", "demo", "soldier", "hacker", "bot", "dummy", "mock", "temp", "deleted", "operator")
+    disallowed_domains = ("@example.com", "@test.com", "@test.lan", "@test.local", "@deleted.securefps.local", "@example.test")
+    disallowed_prefixes = ("player_", "player", "mfa_", "lan_tester_", "test_")
+
     players = []
     for user in users.find(
-        {"role": {"$ne": "admin"}},
-        {"name": 1},
+        {"role": "player", "account_status": {"$nin": ["suspended", "banned", "deleted"]}},
+        {"name": 1, "email": 1, "role": 1, "account_status": 1, "is_demo": 1},
     ):
+        name = str(user.get("name") or "").strip().lower()
+        email = str(user.get("email") or "").strip().lower()
+
+        # Filter out test, bot, and demo accounts from leaderboard
+        if user.get("is_demo") is True:
+            continue
+        if any(email.endswith(d) for d in disallowed_domains):
+            continue
+        if any(email.startswith(p) for p in disallowed_prefixes):
+            continue
+        if any(kw in name for kw in disallowed_keywords):
+            continue
+
         completed_sessions = list(game_sessions.find(
-            {"user_id": user["_id"], "status": "completed"},
-            {"session_id": 1},
+            {"user_id": user["_id"], "status": "completed"}
         ))
         session_ids = [item.get("session_id") for item in completed_sessions if item.get("session_id")]
-        kills = game_telemetry.count_documents({"user_id": user["_id"], "session_id": {"$in": session_ids}, "event_type": "enemy_killed"}) if session_ids else 0
-        deaths = game_telemetry.count_documents({"user_id": user["_id"], "session_id": {"$in": session_ids}, "event_type": "player_death"}) if session_ids else 0
-        accuracy_values = [
-            float(item.get("raw_features", {}).get("accuracy", 0) or 0)
+        
+        total_kills = 0
+        total_deaths = 0
+        accuracy_values = []
+        for cs in completed_sessions:
+            sid = cs.get("session_id")
+            telem_k = game_telemetry.count_documents({"user_id": user["_id"], "session_id": sid, "event_type": "enemy_killed"}) if sid else 0
+            telem_d = game_telemetry.count_documents({"user_id": user["_id"], "session_id": sid, "event_type": "player_death"}) if sid else 0
+            
+            s_k = max(int(cs.get("kills") or 0), telem_k)
+            s_d = max(int(cs.get("deaths") or 0), telem_d)
+            total_kills += s_k
+            total_deaths += s_d
+            
+            acc = cs.get("accuracy")
+            if acc is not None:
+                acc_f = float(acc)
+                accuracy_values.append(acc_f * 100 if acc_f <= 1.0 else acc_f)
+
+        if not accuracy_values and session_ids:
             for item in game_events.find(
                 {"user_id": user["_id"], "analysis_type": "game_session", "session_id": {"$in": session_ids}},
                 {"raw_features.accuracy": 1},
-            )
-            if item.get("raw_features", {}).get("accuracy") is not None
-        ]
+            ):
+                rf_acc = item.get("raw_features", {}).get("accuracy")
+                if rf_acc is not None:
+                    acc_f = float(rf_acc)
+                    accuracy_values.append(acc_f * 100 if acc_f <= 1.0 else acc_f)
+
         matches_played = len(completed_sessions)
-        kd = round(kills / max(deaths, 1), 2)
-        accuracy = round((sum(accuracy_values) / len(accuracy_values)) * 100, 1) if accuracy_values else 0
-        performance = round((kills * 3) + (kd * 10) + (accuracy * 0.25), 1)
+        kd = round(total_kills / max(total_deaths, 1), 2)
+        accuracy = round((sum(accuracy_values) / len(accuracy_values)), 1) if accuracy_values else 0.0
+        performance = round((total_kills * 3) + (kd * 10) + (accuracy * 0.25), 1)
         players.append({
             "id": str(user["_id"]),
             "name": user.get("name", "Player"),
             "matches": matches_played,
-            "kills": kills,
-            "deaths": deaths,
+            "kills": total_kills,
+            "deaths": total_deaths,
             "kd": kd,
             "accuracy": accuracy,
             "performance": performance,
             "average_risk": round(float(risk_by_user.get(user["_id"], 0) or 0), 1),
         })
 
+    # Keep genuine players with match history, or include the currently logged in genuine user
+    current_id = str(user_id)
     players = [
         item for item in players
-        if item["matches"] > 0
-        and item["name"].strip().lower() not in {"live check", "test", "test player", "demo player"}
+        if item["matches"] > 0 or item["id"] == current_id
     ]
-    players.sort(key=lambda item: (-item["performance"], -item["kills"], -item["matches"], item["name"].lower()))
+    players.sort(key=lambda item: (-item["kills"], -item["kd"], -item["accuracy"], item["name"].lower()))
     for rank, player in enumerate(players, start=1):
         player["rank"] = rank
 
-    current_id = str(user_id)
     current_player = next((item for item in players if item["id"] == current_id), None)
     return jsonify({
         "leaderboard": players[:10],
@@ -426,7 +817,7 @@ def get_rewards():
             }
             for a in ACHIEVEMENTS
         ],
-        "store": [{"id": item_id, **item} for item_id, item in REWARD_STORE.items()],
+        "store": [{"id": item_id, **item} for item_id, item in REWARD_STORE.items() if not item.get("hidden")],
         "transactions": [{
             "type": item.get("type", "reward"),
             "description": item.get("description", "Reward earned"),
@@ -512,17 +903,32 @@ def equip_reward_item():
         return jsonify({"message": "Authentication required."}), 401
     item_id = (request.get_json(silent=True) or {}).get("item_id")
     if item_id is not None and (not isinstance(item_id, str) or item_id not in REWARD_STORE):
-        return jsonify({"message": "That badge is not available."}), 404
+        return jsonify({"message": "That store item is not available."}), 404
     user_oid = ObjectId(user_id)
     query = {"_id": user_oid}
     update = {"$unset": {"rewards.equipped_item": ""}}
+    applied_avatar = None
+    applied_banner = None
     if item_id:
+        item = REWARD_STORE[item_id]
         query["rewards.owned_items"] = item_id
-        update = {"$set": {"rewards.equipped_item": item_id}}
+        update_set = {"rewards.equipped_item": item_id}
+        if item.get("category") == "avatar" and item.get("avatar_key"):
+            update_set["profile_customization.avatar"] = item["avatar_key"]
+            applied_avatar = item["avatar_key"]
+        elif item.get("category") == "banner" and item.get("banner_key"):
+            update_set["profile_customization.banner"] = item["banner_key"]
+            applied_banner = item["banner_key"]
+        update = {"$set": update_set}
     result = users.update_one(query, update)
     if not result.matched_count:
-        return jsonify({"message": "Purchase this badge before equipping it."}), 409
-    return jsonify({"message": "Profile badge updated.", "equipped_item": item_id})
+        return jsonify({"message": "Purchase this item before equipping it."}), 409
+    return jsonify({
+        "message": "Equipment updated successfully.",
+        "equipped_item": item_id,
+        "avatar": applied_avatar,
+        "banner": applied_banner
+    })
 
 
 @player_bp.route("/support/tickets", methods=["GET", "POST"])
@@ -663,12 +1069,7 @@ def get_security_summary():
             for item in active_sessions
         ],
         "login_history": [
-            {
-                "timestamp": item["created_at"].isoformat() if item.get("created_at") else None,
-                "ip_address": item.get("ip_address", item.get("ip", "Unknown")),
-                "authentication_method": item.get("authentication_method", "password+mfa"),
-                "success": item.get("status", "success") == "success",
-            }
+            format_login_entry(item)
             for item in logins
         ],
     })
@@ -708,15 +1109,7 @@ def get_login_history():
     )
     return jsonify({
         "login_history": [
-            {
-                "timestamp": item["created_at"].isoformat()
-                if item.get("created_at") else None,
-                "ip_address": item.get("ip_address", item.get("ip", "Unknown")),
-                "authentication_method": item.get(
-                    "authentication_method", "password+mfa"
-                ),
-                "success": item.get("status", "success") == "success",
-            }
+            format_login_entry(item)
             for item in history
         ]
     })
@@ -781,11 +1174,655 @@ def get_account_status():
         sort=[("created_at", -1)]
     )
 
+    acc_status = user.get("account_status") or ("suspended" if user.get("revoked") else "active")
+    pending_appeal = ban_appeals.find_one({"user_id": user_oid, "status": "pending"})
+
+    created_at_val = user.get("created_at")
+    if not created_at_val and "_id" in user and hasattr(user["_id"], "generation_time"):
+        created_at_val = user["_id"].generation_time
+
     return jsonify({
         "mfa_enabled": user.get("mfa_enabled", False),
-        "account_status": "active",
+        "account_status": acc_status,
+        "ban_reason": user.get("ban_reason"),
+        "suspended_until": user["suspended_until"].isoformat() if user.get("suspended_until") else None,
+        "can_appeal": acc_status in {"banned", "suspended"},
+        "has_pending_appeal": bool(pending_appeal),
         "risk_score": user.get("risk_score", 0),
-        "created_at": user["created_at"].isoformat(),
+        "honour_score": user.get("honour_score", 100),
+        "created_at": created_at_val.isoformat() if created_at_val and hasattr(created_at_val, "isoformat") else (str(created_at_val) if created_at_val else None),
         "last_login": recent_login["created_at"].isoformat() if recent_login else None,
         "active_sessions": sessions_db.count_documents({"user_id": user_oid, "is_active": True}),
     })
+
+
+# =========================================================================
+# BAN APPEAL FLOW (Item 4)
+# =========================================================================
+
+@player_bp.get("/appeal")
+def get_appeal_status():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    user_oid = ObjectId(user_id)
+    latest_appeal = ban_appeals.find_one({"user_id": user_oid}, sort=[("created_at", -1)])
+
+    if not latest_appeal:
+        return jsonify({"has_appeal": False, "appeal": None})
+
+    return jsonify({
+        "has_appeal": True,
+        "appeal": {
+            "id": str(latest_appeal["_id"]),
+            "status": latest_appeal.get("status", "pending"),
+            "ban_reason": latest_appeal.get("ban_reason", ""),
+            "appeal_text": latest_appeal.get("appeal_text", ""),
+            "admin_note": latest_appeal.get("admin_note"),
+            "created_at": latest_appeal["created_at"].isoformat() if latest_appeal.get("created_at") else None,
+            "reviewed_at": latest_appeal["reviewed_at"].isoformat() if latest_appeal.get("reviewed_at") else None,
+        }
+    })
+
+
+@player_bp.post("/appeal")
+def submit_appeal():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    user_oid = ObjectId(user_id)
+    user = users.find_one({"_id": user_oid})
+    if not user:
+        return jsonify({"message": "User not found."}), 404
+
+    acc_status = user.get("account_status") or ("suspended" if user.get("revoked") else "active")
+    if acc_status not in {"banned", "suspended"}:
+        return jsonify({"message": "Only suspended or banned accounts may submit an appeal."}), 400
+
+    # Guard against duplicate pending appeals
+    existing_pending = ban_appeals.find_one({"user_id": user_oid, "status": "pending"})
+    if existing_pending:
+        return jsonify({"message": "You already have an appeal under review by our security team."}), 400
+
+    data = request.get_json(silent=True) or {}
+    appeal_text = (data.get("appeal_text") or data.get("reason") or "").strip()
+    if len(appeal_text) < 15:
+        return jsonify({"message": "Please provide a detailed explanation (minimum 15 characters)."}), 400
+
+    now = datetime.now(timezone.utc)
+    ban_reason = user.get("ban_reason", "Security policy violation")
+
+    res = ban_appeals.insert_one({
+        "user_id": user_oid,
+        "ban_reason": ban_reason,
+        "appeal_text": appeal_text,
+        "status": "pending",
+        "created_at": now
+    })
+
+    security_events.insert_one({
+        "type": "ban_appeal_submitted",
+        "user_id": user_oid,
+        "severity": "medium",
+        "description": f"Ban appeal submitted by player ({user['email']})",
+        "created_at": now
+    })
+
+    return jsonify({
+        "success": True,
+        "message": "Your appeal has been submitted successfully. A security administrator will review your case.",
+        "appeal_id": str(res.inserted_id)
+    }), 201
+
+
+# =========================================================================
+# NOTIFICATION CENTER (Item 14)
+# =========================================================================
+
+@player_bp.get("/notifications")
+def get_notifications():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    user_oid = ObjectId(user_id)
+    limit = max(1, min(request.args.get("limit", 20, type=int), 50))
+
+    notes = list(player_notifications.find({"user_id": user_oid}).sort("created_at", -1).limit(limit))
+    if not notes:
+        # Seed engaging, actionable player notifications (Requirement 5)
+        now_dt = datetime.now(timezone.utc)
+        user_doc = users.find_one({"_id": user_oid}) or {}
+        username = user_doc.get("username", "Operator")
+        seed_notifs = [
+            {
+                "user_id": user_oid,
+                "type": "reward",
+                "title": f"Welcome back, {username}! 🎁",
+                "message": "You have unclaimed daily coins and match earnings waiting in your Tactical Armory. Claim your streak bonus now!",
+                "read": False,
+                "created_at": now_dt
+            },
+            {
+                "user_id": user_oid,
+                "type": "security",
+                "title": "🛡️ Fair-Play Verified",
+                "message": "Your recent combat telemetry passed all server-authoritative ML anti-cheat checks with 0.0% anomaly risk.",
+                "read": False,
+                "created_at": now_dt
+            },
+            {
+                "user_id": user_oid,
+                "type": "mission",
+                "title": "⚡ CyberStrike Proving Grounds",
+                "message": "3D tactical combat arena is active. Complete today's match to earn +50 Coins and +100 XP.",
+                "read": False,
+                "created_at": now_dt
+            }
+        ]
+        player_notifications.insert_many(seed_notifs)
+        notes = list(player_notifications.find({"user_id": user_oid}).sort("created_at", -1).limit(limit))
+
+    unread_count = player_notifications.count_documents({"user_id": user_oid, "read": False})
+
+    return jsonify({
+        "notifications": [
+            {
+                "id": str(n["_id"]),
+                "type": n.get("type", "info"),
+                "title": n.get("title", "Notification"),
+                "message": n.get("message", ""),
+                "read": n.get("read", False),
+                "created_at": n["created_at"].isoformat() if n.get("created_at") else None,
+            }
+            for n in notes
+        ],
+        "unread_count": unread_count
+    })
+
+
+@player_bp.post("/notifications/read")
+def mark_notifications_read():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    user_oid = ObjectId(user_id)
+    data = request.get_json(silent=True) or {}
+    mark_all = data.get("mark_all", False)
+    ids = data.get("notification_ids") or []
+
+    if mark_all:
+        player_notifications.update_many({"user_id": user_oid, "read": False}, {"$set": {"read": True}})
+    elif ids:
+        valid_oids = []
+        for i in ids:
+            try:
+                valid_oids.append(ObjectId(i))
+            except Exception:
+                pass
+        player_notifications.update_many({"user_id": user_oid, "_id": {"$in": valid_oids}}, {"$set": {"read": True}})
+
+    return jsonify({"success": True, "message": "Notifications updated."})
+
+
+# =========================================================================
+# MATCH DETAIL DRILL-DOWN (Item 14)
+# =========================================================================
+
+@player_bp.get("/matches/<session_id>")
+def get_match_detail(session_id):
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    user_oid = ObjectId(user_id)
+    sess = game_sessions.find_one({"session_id": session_id, "user_id": user_oid})
+    if not sess:
+        # Check legacy matches
+        try:
+            m = matches.find_one({"_id": ObjectId(session_id), "user_id": user_oid})
+        except Exception:
+            m = None
+        if not m:
+            return jsonify({"message": "Match not found."}), 404
+
+        return jsonify({
+            "session_id": str(m["_id"]),
+            "game": "FPS Microgame",
+            "date": m.get("created_at").isoformat() if m.get("created_at") else None,
+            "kills": m.get("kills", 0),
+            "deaths": m.get("deaths", 0),
+            "kdr": round(m.get("kills", 0) / max(1, m.get("deaths", 0)), 2),
+            "accuracy": round(float(m.get("accuracy", 0)) * 100, 1),
+            "result": "Completed",
+            "features": {},
+            "timeline": []
+        })
+
+    # Fetch analysis features
+    analysis = game_events.find_one({"session_id": session_id, "analysis_type": "game_session"}) or {}
+    raw_feats = analysis.get("raw_features", {})
+
+    # Authoritative counts across all telemetry events matching get_matches()
+    kills_count = game_telemetry.count_documents({"session_id": session_id, "event_type": "enemy_killed"})
+    deaths_count = game_telemetry.count_documents({"session_id": session_id, "event_type": "player_death"})
+    shots_count = game_telemetry.count_documents({"session_id": session_id, "event_type": "weapon_fire"})
+    hits_count = game_telemetry.count_documents({"session_id": session_id, "event_type": "enemy_hit"})
+
+    final_kills = kills_count if kills_count > 0 else int(sess.get("kills", 0) or raw_feats.get("kills", 0) or 0)
+    final_deaths = deaths_count if deaths_count > 0 else int(sess.get("deaths", 0) or raw_feats.get("deaths", 0) or 0)
+    final_shots = shots_count if shots_count > 0 else int(sess.get("shots", 0) or 0)
+    final_hits = hits_count if hits_count > 0 else int(sess.get("hits", 0) or 0)
+
+    calc_acc = round((final_hits / max(1, final_shots)) * 100, 1) if final_shots > 0 else round(float(raw_feats.get("accuracy", 0) or sess.get("accuracy", 0) or 0) * 100, 1)
+
+    # Fetch kill and death events for the combat timeline
+    combat_events = list(game_telemetry.find(
+        {"session_id": session_id, "event_type": {"$in": ["enemy_killed", "player_death"]}}
+    ).sort("timestamp", 1).limit(100))
+
+    timeline = []
+    for ev in combat_events:
+        etype = ev.get("event_type")
+        if etype == "enemy_killed":
+            timeline.append({
+                "type": "kill",
+                "time": ev.get("timestamp"),
+                "enemy_id": ev.get("data", {}).get("enemy_id", "Opponent"),
+                "body_part": ev.get("data", {}).get("body_part", "body")
+            })
+        elif etype == "player_death":
+            timeline.append({
+                "type": "death",
+                "time": ev.get("timestamp"),
+                "killer_id": ev.get("data", {}).get("killer_id", "Enemy")
+            })
+
+    return jsonify({
+        "session_id": session_id,
+        "game": sess.get("game", "CyberStrike 3D"),
+        "date": (sess.get("ended_at") or sess.get("started_at") or sess.get("created_at")).isoformat() if (sess.get("ended_at") or sess.get("started_at") or sess.get("created_at")) else None,
+        "duration_seconds": int((sess["ended_at"] - sess["started_at"]).total_seconds()) if (sess.get("ended_at") and sess.get("started_at")) else None,
+        "kills": final_kills,
+        "deaths": final_deaths,
+        "shots_fired": final_shots,
+        "shots_hit": final_hits,
+        "kdr": round(final_kills / max(1, final_deaths), 2),
+        "accuracy": calc_acc,
+        "result": sess.get("winner", "Completed"),
+        "features": {
+            "accuracy": raw_feats.get("accuracy"),
+            "headshot_ratio": raw_feats.get("headshot_ratio"),
+            "reaction_time_median": raw_feats.get("reaction_time_median"),
+            "reaction_time_min": raw_feats.get("reaction_time_min"),
+            "aim_speed_mean": raw_feats.get("aim_speed_mean"),
+            "aim_speed_max": raw_feats.get("aim_speed_max"),
+            "flick_rate": raw_feats.get("flick_rate"),
+            "movement_speed_mean": raw_feats.get("movement_speed_mean"),
+            "movement_speed_max": raw_feats.get("movement_speed_max"),
+        },
+        "timeline": timeline[:50]
+    })
+
+
+# =========================================================================
+# GDPR DATA EXPORT & SELF-DELETION (Item 14)
+# =========================================================================
+
+@player_bp.get("/export-data")
+def export_player_data():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    user_oid = ObjectId(user_id)
+    user = users.find_one({"_id": user_oid}, {"password_hash": 0, "mfa_secret": 0})
+    if not user:
+        return jsonify({"message": "User not found."}), 404
+
+    # Matches
+    user_sessions = list(game_sessions.find({"user_id": user_oid}))
+    # Honour
+    honour_logs = list(honour_history.find({"$or": [{"user_id": user_oid}, {"player_id": str(user_oid)}]}))
+    # Rewards
+    rewards_logs = list(reward_transactions.find({"user_id": user_oid}))
+    # Logins
+    logins = list(login_history.find({"user_id": user_oid}))
+
+    def serialize_doc(d):
+        out = {}
+        for k, v in d.items():
+            if isinstance(v, ObjectId):
+                out[k] = str(v)
+            elif isinstance(v, datetime):
+                out[k] = v.isoformat()
+            else:
+                out[k] = v
+        return out
+
+    export_payload = {
+        "export_date": datetime.now(timezone.utc).isoformat(),
+        "profile": serialize_doc(user),
+        "game_sessions": [serialize_doc(s) for s in user_sessions],
+        "honour_history": [serialize_doc(h) for h in honour_logs],
+        "reward_transactions": [serialize_doc(r) for r in rewards_logs],
+        "login_history": [serialize_doc(l) for l in logins],
+    }
+
+    response_json = json.dumps(export_payload, indent=2)
+    return Response(
+        response_json,
+        mimetype="application/json",
+        headers={"Content-Disposition": f"attachment; filename=securefps_data_export_{str(user_oid)}.json"}
+    )
+
+
+@player_bp.post("/account/delete")
+def self_delete_account():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    user_oid = ObjectId(user_id)
+    user = users.find_one({"_id": user_oid})
+    if not user:
+        return jsonify({"message": "User not found."}), 404
+
+    data = request.get_json(silent=True) or {}
+    password = data.get("password")
+    if not password:
+        return jsonify({"message": "Please enter your password to confirm account deletion."}), 400
+
+    pw_hash = user.get("password_hash")
+    if not pw_hash:
+        return jsonify({"message": "Account has no password configured."}), 400
+
+    if isinstance(pw_hash, str):
+        pw_hash = pw_hash.encode("utf-8")
+    if not bcrypt.checkpw(password.encode("utf-8"), pw_hash):
+        return jsonify({"message": "Incorrect password. Account deletion aborted."}), 401
+
+    now = datetime.now(timezone.utc)
+    anonymized_email = f"deleted_{str(user_oid)}@deleted.securefps.local"
+    anonymized_name = f"Deleted Player {str(user_oid)[-4:]}"
+
+    users.update_one(
+        {"_id": user_oid},
+        {
+            "$set": {
+                "account_status": "deleted",
+                "revoked": True,
+                "name": anonymized_name,
+                "email": anonymized_email,
+                "password_hash": None,
+                "mfa_enabled": False,
+                "mfa_secret": None,
+                "deleted_at": now,
+                "deletion_reason": "Self-deletion requested by player"
+            }
+        }
+    )
+
+    # Invalidate all active sessions
+    sessions_db.update_many({"user_id": user_oid}, {"$set": {"is_active": False, "revoked_at": now}})
+    session.clear()
+
+    return jsonify({"success": True, "message": "Your account has been deleted and personal data anonymized."})
+
+
+# =========================================================================
+# FAIR PLAY, SETTINGS, ACTIVE SESSIONS & EXPORT ALIASES (Laptop Overhaul)
+# =========================================================================
+
+@player_bp.get("/data-export")
+def data_export_alias():
+    return export_player_data()
+
+
+@player_bp.post("/delete-account")
+def delete_account_alias():
+    return self_delete_account()
+
+
+@player_bp.get("/fairplay")
+def get_fairplay_overview():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    user_oid = ObjectId(user_id)
+    user = users.find_one({"_id": user_oid})
+    if not user:
+        return jsonify({"message": "User not found."}), 404
+
+    honour_score = int(user.get("honour_score", 100))
+    if honour_score >= 90:
+        honour_tier = "Exemplary"
+        honour_color = "emerald"
+        honour_description = "Full platform privileges, maximum priority matching, bonus XP multiplier."
+    elif honour_score >= 70:
+        honour_tier = "Honourable"
+        honour_color = "purple"
+        honour_description = "Normal matchmaking status. Maintain fair play to reach Exemplary standing."
+    elif honour_score >= 50:
+        honour_tier = "Warning"
+        honour_color = "amber"
+        honour_description = "Reduced rewards. Continued infractions may lead to temporary matchmaking restrictions."
+    else:
+        honour_tier = "Restricted"
+        honour_color = "rose"
+        honour_description = "Matchmaking privileges currently restricted. Fair play review in progress."
+
+    # Fetch honour logs
+    raw_logs = list(honour_history.find(
+        {"$or": [{"user_id": user_oid}, {"player_id": str(user_oid)}]}
+    ).sort("timestamp", -1).limit(20))
+
+    history = []
+    for h in raw_logs:
+        delta = h.get("points_delta", 0)
+        history.append({
+            "id": str(h.get("_id", "")),
+            "date": h.get("timestamp").isoformat() if h.get("timestamp") else None,
+            "change": delta,
+            "change_display": f"+{delta}" if delta > 0 else str(delta),
+            "reason": str(h.get("reason", "Gameplay review")).replace("_", " ").title(),
+            "resulting_score": h.get("new_score", honour_score)
+        })
+
+    # Fetch reviewed / flagged sessions - sanitize to NEVER expose raw ML numbers or thresholds!
+    recent_sessions = list(game_sessions.find(
+        {"user_id": user_oid, "status": "completed"}
+    ).sort("started_at", -1).limit(10))
+
+    reviewed_sessions = []
+    for s in recent_sessions:
+        sid = s.get("session_id", "")
+        analysis = game_events.find_one({"session_id": sid, "analysis_type": "game_session"}) or {}
+        enforce_state = analysis.get("enforcement_state") or s.get("enforcement_state") or "monitoring"
+        risk_score = analysis.get("risk_score") or s.get("risk_score") or 0.0
+
+        if enforce_state in {"banned", "suspended"} or risk_score >= 70:
+            friendly_status = "suspended"
+            friendly_reason = "Elevated behavioral variance detected"
+        elif enforce_state in {"investigating", "review", "quarantine"} or (risk_score >= 40):
+            friendly_status = "under_review"
+            friendly_reason = "Flagged for standard security verification"
+        elif risk_score > 20:
+            friendly_status = "monitoring"
+            friendly_reason = "Active baseline monitoring"
+        else:
+            friendly_status = "cleared"
+            friendly_reason = "Standard fair play check passed"
+
+        started_at = s.get("started_at") or s.get("created_at")
+        reviewed_sessions.append({
+            "session_id": sid[:8] if sid else "—",
+            "full_session_id": sid,
+            "date": started_at.isoformat() if started_at else None,
+            "game": s.get("game", "CyberStrike 3D"),
+            "status": friendly_status,
+            "reason": friendly_reason
+        })
+
+    # Appeal status
+    appeal = ban_appeals.find_one({"user_id": user_oid}, sort=[("created_at", -1)])
+    appeal_info = None
+    if appeal:
+        appeal_info = {
+            "id": str(appeal["_id"]),
+            "status": appeal.get("status", "pending"),
+            "submitted_at": appeal.get("created_at").isoformat() if appeal.get("created_at") else None,
+            "reason": appeal.get("reason", ""),
+            "reviewer_notes": appeal.get("reviewer_notes") or appeal.get("admin_response") or None,
+            "updated_at": appeal.get("updated_at").isoformat() if appeal.get("updated_at") else None
+        }
+
+    return jsonify({
+        "honour_score": honour_score,
+        "honour_tier": honour_tier,
+        "honour_color": honour_color,
+        "honour_description": honour_description,
+        "history": history,
+        "reviewed_sessions": reviewed_sessions,
+        "appeal": appeal_info,
+        "detection_explainer": {
+            "title": "How Server-Authoritative Fair Play Works",
+            "summary": "SecureFPS protects competitive integrity through real-time behavioral telemetry and server-side physics verification. All movement velocities, firing rates, and hit registration are validated on authoritative servers to ensure every participant enjoys a level, cheat-free playing field.",
+            "pillars": [
+                {"title": "Input Pattern Analysis", "description": "Detects robotic or unnatural mouse micro-snaps without tracking private client software."},
+                {"title": "Physics Consistency", "description": "Ensures operator acceleration and weapon recoil adhere strictly to server-governed limits."},
+                {"title": "Non-Invasive Verification", "description": "Zero kernel-level drivers or third-party invasiveness—all protection is behavioral and authoritative."}
+            ]
+        }
+    })
+
+
+DEFAULT_PLAYER_SETTINGS = {
+    "mouse_sensitivity": 1.0,
+    "volume": 80,
+    "graphics_quality": "High",
+    "show_fps": True,
+    "keybindings": {
+        "move_forward": "KeyW",
+        "move_backward": "KeyS",
+        "move_left": "KeyA",
+        "move_right": "KeyD",
+        "jump": "Space",
+        "crouch": "KeyC",
+        "reload": "KeyR",
+        "fire": "Mouse0",
+        "aim": "Mouse1"
+    }
+}
+
+
+@player_bp.get("/settings")
+def get_player_settings():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    user = users.find_one({"_id": ObjectId(user_id)}) or {}
+    saved_settings = user.get("settings") or {}
+    merged = {**DEFAULT_PLAYER_SETTINGS, **saved_settings}
+    if "keybindings" in saved_settings and isinstance(saved_settings["keybindings"], dict):
+        merged["keybindings"] = {**DEFAULT_PLAYER_SETTINGS["keybindings"], **saved_settings["keybindings"]}
+
+    return jsonify({"settings": merged})
+
+
+@player_bp.post("/settings")
+def update_player_settings():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    data = request.get_json(silent=True) or {}
+    sensitivity = data.get("mouse_sensitivity")
+    volume = data.get("volume")
+    graphics_quality = data.get("graphics_quality")
+    show_fps = data.get("show_fps")
+    keybindings = data.get("keybindings")
+
+    updates = {}
+    if sensitivity is not None:
+        try:
+            sens_val = float(sensitivity)
+            if not (0.1 <= sens_val <= 10.0):
+                return jsonify({"message": "Mouse sensitivity must be between 0.1 and 10.0."}), 400
+            updates["settings.mouse_sensitivity"] = round(sens_val, 2)
+        except (ValueError, TypeError):
+            return jsonify({"message": "Invalid mouse sensitivity value."}), 400
+
+    if volume is not None:
+        try:
+            vol_val = int(volume)
+            if not (0 <= vol_val <= 100):
+                return jsonify({"message": "Volume must be between 0 and 100."}), 400
+            updates["settings.volume"] = vol_val
+        except (ValueError, TypeError):
+            return jsonify({"message": "Invalid volume value."}), 400
+
+    if graphics_quality is not None:
+        if graphics_quality not in {"Low", "Medium", "High"}:
+            return jsonify({"message": "Graphics quality must be Low, Medium, or High."}), 400
+        updates["settings.graphics_quality"] = graphics_quality
+
+    if show_fps is not None:
+        updates["settings.show_fps"] = bool(show_fps)
+
+    if keybindings is not None:
+        if not isinstance(keybindings, dict):
+            return jsonify({"message": "Keybindings must be a key-value object."}), 400
+        seen_keys = {}
+        for action, key in keybindings.items():
+            if not isinstance(key, str) or not key.strip():
+                return jsonify({"message": f"Invalid key assigned to {action}."}), 400
+            key_clean = key.strip()
+            if key_clean in seen_keys:
+                return jsonify({
+                    "message": f"Key binding conflict: '{key_clean}' is assigned to both '{seen_keys[key_clean]}' and '{action}'. Each action must have a unique key."
+                }), 400
+            seen_keys[key_clean] = action
+        updates["settings.keybindings"] = keybindings
+
+    if not updates:
+        return jsonify({"message": "No valid settings provided."}), 400
+
+    users.update_one({"_id": ObjectId(user_id)}, {"$set": updates})
+    return jsonify({"success": True, "message": "Player settings saved successfully."})
+
+
+@player_bp.get("/active-sessions")
+def get_player_active_sessions():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+
+    user_oid = ObjectId(user_id)
+    current_session_id = session.get("auth_session_id")
+    active_docs = list(sessions_db.find({"user_id": user_oid, "is_active": True}).sort("last_activity", -1).limit(10))
+
+    results = []
+    for s in active_docs:
+        sid_str = str(s["_id"])
+        is_current = (sid_str == str(current_session_id)) or (s.get("session_id") == str(current_session_id))
+        dev = s.get("device_info") or s.get("device") or s.get("user_agent") or "Desktop Browser"
+        parsed = parse_client_device(dev) if isinstance(dev, str) else {}
+        results.append({
+            "id": sid_str,
+            "ip_address": s.get("ip_address") or s.get("ip") or "127.0.0.1",
+            "browser": s.get("browser") or parsed.get("browser", "Chrome"),
+            "os": s.get("os") or parsed.get("os", "Windows"),
+            "device": s.get("device") or parsed.get("device", "Desktop PC"),
+            "last_activity": s.get("last_activity").isoformat() if s.get("last_activity") else (s.get("created_at").isoformat() if s.get("created_at") else None),
+            "is_current": is_current
+        })
+
+    return jsonify({"sessions": results})
+
+

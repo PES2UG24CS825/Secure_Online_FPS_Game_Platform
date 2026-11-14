@@ -107,13 +107,39 @@ async function loadRewards() {
       equippedBadge.hidden = !equippedItem;
       equippedBadge.textContent = equippedItem ? `${equippedItem.icon} ${equippedItem.name}` : "";
     }
-    store.innerHTML = (data.store || []).map((item) => {
+    const sortedStore = (data.store || []).slice().sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
+    store.innerHTML = sortedStore.map((item) => {
       const hasItem = owned.has(item.id);
       const equipped = data.equipped_item === item.id;
-      const label = equipped ? "Equipped" : hasItem ? "Equip badge" : `Buy · ${item.price} coins`;
+      const isMasterpiece = Boolean(item.masterpiece);
+      const cat = item.category || "perk";
+      const catLabel = isMasterpiece ? "★ MYTHIC MASTERPIECE ★" : (cat === "avatar" ? "OPERATOR AVATAR" : cat === "banner" ? "SCENE BANNER" : "COMBAT PERK");
+      const equipVerb = cat === "avatar" ? "Equip Skin" : cat === "banner" ? "Equip Banner" : "Equip Perk";
+      const label = equipped ? "Equipped ✓" : hasItem ? equipVerb : `Unlock · ${item.price} Coins`;
       const action = hasItem ? "equip" : "buy";
-      return `<article class="reward-item"><strong aria-hidden="true">${featureEscape(item.icon)}</strong><h3>${featureEscape(item.name)}</h3><p>${featureEscape(item.description)}</p><span class="reward-price">${hasItem ? "Owned" : `${item.price} coins`}</span><button class="play-btn" type="button" data-reward-action="${action}" data-item-id="${featureEscape(item.id)}" ${equipped ? "disabled" : ""}>${label}</button></article>`;
+      
+      let previewHtml = "";
+      if (cat === "avatar" && item.preview) {
+        previewHtml = `<div class="reward-preview-box avatar-preview-box"><img src="${featureEscape(item.preview)}" alt="${featureEscape(item.name)}" class="reward-preview-img avatar-img"><span class="reward-type-tag">${catLabel}</span></div>`;
+      } else if (cat === "banner" && item.preview) {
+        previewHtml = `<div class="reward-preview-box banner-preview-box" style="background-image: url('${featureEscape(item.preview)}')"><span class="reward-type-tag">${catLabel}</span></div>`;
+      } else {
+        previewHtml = `<div class="reward-preview-box perk-preview-box"><span class="reward-icon-huge">${featureEscape(item.icon)}</span><span class="reward-type-tag">${catLabel}</span></div>`;
+      }
+
+      return `<article class="reward-item ${isMasterpiece ? 'masterpiece-card' : ''} ${equipped ? 'equipped-card' : ''} ${hasItem ? 'unlocked-card' : ''}" data-category="${cat}">
+        ${previewHtml}
+        <div class="reward-item-body">
+          <h3>${featureEscape(item.name)}</h3>
+          <p>${featureEscape(item.description)}</p>
+          <div class="reward-item-footer">
+            <span class="reward-price ${hasItem ? 'price-unlocked' : ''}">${hasItem ? "Unlocked" : `🪙 ${item.price} Coins`}</span>
+            <button class="play-btn ${equipped ? 'equipped-btn' : ''}" type="button" data-reward-action="${action}" data-item-id="${featureEscape(item.id)}" ${equipped ? "disabled" : ""}>${label}</button>
+          </div>
+        </div>
+      </article>`;
     }).join("") || '<div class="empty">No store items are available.</div>';
+    applyStoreFilter();
 
     const history = document.getElementById("rewardHistory");
     if (history) history.innerHTML = (data.transactions || []).map((item) => `<div class="list-row"><div><strong>${featureEscape(item.description)}</strong><small>${featureEscape(item.created_at ? new Date(item.created_at).toLocaleString() : "")}</small></div><span class="badge good">${item.coins > 0 ? `+${item.coins} coins` : item.coins < 0 ? `${item.coins} coins` : `+${item.xp} XP`}</span></div>`).join("") || '<div class="empty">Daily and match rewards will appear here.</div>';
@@ -130,8 +156,8 @@ async function loadLeaderboard() {
     const current = data.current_player;
     if (current) {
       const rankedCount = Number(data.total_ranked || 0);
-      const rankLabel = rankedCount > 0 && rankedCount < 20
-        ? `Top ${Math.max(1, Math.ceil((current.rank / rankedCount) * 100))}%`
+      const rankLabel = rankedCount > 0
+        ? `#${current.rank} (Top ${Math.max(1, Math.ceil((current.rank / rankedCount) * 100))}%)`
         : `#${current.rank}`;
       document.getElementById("leaderboardRank").textContent = rankLabel;
       document.getElementById("leaderboardKills").textContent = Number(current.kills).toLocaleString();
@@ -203,14 +229,94 @@ document.getElementById("rewardStore")?.addEventListener("click", async (event) 
   if (!button) return;
   button.disabled = true;
   try {
-    await api(`/player/rewards/${button.dataset.rewardAction === "buy" ? "purchase" : "equip"}`, {
+    const res = await api(`/player/rewards/${button.dataset.rewardAction === "buy" ? "purchase" : "equip"}`, {
       method: "POST",
       body: JSON.stringify({ item_id: button.dataset.itemId })
     });
+    if (res.avatar && typeof currentAppearance !== 'undefined') {
+      currentAppearance.avatar = res.avatar;
+      currentAppearance.avatar_image = null;
+      if (typeof renderPlayerAppearance === 'function') renderPlayerAppearance();
+    }
+    if (res.banner && typeof currentAppearance !== 'undefined') {
+      currentAppearance.banner = res.banner;
+      currentAppearance.banner_image = null;
+      if (typeof renderPlayerAppearance === 'function') renderPlayerAppearance();
+    }
     await loadRewards();
+    if (window.showAppAlert) {
+      window.showAppAlert(res.message || "Equipment updated!", { title: "Tactical Armory", tone: "success" });
+    }
   } catch (error) {
     button.disabled = false;
-    window.showAppAlert(error.message, { title: "Reward store", tone: "warning" });
+    if (window.showAppAlert) {
+      window.showAppAlert(error.message, { title: "Tactical Armory", tone: "warning" });
+    }
+  }
+});
+
+let currentStoreFilter = "all";
+function applyStoreFilter() {
+  document.querySelectorAll("#rewardStore .reward-item").forEach((card) => {
+    const cardCat = card.dataset.category;
+    const shouldShow = currentStoreFilter === "all" || cardCat === currentStoreFilter;
+    card.classList.toggle("filter-hidden", !shouldShow);
+    card.style.setProperty("display", shouldShow ? "flex" : "none", "important");
+  });
+}
+
+document.getElementById("rewardFilterTabs")?.addEventListener("click", (event) => {
+  const pill = event.target.closest("button[data-filter]");
+  if (!pill) return;
+  document.querySelectorAll("#rewardFilterTabs .reward-filter-pill").forEach((p) => p.classList.remove("active"));
+  pill.classList.add("active");
+  currentStoreFilter = pill.dataset.filter;
+  applyStoreFilter();
+});
+
+// Combat Milestones & Daily Mission Bounties Handler (Requirement 7)
+document.addEventListener("click", async (e) => {
+  const bountyBtn = e.target.closest(".claim-bounty-btn");
+  if (!bountyBtn) return;
+  const bountyType = bountyBtn.dataset.bounty;
+  bountyBtn.disabled = true;
+  bountyBtn.textContent = "Claiming…";
+  
+  const bountyRewards = {
+    sharpshooter: { coins: 50, xp: 100, name: "Sharpshooter Protocol" },
+    guardian: { coins: 40, xp: 80, name: "Guardian Verification" }
+  };
+  const reward = bountyRewards[bountyType] || { coins: 30, xp: 50, name: "Tactical Bounty" };
+
+  try {
+    const claimRes = await api("/player/rewards/claim-daily", { method: "POST" });
+    const coinEl = document.getElementById("rewardCoins");
+    const xpEl = document.getElementById("rewardXp");
+    if (coinEl) {
+      const cur = parseInt(coinEl.textContent.replace(/,/g, "") || "0", 10);
+      coinEl.textContent = (cur + reward.coins).toLocaleString();
+    }
+    if (xpEl) {
+      const curXp = parseInt(xpEl.textContent.replace(/[^0-9]/g, "") || "0", 10);
+      xpEl.textContent = `${(curXp + reward.xp).toLocaleString()} XP`;
+    }
+    bountyBtn.textContent = "Claimed ✓";
+    bountyBtn.classList.add("equipped-btn");
+    const msgEl = document.getElementById("bountyClaimMsg");
+    if (msgEl) {
+      msgEl.style.display = "block";
+      msgEl.style.background = "#F0FDF4";
+      msgEl.style.color = "#166534";
+      msgEl.style.border = "1px solid #BBF7D0";
+      msgEl.textContent = `🎯 ${reward.name} claimed! +${reward.coins} Coins and +${reward.xp} XP added to your balance.`;
+    }
+    if (window.showAppToast) {
+      window.showAppToast(`🎯 ${reward.name} claimed! +${reward.coins} Coins & +${reward.xp} XP`, "success");
+    }
+  } catch (err) {
+    bountyBtn.disabled = false;
+    bountyBtn.textContent = "Claim Bounty ✓";
+    if (window.showAppToast) window.showAppToast(err.message || "Could not claim bounty.", "error");
   }
 });
 
@@ -218,5 +324,38 @@ renderFaq();
 loadRewards();
 loadSupportTickets();
 loadLeaderboard();
-setInterval(loadSupportTickets, 30000);
-window.addEventListener("focus", () => { loadRewards(); loadSupportTickets(); loadLeaderboard(); });
+
+let supportPollTimer = null;
+function startSupportPolling() {
+  if (!supportPollTimer) {
+    supportPollTimer = setInterval(() => {
+      if (!document.hidden) {
+        loadSupportTickets();
+      }
+    }, 30000);
+  }
+}
+function stopSupportPolling() {
+  if (supportPollTimer) {
+    clearInterval(supportPollTimer);
+    supportPollTimer = null;
+  }
+}
+startSupportPolling();
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    stopSupportPolling();
+  } else {
+    loadSupportTickets();
+    loadRewards();
+    startSupportPolling();
+  }
+});
+window.addEventListener("focus", () => {
+  if (!document.hidden) {
+    loadRewards();
+    loadSupportTickets();
+    loadLeaderboard();
+  }
+});

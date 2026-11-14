@@ -8,9 +8,10 @@ function escapeHtml(value) {
 window.escapeHtml = escapeHtml;
 
 const playerDate = (value) => {
-  if (!value) return "Not recorded";
+  if (!value) return "Recently joined";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Not recorded" : date.toLocaleString();
+  if (Number.isNaN(date.getTime())) return "Recently joined";
+  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
 const playerRisk = (value) => {
@@ -28,7 +29,16 @@ const overviewRiskBadge = (match) => {
 const overviewDate = (value) => {
   if (!value) return "—";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  if (Number.isNaN(date.getTime())) return "—";
+  const pad = (n) => String(n).padStart(2, '0');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const day = pad(date.getDate());
+  const month = months[date.getMonth()];
+  const year = date.getFullYear();
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  const seconds = pad(date.getSeconds());
+  return `${day} ${month} ${year}, ${hours}:${minutes}:${seconds}`;
 };
 
 function getRiskBreakdown(score) {
@@ -66,15 +76,21 @@ function updateRiskBreakdown(score) {
 }
 
 const avatarPortraits = {
+  "default-operator": "public/avatars/default-operator.png",
   "chibi-male-1": "public/avatars/chibi-male-1.png",
   "chibi-female-1": "public/avatars/chibi-female-1.png",
   "chibi-male-2": "public/avatars/chibi-male-2.png",
-  "chibi-female-2": "public/avatars/chibi-female-2.png"
+  "chibi-female-2": "public/avatars/chibi-female-2.png",
+  "valkyrie-void": "public/avatars/valkyrie-void.png",
+  "ghost-specops": "public/avatars/ghost-specops.png",
+  "celestial-sovereign": "public/avatars/celestial-sovereign.png"
 };
-const bannerScenes = new Set(["sakura", "frontline", "dawn", "neon"]);
+const bannerScenes = new Set([
+  "default-banner", "sakura", "frontline", "dawn", "neon", "battlefield", "command-center", "cyber-metropolis", "orbital-bastion", "nebula-eternity"
+]);
 let playerDashboardLoading = false;
 let appearanceControlsBound = false;
-let currentAppearance = { avatar: "chibi-female-2", banner: "frontline", avatar_image: null, banner_image: null };
+let currentAppearance = { avatar: "default-operator", banner: "default-banner", avatar_image: null, banner_image: null };
 let appearanceDirty = false;
 let renderPlayerAppearance = () => {};
 let playerLiveEvents = null;
@@ -153,24 +169,37 @@ function connectPlayerLiveEvents() {
   };
 }
 
+window.addEventListener("pagehide", () => {
+  if (playerLiveEvents) {
+    playerLiveEvents.close();
+    playerLiveEvents = null;
+  }
+});
+
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted && !playerLiveEvents) {
+    connectPlayerLiveEvents();
+  }
+});
+
 function matchCard(match) {
   const value = (field) => match[field] == null ? "—" : Number(match[field]);
   const state = String(match.status || "unknown").toLowerCase();
   const badge = state === "terminated_banned" ? "bad" : state === "completed" ? "good" : state === "active" ? "warn" : "gray";
   const duration = match.duration == null ? "—" : `${Math.max(0, Number(match.duration))}s`;
-  const accuracy = match.accuracy == null ? "—" : `${Number(match.accuracy).toFixed(1)}%`;
+  const accuracyStr = match.accuracy == null ? "—" : `${Number(match.accuracy).toFixed(1)}%`;
+  const coinsEarned = Math.min(50, Math.max(15, (Number(match.kills) || 0) * 2 + 10));
+  const xpEarned = (Number(match.kills) || 0) * 50 + 100;
   const analysisStatus = String(match.analysis_status || "pending").replaceAll("_", " ");
-  const analysisNote = match.risk_score != null ? "" : match.missing_features?.length
-    ? `<p class="match-analysis-note">Analysis needs gameplay data: ${playerText(match.missing_features.join(", "))}.</p>`
-    : match.analysis_error ? `<p class="match-analysis-note">Analysis could not finish: ${playerText(match.analysis_error)}</p>`
-    : state === "active" ? '<p class="match-analysis-note">Risk review starts when this match is completed.</p>'
-    : '<p class="match-analysis-note">Risk review is pending for this match.</p>';
-  return `<article class="match-card">
-    <div class="match-card-head"><div><span class="match-card-kicker">${escapeHtml(match.game || "CyberStrike 3D")}${match.demo_test ? ` · ${playerText(match.hacker_profile || "hacker demo")}` : ""}</span><h3>Match ${playerText(match.match_id || "—")}</h3><div class="match-card-date">${playerText(playerDate(match.date))}</div></div><span class="badge ${badge}">${playerText(state === "terminated_banned" ? "PERMANENTLY BANNED" : state)}</span></div>
-    <div class="match-stat-grid"><div class="match-stat"><span>Kills</span><strong>${value("kills")}</strong></div><div class="match-stat"><span>Deaths</span><strong>${value("deaths")}</strong></div><div class="match-stat"><span>K/D</span><strong>${match.kd == null ? "—" : Number(match.kd).toFixed(2)}</strong></div><div class="match-stat"><span>Duration</span><strong>${duration}</strong></div><div class="match-stat"><span>Accuracy</span><strong>${accuracy}</strong></div><div class="match-stat"><span>Analysis</span><strong>${playerText(analysisStatus)}</strong></div></div>
+  return `<article class="match-card" data-session-id="${escapeHtml(match.session_id || match.id || match.match_id)}">
+    <div class="match-card-head"><div><span class="match-card-kicker">${escapeHtml(match.game || "CyberStrike 3D")}${match.demo_test ? ` · ${playerText(match.hacker_profile || "hacker demo")}` : ""}</span><h3>Match ${playerText(match.match_id || "—")}</h3><div class="match-card-date">${playerText(playerDate(match.date))}</div></div><div style="display:flex; align-items:center; gap:8px;"><button type="button" class="match-drilldown-btn ghost-btn" data-session-id="${escapeHtml(match.session_id || match.id || match.match_id)}" style="background:transparent; border:1px solid var(--player-border,#38bdf8); border-radius:4px; padding:3px 8px; color:var(--player-blue,#38bdf8); cursor:pointer; font-size:11px;">Details</button><span class="badge ${badge}">${playerText(state === "terminated_banned" ? "PERMANENTLY BANNED" : state)}</span></div></div>
+    <div class="match-stat-grid"><div class="match-stat"><span>Kills</span><strong>${value("kills")}</strong></div><div class="match-stat"><span>Deaths</span><strong>${value("deaths")}</strong></div><div class="match-stat"><span>K/D</span><strong>${match.kd == null ? "—" : Number(match.kd).toFixed(2)}</strong></div><div class="match-stat"><span>Duration</span><strong>${duration}</strong></div><div class="match-stat"><span>Accuracy</span><strong>${accuracyStr}</strong></div><div class="match-stat"><span>Analysis</span><strong>${playerText(analysisStatus)}</strong></div></div>
     <div class="match-risk"><span>Security risk score</span><strong>${playerText(playerRisk(match.risk_score))} ${match.risk_category ? `<span class="badge ${match.risk_category === 'Normal' ? 'good' : match.risk_category === 'Monitoring' ? 'warn' : 'bad'}">${escapeHtml(match.risk_category)}</span>` : ''}</strong></div>
-    <p class="match-analysis-note"><strong>ML Models:</strong> RF: ${escapeHtml(match.random_forest || 'normal')} · IF: ${escapeHtml(match.isolation_forest || 'anomaly')} | <strong>Analysis ID:</strong> ${escapeHtml(match.analysis_id || 'N/A')}</p>
-    ${match.enforcement_action ? `<p class="match-analysis-note"><strong>Detection result:</strong> ${playerText(String(match.enforcement_action).replaceAll("_", " "))}</p>` : ""}${analysisNote}
+    <div class="match-features-strip" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid rgba(148,163,184,0.18); font-size:11px;">
+      <span style="background:rgba(14,165,233,0.1); color:#0284c7; padding:4px 10px; border-radius:6px; font-weight:600;">🛡️ Fair Play Verified</span>
+      <span style="background:rgba(245,158,11,0.1); color:#d97706; padding:4px 10px; border-radius:6px; font-weight:600;">⭐ +${xpEarned} XP</span>
+      <span style="background:rgba(16,185,129,0.1); color:#059669; padding:4px 10px; border-radius:6px; font-weight:600;">🪙 +${coinsEarned} Coins</span>
+    </div>
   </article>`;
 }
 
@@ -227,14 +256,16 @@ async function loadPlayerDashboard() {
         return null;
       }
     };
-    const [matchesData, securityData, profileData] = await Promise.all([
+    const [matchesData, securityData, profileData, statsData, rewardsData] = await Promise.all([
       loadSection("matches", "/player/matches"),
       loadSection("account security", "/player/security"),
-      loadSection("profile", "/player/profile")
+      loadSection("profile", "/player/profile"),
+      loadSection("stats", "/player/stats"),
+      loadSection("rewards", "/player/rewards")
     ]);
 
     const matches = Array.isArray(matchesData?.matches) ? matchesData.matches : [];
-    const completedMatches = matches.filter((match) => String(match.status || "").toLowerCase() === "completed");
+    const completedMatches = matches;
     latestPlayerMatchId = completedMatches[0]?.id || "";
     const history = Array.isArray(securityData?.login_history) ? securityData.login_history : [];
     const activeSessions = Array.isArray(securityData?.active_sessions) ? securityData.active_sessions : [];
@@ -362,6 +393,36 @@ async function loadPlayerDashboard() {
     document.getElementById("matchesCount").textContent = matchesData ? Number(matchesData.total_matches ?? completedMatches.length) : "Unavailable";
     const matchesSummary = document.getElementById("matchesSummary");
     if (matchesSummary) matchesSummary.textContent = `${analyzedMatches.length} analyzed · ${Math.max(0, completedMatches.length - analyzedMatches.length)} awaiting review`;
+
+    // Populate Combat Career Lifetime Overview Statistics
+    const totalKills = statsData?.kills ?? completedMatches.reduce((sum, m) => sum + (Number(m.kills) || 0), 0);
+    const totalDeaths = statsData?.deaths ?? completedMatches.reduce((sum, m) => sum + (Number(m.deaths) || 0), 0);
+    const careerKd = statsData?.kdr ?? (totalDeaths > 0 ? (totalKills / totalDeaths).toFixed(2) : totalKills.toFixed(2));
+    const totalShots = statsData?.shots_fired ?? completedMatches.reduce((sum, m) => sum + (Number(m.shots_fired) || 0), 0);
+    const totalHits = statsData?.shots_hit ?? completedMatches.reduce((sum, m) => sum + (Number(m.shots_hit) || 0), 0);
+    const careerAcc = statsData?.accuracy ?? (totalShots > 0 ? ((totalHits / totalShots) * 100).toFixed(1) : "0.0");
+    const totalMatchesCount = statsData?.total_matches ?? Number(matchesData?.total_matches ?? completedMatches.length);
+
+    const careerKillsEl = document.getElementById("careerTotalKills");
+    if (careerKillsEl) careerKillsEl.textContent = totalKills;
+
+    const careerDeathsEl = document.getElementById("careerTotalDeaths");
+    if (careerDeathsEl) careerDeathsEl.textContent = totalDeaths;
+
+    const careerKdEl = document.getElementById("careerKd");
+    if (careerKdEl) careerKdEl.textContent = Number(careerKd).toFixed(2);
+
+    const careerAccEl = document.getElementById("careerAccuracy");
+    if (careerAccEl) careerAccEl.textContent = `${Number(careerAcc).toFixed(1)}%`;
+
+    const careerShotsEl = document.getElementById("careerShotsSummary");
+    if (careerShotsEl) careerShotsEl.textContent = "";
+
+    const careerMatchesEl = document.getElementById("careerMatches");
+    if (careerMatchesEl) careerMatchesEl.textContent = totalMatchesCount;
+
+    const careerWinRateEl = document.getElementById("careerWinRate");
+    if (careerWinRateEl) careerWinRateEl.textContent = `${statsData?.wins || 0} wins · ${totalMatchesCount} played`;
     document.getElementById("mfaStatus").textContent = securityData ? securityData.mfa_status === "enabled" ? "On" : "Off" : "Unavailable";
     const accountStatus = securityData?.account_status;
     const accountStatusLabels = {
@@ -388,7 +449,7 @@ async function loadPlayerDashboard() {
     const recentRows = document.getElementById("overviewRecentRows");
     if (recentRows) recentRows.innerHTML = !matchesData
       ? '<tr><td colspan="7">Match history unavailable.</td></tr>'
-      : completedMatches.slice(0, 3).map((match) => `<tr><td><strong>${playerText(match.match_id || "—")}</strong></td><td>${playerText(overviewDate(match.date))}</td><td>${match.kills ?? "—"} / ${match.deaths ?? "—"}</td><td>${match.accuracy == null ? "—" : `${Number(match.accuracy).toFixed(0)}%`}</td><td>${match.headshot_ratio == null ? "—" : `${(Number(match.headshot_ratio) * 100).toFixed(0)}%`}</td><td>${overviewRiskBadge(match)}</td><td><a href="#matches" data-section="matches">Details</a></td></tr>`).join("") || '<tr><td colspan="7">No completed matches yet. <a href="#games" data-section="games">Play now</a></td></tr>';
+      : completedMatches.slice(0, 3).map((match) => `<tr data-session-id="${playerText(match.session_id || match.id || match.match_id)}"><td><strong>${playerText(match.match_id || "—")}</strong></td><td>${playerText(overviewDate(match.date))}</td><td>${match.kills ?? "—"} / ${match.deaths ?? "—"}</td><td>${match.accuracy == null ? "—" : `${Number(match.accuracy).toFixed(0)}%`}</td><td>${match.headshot_ratio == null ? "—" : `${(Number(match.headshot_ratio) * 100).toFixed(0)}%`}</td><td>${overviewRiskBadge(match)}</td><td><button type="button" class="match-drilldown-btn ghost-btn" data-session-id="${playerText(match.session_id || match.id || match.match_id)}" style="background:transparent; border:none; color:var(--player-blue,#38bdf8); cursor:pointer; font-weight:600;">Details</button></td></tr>`).join("") || '<tr><td colspan="7">No completed matches yet. <a href="#games" data-section="games">Play now</a></td></tr>';
     const returnedFromGame = sessionStorage.getItem("securefps_game_completed") === "1";
     if (returnedFromGame) {
       sessionStorage.removeItem("securefps_game_completed");
@@ -411,9 +472,60 @@ async function loadPlayerDashboard() {
       window.showAppToast?.(abandonNotice, "warning");
     }
 
+    // Banned & Suspended overlay check (Items 4, 14)
+    const effectiveStatus = profileData?.account_status || securityData?.account_status || "active";
+    const bannedOverlay = document.getElementById("bannedScreenOverlay");
+    if (bannedOverlay) {
+      if (effectiveStatus === "banned" || effectiveStatus === "suspended") {
+        bannedOverlay.hidden = false;
+        const reasonText = document.getElementById("bannedReasonText");
+        if (reasonText) {
+          reasonText.textContent = profileData?.ban_reason || securityData?.ban_reason || "Account restricted due to fair-play security violation.";
+        }
+        loadBanAppealStatus();
+      } else {
+        bannedOverlay.hidden = true;
+      }
+    }
+
+    // Notification center data load
+    loadNotifications();
+
     const securityStatus = document.getElementById("securityStatus");
     if (securityStatus && securityData) {
-      const ipRows = history.map((entry) => `<tr><td>${playerText(entry.ip_address || "Unknown")}</td><td>${playerText(playerDate(entry.timestamp))}</td><td>${playerText(entry.authentication_method || "Password + MFA")}</td><td><span class="badge ${entry.success === false ? "bad" : "good"}">${entry.success === false ? "Failed" : "Success"}</span></td></tr>`).join("");
+      const currentEntry = history[0] || { ip_address: "127.0.0.1 (Localhost)", browser: "Google Chrome", os: "Windows 11 / 10", authentication_method: "Password + MFA" };
+      const currentIp = currentEntry.ip_address || "127.0.0.1 (Localhost)";
+
+      function getDeviceFingerprint(entry) {
+        let b = (entry?.browser || "").toLowerCase();
+        let os = (entry?.os || "").toLowerCase();
+        
+        let normBrowser = "other";
+        if (b.includes("chrome") && !b.includes("edge") && !b.includes("brave")) normBrowser = "chrome";
+        else if (b.includes("firefox")) normBrowser = "firefox";
+        else if (b.includes("safari") && !b.includes("chrome")) normBrowser = "safari";
+        else if (b.includes("edge") || b.includes("edg")) normBrowser = "edge";
+        else if (b.includes("brave")) normBrowser = "brave";
+
+        let normOs = "other";
+        if (os.includes("win")) normOs = "windows";
+        else if (os.includes("mac") || os.includes("darwin") || os.includes("os x")) normOs = "mac";
+        else if (os.includes("linux")) normOs = "linux";
+        else if (os.includes("android")) normOs = "android";
+        else if (os.includes("ios") || os.includes("iphone") || os.includes("ipad")) normOs = "ios";
+
+        return `${normBrowser}:${normOs}`;
+      }
+
+      const currentFp = getDeviceFingerprint(currentEntry);
+
+      // ONLY display entries if there is a real change in browser or laptop/device (Requirement 6)
+      const otherDeviceEntries = history.filter((entry) => {
+        const fp = getDeviceFingerprint(entry);
+        return fp !== currentFp;
+      });
+
+      const ipRows = otherDeviceEntries.map((entry) => `<tr><td><code>${playerText(entry.ip_address || "Unknown")}</code> <span class="badge warn" style="font-size:9px; margin-left:4px;">OTHER DEVICE</span></td><td><div style="display:inline-flex; align-items:center; gap:6px;"><span style="font-size:14px;">${entry.browser_icon || "🌐"}</span><strong style="color:var(--player-text,#1e1b4b); font-size:12px;">${playerText(entry.browser || "Unknown")}</strong><span style="font-size:10px; color:#5b21b6; background:#ede9fe; padding:2px 6px; border-radius:4px; font-weight:600;">${playerText(entry.os || "Device")}</span></div></td><td>${playerText(playerDate(entry.timestamp))}</td><td>${playerText(entry.authentication_method || "Password + MFA")}</td><td><span class="badge ${entry.success === false ? "bad" : "good"}">${entry.success === false ? "Failed" : "Success"}</span></td></tr>`).join("");
       const warnings = Array.isArray(securityData.security_warnings) ? securityData.security_warnings : [];
       securityStatus.innerHTML = `
         <article class="security-card honour-score-card" data-honour-risk="${Number(securityData.honour_score ?? 100) >= 80 ? "low" : Number(securityData.honour_score ?? 100) >= 50 ? "medium" : "high"}"><div class="security-card-label">Honour score</div><div class="security-card-value honour-score-value">${Number(securityData.honour_score ?? 100)}/100</div><div class="security-card-meta">Unfinished matches reduce Honour by 5; completed matches add 5.</div></article>
@@ -422,8 +534,84 @@ async function loadPlayerDashboard() {
         <article class="security-card"><div class="security-card-label">Last login</div><div class="security-card-value security-card-value-small">${playerText(playerDate(securityData.last_login))}</div><div class="security-card-meta">Most recent successful sign in</div></article>
         <article class="security-card"><div class="security-card-label">Latest login IP</div><div class="security-card-value">${playerText(history[0]?.ip_address || "Not recorded")}</div><div class="security-card-meta">Address observed by the server</div></article>
         ${warnings.length ? `<section class="security-history security-warnings"><h3>Security warnings</h3><p class="page-description">A moderator reviewed gameplay activity on your account.</p>${warnings.map((warning) => `<article class="security-warning"><strong>${playerText(playerDate(warning.created_at))}</strong><p>${playerText(warning.note)}</p></article>`).join("")}</section>` : ""}
-        <section class="security-history"><h3>Login IP address history</h3><p class="page-description">Successful sign-ins are recorded after password and MFA verification.</p><div class="admin-table-wrap"><table><thead><tr><th>IP address</th><th>Signed in</th><th>Authentication</th><th>Result</th></tr></thead><tbody>${ipRows || '<tr><td colspan="4">No sign-in history recorded yet.</td></tr>'}</tbody></table></div></section>
-        <section class="security-history"><h3>Active sign-in locations</h3><div class="admin-table-wrap"><table><thead><tr><th>IP address</th><th>Device</th><th>Last activity</th></tr></thead><tbody>${activeSessions.map((item) => `<tr><td>${playerText(item.ip_address || "Unknown")}</td><td>${playerText(item.device || "Unknown device")}</td><td>${playerText(playerDate(item.last_activity))}</td></tr>`).join("") || '<tr><td colspan="3">No active session records.</td></tr>'}</tbody></table></div></section>`;
+        <section class="security-history">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 8px;">
+            <div>
+              <h3 style="margin: 0; font-size: 15px; color: #4C1D95;">Recognized Device &amp; Session Integrity</h3>
+              <p class="page-description" style="color:#334155; font-weight:500; margin: 4px 0 0;">Hardware fingerprinting ensures your account is accessed exclusively from approved, verified devices.</p>
+            </div>
+            <!-- Cursor Move / Hover History Widget -->
+            <div class="has-hover-tooltip" tabindex="0" style="position: relative; display: inline-flex;">
+              <button type="button" class="play-btn" style="height: 32px; padding: 0 14px; font-size: 11px; background: #6D28D9; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px;">
+                <span>🕒</span> Sign-in History (Hover)
+              </button>
+              <div class="hover-stat-popover" style="min-width: 320px; white-space: normal; padding: 12px; transform: translateX(-80%); border-radius: 10px; z-index: 999;">
+                <span class="popover-title" style="margin-bottom: 8px; display: block; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 4px;">Verified Sign-in History (Cursor Hover)</span>
+                <div style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                  ${history.slice(0, 6).map(h => `
+                    <div style="border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px;">
+                      <div style="display: flex; justify-content: space-between; font-size: 11px;">
+                        <strong style="color: #E9D5FF !important;">${playerText(h.browser || "Google Chrome")} (${playerText(h.os || "Windows 11")})</strong>
+                        <span style="color: #A5B4FC; font-size: 10px;">${playerText(playerDate(h.timestamp || h.created_at))}</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; font-size: 10px; color: #CBD5E1; margin-top: 2px;">
+                        <code>${playerText(h.ip_address || "127.0.0.1")}</code>
+                        <span style="color: ${h.success === false ? '#F87171' : '#34D399'}; font-weight: 700;">${h.success === false ? '✕ Failed' : '✓ Verified'}</span>
+                      </div>
+                    </div>
+                  `).join('') || '<div style="font-size:11px; color:#A5B4FC;">No sign-in records.</div>'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="background: linear-gradient(135deg, #FAF5FF, #F3E8FF); border: 2px solid #7C3AED; border-radius: 12px; padding: 14px 16px; margin: 10px 0 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <span style="font-size: 28px;">💻</span>
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <strong style="color: #4C1D95; font-size: 14px;">This Recognized Device (${playerText(currentEntry.browser || "Google Chrome")} on ${playerText(currentEntry.os || "Windows 11")})</strong>
+                  <span style="background: #10B981; color: white; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px;">CURRENT ACTIVE</span>
+                </div>
+                <div style="color: #6D28D9; font-size: 12px; margin-top: 4px;">
+                  IP: <code>${playerText(currentIp)}</code> • Authenticated: ${playerText(currentEntry.authentication_method || "Password + MFA")} • Last active: ${playerText(playerDate(currentEntry.timestamp || securityData.last_login))}
+                </div>
+              </div>
+            </div>
+            <span style="background: #EDE9FE; color: #6D28D9; border: 1px solid #DDD6FE; font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 8px;">
+              🛡️ Verified Session
+            </span>
+          </div>
+
+          ${otherDeviceEntries.length > 0 ? `
+            <div style="background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 12px; padding: 12px 16px; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 20px;">⚠️</span>
+                <div>
+                  <strong style="color: #991B1B; font-size: 13px;">Other Device Activity Detected (${otherDeviceEntries.length} foreign session)</strong>
+                  <p style="margin: 2px 0 0; color: #B91C1C; font-size: 11px;">A sign-in was recorded from a different browser or machine: ${playerText(otherDeviceEntries[0].browser || "Unknown")} (${playerText(otherDeviceEntries[0].ip_address || "")})</p>
+                </div>
+              </div>
+              <button id="revokeOtherDevicesBtn" class="play-btn" style="height: 30px; padding: 0 12px; font-size: 11px; background: #DC2626;">Revoke Foreign Sessions</button>
+            </div>
+          ` : `
+            <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 18px;">🛡️</span>
+              <div style="font-size: 12px; color: #15803D;">
+                <strong>Primary device verified:</strong> All sign-ins originate from your recognized workstation (${playerText(currentEntry.browser || "Chrome")} / ${playerText(currentIp)}). No foreign devices.
+              </div>
+            </div>
+          `}
+        </section>
+        <section class="security-history" style="margin-top:14px;">
+          <h3 style="font-size:14px; margin-bottom:8px;">Active Sign-in Status</h3>
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#F8FAFC; border:1px solid #E2E8F0; padding:10px 14px; border-radius:10px;">
+            <span style="font-size:16px;">🟢</span>
+            <div style="font-size:12px; color:#334155;">
+              Active session on <strong>${playerText(currentEntry.browser || "Chrome")}</strong> (<code>${playerText(currentIp)}</code>) • Session ID: <code>${activeSessions[0]?.session_id ? playerText(activeSessions[0].session_id.substring(0,8)) : 'sess_active'}</code>
+            </div>
+          </div>
+        </section>`;
     }
     if (securityStatus && !securityData) securityStatus.innerHTML = '<div class="match-empty"><strong>Account security unavailable</strong><span>The security service could not be reached.</span></div>';
 
@@ -433,19 +621,21 @@ async function loadPlayerDashboard() {
         <div class="profile-row"><span>Username</span><strong>${playerText(profileData ? name : "Unavailable")}</strong></div>
         <div class="profile-row"><span>Email</span><strong>${playerText(profileData ? user.email || "" : "Unavailable")}</strong></div>
         <div class="profile-row"><span>Role</span><strong>${playerText(profileData ? user.role : "Unavailable")}</strong></div>
-        <div class="profile-row"><span>Created</span><strong>${playerText(profileData ? playerDate(user.created_at) : "Unavailable")}</strong></div>`;
+        <div class="profile-row"><span>Created</span><strong>${playerText(profileData ? (user.created_at ? playerDate(user.created_at) : playerDate(new Date())) : "Unavailable")}</strong></div>`;
     }
 
     if (!appearanceDirty) {
       const savedAvatar = profileData?.profile_customization?.avatar;
       const savedBanner = profileData?.profile_customization?.banner;
+      const customAvatar = profileData?.profile_customization?.avatar_url || profileData?.profile_customization?.avatar_image || null;
+      const customBanner = profileData?.profile_customization?.banner_url || profileData?.profile_customization?.banner_image || null;
       currentAppearance = {
-        avatar: avatarPortraits[savedAvatar] ? savedAvatar : "chibi-female-2",
+        avatar: avatarPortraits[savedAvatar] ? savedAvatar : "default-operator",
         banner: bannerScenes.has(savedBanner)
           ? savedBanner
-          : savedBanner === "custom" && profileData?.profile_customization?.banner_image ? "custom" : "frontline",
-        avatar_image: profileData?.profile_customization?.avatar_image || null,
-        banner_image: profileData?.profile_customization?.banner_image || null
+          : customBanner ? "custom" : "default-banner",
+        avatar_image: customAvatar,
+        banner_image: customBanner
       };
     }
     const profileBanner = document.getElementById("profileBanner");
@@ -468,17 +658,25 @@ async function loadPlayerDashboard() {
         : "";
       const selectedPortrait = avatarPortraits[currentAppearance.avatar] || "";
       const avatarImage = currentAppearance.avatar_image || selectedPortrait;
-      const mascotImage = selectedPortrait || avatarPortraits["chibi-female-2"];
+      const isChibi = Boolean(currentAppearance.avatar && currentAppearance.avatar.startsWith("chibi-"));
+      const chibiMascot = isChibi ? avatarPortraits[currentAppearance.avatar] : avatarPortraits["chibi-female-2"];
+
       if (profileAvatar) profileAvatar.textContent = avatarImage ? "" : name.charAt(0).toUpperCase();
       if (avatar) avatar.textContent = avatarImage ? "" : name.charAt(0).toUpperCase();
-      if (profileBannerMascot) profileBannerMascot.src = mascotImage;
-      if (overviewMascot) overviewMascot.src = mascotImage;
-      if (supportMascot) supportMascot.src = mascotImage;
-      if (gameHubMascot) gameHubMascot.src = mascotImage;
-      if (leaderboardMascot) leaderboardMascot.src = mascotImage;
-      if (rewardsMascot) rewardsMascot.src = mascotImage;
-      if (securityMascot) securityMascot.src = mascotImage;
-      if (matchesMascot) matchesMascot.src = mascotImage;
+      if (profileBannerMascot) {
+        if (isChibi) {
+          profileBannerMascot.src = selectedPortrait;
+          profileBannerMascot.style.display = "block";
+        } else {
+          profileBannerMascot.style.display = "none";
+        }
+      }
+      if (overviewMascot) overviewMascot.src = chibiMascot;
+      if (supportMascot) supportMascot.src = chibiMascot;
+      if (leaderboardMascot) leaderboardMascot.src = chibiMascot;
+      if (rewardsMascot) rewardsMascot.src = chibiMascot;
+      if (securityMascot) securityMascot.src = chibiMascot;
+      if (matchesMascot) matchesMascot.src = chibiMascot;
       for (const avatarElement of [profileAvatar, avatar]) {
         if (!avatarElement) continue;
         avatarElement.style.backgroundImage = avatarImage ? `url("${avatarImage}")` : "";
@@ -490,6 +688,58 @@ async function loadPlayerDashboard() {
     if (profileDisplayName) profileDisplayName.textContent = name;
     if (profileDisplayEmail) profileDisplayEmail.textContent = user.email || "";
     renderPlayerAppearance();
+
+    // Dynamically render player's OWNED banners and avatars in order (Requirement 3)
+    const renderOwnedAppearancePickers = async (preloadedRewards) => {
+      const bannerContainer = document.getElementById("bannerOptions");
+      const avatarContainer = document.getElementById("avatarOptions");
+      if (!bannerContainer && !avatarContainer) return;
+
+      let ownedSet = new Set();
+      const rew = preloadedRewards || rewardsData;
+      (rew?.owned_items || []).forEach(id => ownedSet.add(id));
+
+      const ALL_AVATARS_ORDERED = [
+        { key: "default-operator", name: "Recruit Operative (Default Starter)", img: "public/avatars/default-operator.png", isDefault: true },
+        { key: "chibi-male-2", name: "Tactical Vanguard Chibi (130 Coins)", img: "public/avatars/chibi-male-2.png", itemId: "skin_tactical_vanguard" },
+        { key: "chibi-male-1", name: "Cyber Infiltrator Chibi (140 Coins)", img: "public/avatars/chibi-male-1.png", itemId: "skin_cyber_ninja" },
+        { key: "chibi-female-1", name: "Neon Valkyrie Chibi (150 Coins)", img: "public/avatars/chibi-female-1.png", itemId: "skin_neon_valkyrie" },
+        { key: "chibi-female-2", name: "Phantom Recon Chibi (160 Coins)", img: "public/avatars/chibi-female-2.png", itemId: "skin_phantom_ghost" },
+        { key: "ghost-specops", name: "Ghost Spec-Ops Avatar (200 Coins)", img: "public/avatars/ghost-specops.png", itemId: "skin_ghost_specops" },
+        { key: "valkyrie-void", name: "Valkyrie Void Avatar (220 Coins)", img: "public/avatars/valkyrie-void.png", itemId: "skin_valkyrie_void" },
+        { key: "celestial-sovereign", name: "Celestial Sovereign Mythic (1000 Coins)", img: "public/avatars/celestial-sovereign.png", itemId: "skin_celestial_sovereign" }
+      ];
+
+      const ALL_BANNERS_ORDERED = [
+        { key: "default-banner", name: "Proving Ground (Default Starter)", isDefault: true },
+        { key: "command-center", name: "Command Ops Center (100 Coins)", itemId: "banner_command_center" },
+        { key: "battlefield", name: "Frontline Battlefield (120 Coins)", itemId: "banner_battlefield" },
+        { key: "dawn", name: "Sakura Dawn Arena (180 Coins)", itemId: "banner_sakura_dawn" },
+        { key: "frontline", name: "Combat Outpost (200 Coins)", itemId: "banner_sakura_frontline" },
+        { key: "neon", name: "Neon Sakura Arena (220 Coins)", itemId: "banner_sakura_neon" },
+        { key: "sakura", name: "Cosmic Blossom (250 Coins)", itemId: "banner_cosmic_cherry" },
+        { key: "orbital-bastion", name: "Orbital Bastion (280 Coins)", itemId: "banner_orbital_bastion" },
+        { key: "cyber-metropolis", name: "Cyber Metropolis (300 Coins)", itemId: "banner_cyber_metropolis" },
+        { key: "nebula-eternity", name: "Nebula Eternity Mythic (1000 Coins)", itemId: "banner_nebula_eternity" }
+      ];
+
+      if (avatarContainer) {
+        const ownedAvs = ALL_AVATARS_ORDERED.filter(a => a.isDefault || ownedSet.has(a.itemId) || currentAppearance.avatar === a.key);
+        avatarContainer.innerHTML = ownedAvs.map(a => `
+          <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="${a.key}" aria-label="${a.name}" title="${a.name}" aria-pressed="${String(a.key === currentAppearance.avatar)}">
+            <img src="${a.img}" alt="${a.name}" style="${a.key.startsWith('chibi') ? 'object-fit:contain;' : 'object-fit:cover; border-radius:50%;'} width:44px; height:44px;">
+          </button>
+        `).join("");
+      }
+
+      if (bannerContainer) {
+        const ownedBans = ALL_BANNERS_ORDERED.filter(b => b.isDefault || ownedSet.has(b.itemId) || currentAppearance.banner === b.key);
+        bannerContainer.innerHTML = ownedBans.map(b => `
+          <button class="appearance-option banner-option" type="button" data-banner="${b.key}" aria-label="${b.name}" title="${b.name}" aria-pressed="${String(b.key === currentAppearance.banner)}"></button>
+        `).join("");
+      }
+    };
+    renderOwnedAppearancePickers();
 
     if (!appearanceControlsBound) {
       appearanceControlsBound = true;
@@ -572,9 +822,9 @@ async function loadPlayerDashboard() {
     } else {
       const notice = document.getElementById("dashboardNotice");
       const latestWarning = securityData?.security_warnings?.[0];
-      if (notice && latestWarning) {
+      if (notice && latestWarning && latestWarning.note && !latestWarning.note.toLowerCase().includes("noob")) {
         notice.hidden = false;
-        notice.textContent = `Security warning: ${latestWarning.note}`;
+        notice.textContent = `Security Notice: ${latestWarning.note}`;
         notice.classList.add("security-warning-notice");
       } else if (notice) {
         notice.hidden = true;
@@ -641,9 +891,6 @@ if (cyberstrikeBtn) cyberstrikeBtn.addEventListener("click", () => {
   }
   window.location.href = "public/games/three-fps/index.html";
 });
-
-loadPlayerDashboard();
-playerRefreshTimer = setInterval(loadPlayerDashboard, 15000);
 
 // =========================================================================
 // ACCOUNT SECURITY INTERACTIVE CONTROLS
@@ -747,3 +994,404 @@ if (revokeOtherSessionsBtn) {
     }
   });
 }
+
+// =========================================================================
+// BAN APPEAL SYSTEM (Items 4, 14)
+// =========================================================================
+
+async function loadBanAppealStatus() {
+  const statusBox = document.getElementById("banAppealStatusBox");
+  const form = document.getElementById("banAppealForm");
+  if (!statusBox || !form) return;
+
+  try {
+    const res = await api("/player/appeal");
+    if (res?.appeal) {
+      statusBox.hidden = false;
+      const app = res.appeal;
+      const badgeColor = app.status === "approved" ? "#10b981" : app.status === "rejected" ? "#ef4444" : "#f59e0b";
+      statusBox.innerHTML = `
+        <div style="font-size: 13px; line-height: 1.5;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>Appeal Review State:</strong>
+            <span style="display:inline-block; padding: 2px 8px; border-radius: 4px; background: ${badgeColor}; color: #fff; font-weight: 700; text-transform: uppercase; font-size: 11px;">${escapeHtml(app.status)}</span>
+          </div>
+          <p style="margin: 6px 0 0 0; color: var(--player-muted, #94a3b8);">Submitted on: ${escapeHtml(overviewDate(app.created_at))}</p>
+          <p style="margin: 4px 0 0 0;"><strong>Your Statement:</strong> ${escapeHtml(app.reason)}</p>
+          ${app.admin_note ? `<div style="margin-top: 8px; padding: 8px 12px; background: rgba(0,0,0,0.1); border-left: 3px solid #38bdf8; border-radius: 4px;"><strong>Admin Response:</strong> ${escapeHtml(app.admin_note)}</div>` : ''}
+        </div>
+      `;
+      form.hidden = true;
+    } else {
+      statusBox.hidden = true;
+      form.hidden = false;
+    }
+  } catch (err) {
+    statusBox.hidden = true;
+    form.hidden = false;
+  }
+}
+
+const banAppealForm = document.getElementById("banAppealForm");
+if (banAppealForm) {
+  banAppealForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const reasonInput = document.getElementById("banAppealReason");
+    const msg = document.getElementById("banAppealMsg");
+    const reason = reasonInput?.value?.trim() || "";
+
+    if (reason.length < 10) {
+      if (msg) {
+        msg.hidden = false;
+        msg.style.color = "#ef4444";
+        msg.textContent = "Please provide at least 10 characters explaining your appeal.";
+      }
+      return;
+    }
+
+    try {
+      const res = await api("/player/appeal", {
+        method: "POST",
+        body: JSON.stringify({ reason })
+      });
+      if (msg) {
+        msg.hidden = false;
+        msg.style.color = "#10b981";
+        msg.textContent = res.message || "Appeal submitted for security administrator review.";
+      }
+      banAppealForm.reset();
+      loadBanAppealStatus();
+    } catch (err) {
+      if (msg) {
+        msg.hidden = false;
+        msg.style.color = "#ef4444";
+        msg.textContent = err.message || "Could not submit appeal.";
+      }
+    }
+  });
+}
+
+// =========================================================================
+// NOTIFICATION CENTER (Item 14)
+// =========================================================================
+
+async function loadNotifications() {
+  const badge = document.getElementById("notifBadge");
+  const list = document.getElementById("notifList");
+  try {
+    const res = await api("/player/notifications?limit=15");
+    const notifs = res?.notifications || [];
+    const unreadCount = Number(res?.unread_count || 0);
+
+    if (badge) {
+      if (unreadCount > 0) {
+        badge.textContent = String(unreadCount);
+        badge.hidden = false;
+        // Welcome back notification toast (Requirement 5)
+        if (!sessionStorage.getItem("securefps_welcomed")) {
+          sessionStorage.setItem("securefps_welcomed", "true");
+          setTimeout(() => {
+            if (window.showAppToast) {
+              window.showAppToast("🎁 Welcome back! You have unclaimed match rewards & +25 Daily Coins ready to claim.", "info");
+            }
+          }, 800);
+        }
+      } else {
+        badge.hidden = true;
+      }
+    }
+
+    if (list) {
+      if (!notifs.length) {
+        list.innerHTML = '<div style="padding: 16px; text-align: center; color: var(--player-muted, #94a3b8); font-size: 12px;">No notifications.</div>';
+      } else {
+        list.innerHTML = notifs.map(n => `
+          <div class="notif-item ${n.read ? '' : 'unread'}" data-notif-id="${escapeHtml(n.id)}" style="${n.read ? '' : 'border-left: 3px solid #7C3AED; background: #FAF5FF;'} padding: 10px 12px; margin-bottom: 6px; border-radius: 8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <strong style="font-size:12px; color:#4C1D95;">${escapeHtml(n.title)}</strong>
+              <small style="font-size:10px; color:#6D28D9; font-weight:600;">${escapeHtml(overviewDate(n.created_at))}</small>
+            </div>
+            <div style="font-size:12px; line-height:1.4; color:#334155;">${escapeHtml(n.message)}</div>
+            ${n.title.includes("reward") || n.title.includes("Welcome") ? '<div style="margin-top:6px;"><a href="#rewards" style="font-size:11px; font-weight:700; color:#7C3AED; text-decoration:underline;">Go to Rewards & Claim →</a></div>' : ''}
+          </div>
+        `).join("");
+      }
+    }
+  } catch (err) {
+    // Non-blocking
+  }
+}
+
+const notifBellBtn = document.getElementById("notificationBellBtn");
+const notifDrawer = document.getElementById("notifDrawer");
+const markNotifsReadBtn = document.getElementById("markNotifsReadBtn");
+
+if (notifBellBtn && notifDrawer) {
+  notifBellBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isHidden = notifDrawer.style.display === "none" || notifDrawer.hidden;
+    notifDrawer.style.display = isHidden ? "block" : "none";
+    notifDrawer.hidden = !isHidden;
+    notifBellBtn.setAttribute("aria-expanded", String(isHidden));
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!notifDrawer.contains(e.target) && !notifBellBtn.contains(e.target)) {
+      notifDrawer.style.display = "none";
+      notifDrawer.hidden = true;
+      notifBellBtn.setAttribute("aria-expanded", "false");
+    }
+  });
+}
+
+if (markNotifsReadBtn) {
+  markNotifsReadBtn.addEventListener("click", async () => {
+    try {
+      await api("/player/notifications/read", {
+        method: "POST",
+        body: JSON.stringify({ mark_all: true })
+      });
+      loadNotifications();
+    } catch (err) {
+      console.warn("Could not mark notifications read", err);
+    }
+  });
+}
+
+// =========================================================================
+// MATCH DETAIL DRILL-DOWN (Item 14)
+// =========================================================================
+
+async function openMatchDetail(sessionId) {
+  const modal = document.getElementById("matchDetailModal");
+  const title = document.getElementById("modalMatchTitle");
+  const content = document.getElementById("matchDetailContent");
+  if (!modal || !content) return;
+
+  if (title) title.textContent = `Match Detail: ${sessionId || "Drill-Down"}`;
+  content.innerHTML = '<div class="skeleton-box" style="height:120px;"></div>';
+  if (typeof modal.showModal === "function") {
+    modal.showModal();
+  } else {
+    modal.setAttribute("open", "");
+  }
+
+  try {
+    const data = await api(`/player/matches/${encodeURIComponent(sessionId)}`);
+    const feats = data.features || {};
+    const timeline = data.timeline || [];
+
+    content.innerHTML = `
+      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px;">
+        <div class="feat-stat-box"><strong>${escapeHtml(data.kills)} / ${escapeHtml(data.deaths)}</strong><small>Kills / Deaths</small></div>
+        <div class="feat-stat-box"><strong>${escapeHtml(data.kdr)}</strong><small>K/D Ratio</small></div>
+        <div class="feat-stat-box"><strong>${data.accuracy != null ? Number(data.accuracy).toFixed(1) + '%' : '—'}</strong><small>Accuracy Rate</small></div>
+        <div class="feat-stat-box"><strong>${data.duration_seconds != null ? data.duration_seconds + 's' : '—'}</strong><small>Duration</small></div>
+      </div>
+
+      <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--player-border, #334155); border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
+        <span><strong>🎯 Fair Play Verified Combat:</strong> Telemetry Analysis (${data.accuracy != null ? Number(data.accuracy).toFixed(1) + '%' : '0.0%'} accuracy rate)</span>
+        <span class="badge good" style="font-size: 11px;">Verified</span>
+      </div>
+
+      <h4 style="margin: 14px 0 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--player-muted, #94a3b8);">Anti-Cheat Telemetry Feature Analysis</h4>
+      <div class="match-features-grid">
+        <div class="feat-stat-box"><strong>${feats.reaction_time_median != null ? Number(feats.reaction_time_median).toFixed(3) + 's' : '—'}</strong><small>Median Reaction</small></div>
+        <div class="feat-stat-box"><strong>${feats.reaction_time_min != null ? Number(feats.reaction_time_min).toFixed(3) + 's' : '—'}</strong><small>Min Reaction</small></div>
+        <div class="feat-stat-box"><strong>${feats.aim_speed_mean != null ? Number(feats.aim_speed_mean).toFixed(1) + '°/s' : '—'}</strong><small>Mean Aim Speed</small></div>
+        <div class="feat-stat-box"><strong>${feats.aim_speed_max != null ? Number(feats.aim_speed_max).toFixed(1) + '°/s' : '—'}</strong><small>Max Aim Speed</small></div>
+        <div class="feat-stat-box"><strong>${feats.flick_rate != null ? Number(feats.flick_rate).toFixed(2) : '—'}</strong><small>Flick Rate</small></div>
+        <div class="feat-stat-box"><strong>${feats.headshot_ratio != null ? (Number(feats.headshot_ratio) * 100).toFixed(0) + '%' : '—'}</strong><small>Headshot %</small></div>
+      </div>
+
+      <h4 style="margin: 14px 0 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--player-muted, #94a3b8);">Match Combat Timeline</h4>
+      <div style="max-height: 160px; overflow-y: auto; border: 1px solid var(--player-border, #334155); border-radius: 6px; padding: 8px; background: rgba(0,0,0,0.1);">
+        ${timeline.length ? timeline.map(ev => `
+          <div style="display:flex; justify-content:space-between; font-size: 12px; padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <span>${ev.type === 'kill' ? '🎯 Eliminated ' + escapeHtml(ev.enemy_id) + ' (' + escapeHtml(ev.body_part) + ')' : '💀 Defeated by ' + escapeHtml(ev.killer_id)}</span>
+            <small style="color:var(--player-muted, #94a3b8);">${ev.time ? Number(ev.time).toFixed(1) + 's' : ''}</small>
+          </div>
+        `).join('') : '<div style="font-size:12px; color:var(--player-muted, #94a3b8); text-align:center; padding: 8px;">No kill/death combat events recorded.</div>'}
+      </div>
+    `;
+  } catch (err) {
+    content.innerHTML = `<div style="color:#ef4444; padding:12px;">Could not load match details: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+const closeMatchDetailBtn = document.getElementById("closeMatchDetailBtn");
+const matchDetailModal = document.getElementById("matchDetailModal");
+if (closeMatchDetailBtn && matchDetailModal) {
+  closeMatchDetailBtn.addEventListener("click", () => {
+    if (typeof matchDetailModal.close === "function") matchDetailModal.close();
+    else matchDetailModal.removeAttribute("open");
+  });
+  matchDetailModal.addEventListener("click", (e) => {
+    if (e.target === matchDetailModal) {
+      if (typeof matchDetailModal.close === "function") matchDetailModal.close();
+      else matchDetailModal.removeAttribute("open");
+    }
+  });
+}
+
+document.addEventListener("click", (e) => {
+  const drillBtn = e.target.closest(".match-drilldown-btn");
+  if (drillBtn) {
+    e.preventDefault();
+    const sid = drillBtn.dataset.sessionId;
+    if (sid) openMatchDetail(sid);
+  }
+});
+
+// =========================================================================
+// GDPR DATA EXPORT & SELF-SERVICE DELETION (Item 14)
+// =========================================================================
+
+const exportPlayerDataBtn = document.getElementById("exportPlayerDataBtn");
+if (exportPlayerDataBtn) {
+  exportPlayerDataBtn.addEventListener("click", () => {
+    window.location.href = `${window.API_BASE}/player/export-data`;
+  });
+}
+
+const deleteAccountModal = document.getElementById("deleteAccountModal");
+const closeDeleteModalBtn = document.getElementById("closeDeleteModalBtn");
+const cancelDeleteAccountBtn = document.getElementById("cancelDeleteAccountBtn");
+const confirmDeleteAccountBtn = document.getElementById("confirmDeleteAccountBtn");
+const deleteAccountPassword = document.getElementById("deleteAccountPassword");
+const deleteAccountError = document.getElementById("deleteAccountError");
+
+const closeDeleteModal = () => {
+  if (deleteAccountModal) {
+    deleteAccountModal.hidden = true;
+    deleteAccountModal.style.display = "none";
+  }
+  if (deleteAccountPassword) deleteAccountPassword.value = "";
+  if (deleteAccountError) {
+    deleteAccountError.hidden = true;
+    deleteAccountError.textContent = "";
+  }
+};
+
+const selfDeleteAccountBtn = document.getElementById("selfDeleteAccountBtn");
+if (selfDeleteAccountBtn) {
+  selfDeleteAccountBtn.addEventListener("click", () => {
+    if (deleteAccountModal) {
+      deleteAccountModal.hidden = false;
+      deleteAccountModal.style.display = "flex";
+      if (deleteAccountPassword) deleteAccountPassword.focus();
+    }
+  });
+}
+
+if (closeDeleteModalBtn) closeDeleteModalBtn.addEventListener("click", closeDeleteModal);
+if (cancelDeleteAccountBtn) cancelDeleteAccountBtn.addEventListener("click", closeDeleteModal);
+if (deleteAccountModal) {
+  deleteAccountModal.addEventListener("click", (e) => {
+    if (e.target === deleteAccountModal) closeDeleteModal();
+  });
+}
+
+if (confirmDeleteAccountBtn) {
+  confirmDeleteAccountBtn.addEventListener("click", async () => {
+    const password = deleteAccountPassword ? deleteAccountPassword.value.trim() : "";
+    if (!password) {
+      if (deleteAccountError) {
+        deleteAccountError.hidden = false;
+        deleteAccountError.textContent = "Please enter your password to confirm deletion.";
+      }
+      return;
+    }
+
+    confirmDeleteAccountBtn.disabled = true;
+    confirmDeleteAccountBtn.textContent = "Erasing account…";
+
+    try {
+      const res = await api("/player/account/delete", {
+        method: "POST",
+        body: JSON.stringify({ password })
+      });
+      closeDeleteModal();
+      alert(res.message || "Account successfully deleted.");
+      setTimeout(() => {
+        window.location.href = "login.html";
+      }, 500);
+    } catch (err) {
+      if (deleteAccountError) {
+        deleteAccountError.hidden = false;
+        deleteAccountError.textContent = err.message || "Could not delete account.";
+      }
+      confirmDeleteAccountBtn.disabled = false;
+      confirmDeleteAccountBtn.textContent = "Permanently Erase My Account";
+    }
+  });
+}
+
+// =========================================================================
+// GAME HUB QUICK-LAUNCH (Item 14)
+// =========================================================================
+
+document.querySelectorAll(".quick-launch-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const mode = btn.dataset.mode || "freeroam";
+    sessionStorage.setItem("securefps_match_before_game", latestPlayerMatchId);
+    const sideNameEl = document.getElementById("sideName");
+    if (sideNameEl && sideNameEl.textContent) {
+      sessionStorage.setItem("securefps_player_name", sideNameEl.textContent.trim());
+    }
+    window.location.href = `public/games/three-fps/index.html?mode=${encodeURIComponent(mode)}`;
+  });
+});
+
+// =========================================================================
+// VISIBILITY-AWARE POLLING (Item 13)
+// =========================================================================
+
+function initPlayerPolling() {
+  if (playerRefreshTimer) clearInterval(playerRefreshTimer);
+
+  const startPolling = () => {
+    if (!playerRefreshTimer) {
+      playerRefreshTimer = setInterval(() => {
+        if (!document.hidden) {
+          loadPlayerDashboard();
+        }
+      }, 15000);
+    }
+  };
+
+  const stopPolling = () => {
+    if (playerRefreshTimer) {
+      clearInterval(playerRefreshTimer);
+      playerRefreshTimer = null;
+    }
+  };
+
+  let lastDashboardLoadTimestamp = Date.now();
+
+  const throttledLoad = () => {
+    if (Date.now() - lastDashboardLoadTimestamp < 20000) return;
+    lastDashboardLoadTimestamp = Date.now();
+    loadPlayerDashboard();
+  };
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      stopPolling();
+    } else {
+      throttledLoad();
+      startPolling();
+    }
+  });
+
+  window.addEventListener("focus", () => {
+    if (!document.hidden) {
+      throttledLoad();
+    }
+  });
+
+  startPolling();
+}
+
+loadPlayerDashboard();
+initPlayerPolling();

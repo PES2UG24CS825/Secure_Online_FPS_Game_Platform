@@ -148,6 +148,7 @@ class GameModeManager {
     this.playerHealth = this.maxHealth;
     this.playerArmour = this.maxArmour;
     this.isDead = false;
+    this.targetKills = this.currentMode === 'solo' ? 0 : 25;
     this.hasSpawnProtection = true;
     this.spawnProtectionTimer = this.spawnProtectionDuration;
     this.resetBotScores();
@@ -179,8 +180,8 @@ class GameModeManager {
     }
 
     // 2. Countdown Match Timer (12:00 -> 00:00)
-    // Training mode does not run a countdown timer
-    if (this.currentMode !== 'training') {
+    // Training mode and Free Roam (solo) do not run an expiring match countdown
+    if (this.currentMode !== 'training' && this.currentMode !== 'solo') {
       this.timeRemaining -= delta;
       if (this.timeRemaining <= 0) {
         this.timeRemaining = 0;
@@ -423,7 +424,7 @@ class GameModeManager {
     }
 
     // Check score limit (25 confirmed kills ends match immediately!)
-    if (this.kills >= this.targetKills) {
+    if (this.targetKills > 0 && this.kills >= this.targetKills) {
       this.completeMatch('score_limit_reached');
     }
   }

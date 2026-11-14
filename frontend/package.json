@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "Secure Online FPS Game Platform Frontend",
   "scripts": {
-    "start": "http-server . -p 3000 -o /login.html"
+    "start": "http-server . -p 3000 -o /login.html",
+    "validate:glb": "python ../tools/validate_glb.py"
   },
   "devDependencies": {
     "http-server": "^14.1.1"

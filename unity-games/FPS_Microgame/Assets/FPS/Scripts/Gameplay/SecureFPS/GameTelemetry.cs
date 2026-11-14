@@ -1,4 +1,3 @@
-
 using UnityEngine;
 using System.Globalization;
 using System.Collections;
@@ -18,6 +17,7 @@ public class GameTelemetry : MonoBehaviour
     private Coroutine demoTelemetryRoutine;
 
     private SecureFPSClient secureClient;
+    private int eventSequence = 0;
 
     // =========================================================
     // AWAKE
@@ -38,21 +38,15 @@ public class GameTelemetry : MonoBehaviour
         EventManager.AddListener<AllObjectivesCompletedEvent>(OnAllObjectivesCompleted);
         EventManager.AddListener<PlayerDeathEvent>(OnPlayerDeath);
 
-        // Find SecureFPSClient on the same GameObject.
         secureClient = GetComponent<SecureFPSClient>();
 
         if (secureClient != null)
         {
-            Debug.Log(
-                "[SecureFPS] SecureFPSClient found on same GameObject."
-            );
+            Debug.Log("[SecureFPS] SecureFPSClient found on same GameObject.");
         }
         else
         {
-            Debug.LogWarning(
-                "[SecureFPS] SecureFPSClient not on same GameObject. " +
-                "Will search when sending events."
-            );
+            Debug.LogWarning("[SecureFPS] SecureFPSClient not on same GameObject. Will search when sending events.");
         }
     }
 
@@ -107,7 +101,6 @@ public class GameTelemetry : MonoBehaviour
 
     private IEnumerator DemoTelemetryPattern()
     {
-        // Development simulation only: emit existing events; never change gameplay or model outputs.
         for (int shotIndex = 0; shotIndex < 20; shotIndex++)
         {
             WeaponFire("demo-telemetry-fixture");
@@ -126,7 +119,6 @@ public class GameTelemetry : MonoBehaviour
             yield return new WaitForSecondsRealtime(0.005f);
         }
 
-        // Report a telemetry event only. Do not invoke PlayerDeath(), which ends gameplay.
         SendEvent("player_death", "{}");
         demoTelemetryRoutine = null;
     }
@@ -146,107 +138,153 @@ public class GameTelemetry : MonoBehaviour
         gameStartedSent = true;
         sessionStartTime = Time.realtimeSinceStartup;
 
-
         SendEvent("game_started", "{}");
     }
 
     // =========================================================
-    // GENERIC EVENT
+    // GENERIC EVENT WITH SEQ AND TIMESTAMP
     // =========================================================
+
+    private string WrapTelemetryJson(string innerJson)
+    {
+        eventSequence++;
+        float nowSec = Time.realtimeSinceStartup;
+        string prefix = "\"seq\":" + eventSequence + ",\"timestamp\":" + nowSec.ToString(CultureInfo.InvariantCulture);
+
+        if (string.IsNullOrEmpty(innerJson) || innerJson.Trim() == "{}")
+        {
+            return "{" + prefix + "}";
+        }
+
+        string trimmed = innerJson.Trim();
+        if (trimmed.StartsWith("{") && trimmed.EndsWith("}"))
+        {
+            string body = trimmed.Substring(1, trimmed.Length - 2).Trim();
+            if (body.Length > 0)
+            {
+                if (!body.Contains("\"seq\":"))
+                {
+                    body = prefix + "," + body;
+                }
+                return "{" + body + "}";
+            }
+            return "{" + prefix + "}";
+        }
+        return "{" + prefix + "}";
+    }
 
     public void SendEvent(
         string eventType,
         string telemetryJson = "{}"
     )
     {
-        Debug.Log(
-            "[SecureFPS TEST] Sending telemetry event: " +
-            eventType
-        );
-
-        // First: use the cached component.
         if (secureClient == null)
         {
             secureClient = GetComponent<SecureFPSClient>();
         }
-
-        // Second: use the singleton.
         if (secureClient == null)
         {
             secureClient = SecureFPSClient.Instance;
         }
-
-        // Third: search the scene for an existing client.
         if (secureClient == null)
         {
-            Debug.LogWarning(
-                "[SecureFPS TEST] Client reference is NULL. " +
-                "Searching scene..."
-            );
-
             secureClient = FindObjectOfType<SecureFPSClient>();
         }
 
         if (secureClient == null)
         {
-            Debug.LogError(
-                "[SecureFPS] No SecureFPSClient found. " +
-                "Event not sent: " + eventType
-            );
-
+            Debug.LogError("[SecureFPS] No SecureFPSClient found. Event not sent: " + eventType);
             return;
         }
 
-        secureClient.SendEvent(
-            eventType,
-            telemetryJson
-        );
+        string wrappedJson = WrapTelemetryJson(telemetryJson);
+        secureClient.SendEvent(eventType, wrappedJson);
+    }
+
+    // =========================================================
+    // PHASE 1 TELEMETRY EVENTS
+    // =========================================================
+
+    public void AimSample(float angularVelocityDegS, float yaw, float pitch)
+    {
+        string json =
+            "{"
+            + "\"angular_velocity_deg_s\":"
+            + angularVelocityDegS.ToString(CultureInfo.InvariantCulture)
+            + ",\"yaw\":"
+            + yaw.ToString(CultureInfo.InvariantCulture)
+            + ",\"pitch\":"
+            + pitch.ToString(CultureInfo.InvariantCulture)
+            + "}";
+
+        SendEvent("aim_sample", json);
+    }
+
+    public void TargetAcquired(string enemyId, float distance, bool visibleThroughWall)
+    {
+        string json =
+            "{"
+            + "\"enemy_id\":\""
+            + EscapeJson(enemyId)
+            + "\",\"distance\":"
+            + distance.ToString(CultureInfo.InvariantCulture)
+            + ",\"visible_through_wall\":"
+            + (visibleThroughWall ? "true" : "false")
+            + "}";
+
+        SendEvent("target_acquired", json);
+    }
+
+    public void HitDetail(string targetId, string bodyPart, float distance, float damage)
+    {
+        string json =
+            "{"
+            + "\"target_id\":\""
+            + EscapeJson(targetId)
+            + "\",\"body_part\":\""
+            + EscapeJson(bodyPart)
+            + "\",\"distance\":"
+            + distance.ToString(CultureInfo.InvariantCulture)
+            + ",\"damage\":"
+            + damage.ToString(CultureInfo.InvariantCulture)
+            + "}";
+
+        SendEvent("hit_detail", json);
+    }
+
+    public void WeaponFire(string weaponName, float aimErrorDeg = -1f, string targetId = null)
+    {
+        string targetIdStr = string.IsNullOrEmpty(targetId) ? "null" : ("\"" + EscapeJson(targetId) + "\"");
+        string aimErrorStr = aimErrorDeg >= 0f ? aimErrorDeg.ToString(CultureInfo.InvariantCulture) : "null";
+
+        string json =
+            "{"
+            + "\"weapon\":\""
+            + EscapeJson(weaponName)
+            + "\",\"aim_error_deg\":"
+            + aimErrorStr
+            + ",\"target_id\":"
+            + targetIdStr
+            + "}";
+
+        SendEvent("weapon_fire", json);
+    }
+
+    // Overload for backward compatibility
+    public void WeaponFire(string weaponName)
+    {
+        WeaponFire(weaponName, -1f, null);
     }
 
     public void EnemySpawned(string enemyId)
     {
         string json =
             "{"
-            + "\"enemy_id\":\"" + EscapeJson(enemyId) + "\","
-            + "\"timestamp\":"
-            + Time.realtimeSinceStartup.ToString(
-            CultureInfo.InvariantCulture)
+            + "\"enemy_id\":\"" + EscapeJson(enemyId) + "\""
             + "}";
 
         SendEvent("enemy_spawned", json);
     }
-
-
-
-    // =========================================================
-    // WEAPON FIRE
-    // =========================================================
-
-    public void WeaponFire(string weaponName)
-    {
-        Debug.Log(
-            "[SecureFPS TEST] WEAPON FIRE DETECTED: " +
-            weaponName
-        );
-
-        string json =
-            "{"
-            + "\"weapon\":\""
-            + EscapeJson(weaponName)
-            + "\","
-            + "\"timestamp\":"
-            + Time.realtimeSinceStartup.ToString(CultureInfo.InvariantCulture)
-            + "}";
-
-        SendEvent(
-            "weapon_fire",
-            json
-        );
-    }
-
-    // =========================================================
-    // PLAYER HIT
-    // =========================================================
 
     public void EnemyHit(string targetId, float damage)
     {
@@ -256,56 +294,24 @@ public class GameTelemetry : MonoBehaviour
             + EscapeJson(targetId)
             + "\",\"damage\":"
             + damage.ToString(CultureInfo.InvariantCulture)
-            + ","
-            + "\"timestamp\":"
-            + Time.realtimeSinceStartup.ToString(CultureInfo.InvariantCulture)
             + "}";
 
-        SendEvent(
-            "enemy_hit",
-            json
-        );
+        SendEvent("enemy_hit", json);
     }
 
     public void PlayerHit(float damage)
     {
-        Debug.Log(
-            "[SecureFPS TEST] PLAYER HIT DETECTED! Damage = " +
-            damage.ToString(
-                CultureInfo.InvariantCulture
-            )
-        );
-
         string json =
             "{"
             + "\"damage\":"
-            + damage.ToString(
-                CultureInfo.InvariantCulture
-            )
+            + damage.ToString(CultureInfo.InvariantCulture)
             + "}";
 
-        Debug.Log(
-            "[SecureFPS TEST] PLAYER HIT JSON: " +
-            json
-        );
-
-        SendEvent(
-            "player_hit",
-            json
-        );
+        SendEvent("player_hit", json);
     }
-
-    // =========================================================
-    // ENEMY KILLED
-    // =========================================================
 
     public void EnemyKilled(string enemyName)
     {
-        Debug.Log(
-            "[SecureFPS TEST] ENEMY KILLED: " +
-            enemyName
-        );
-
         string json =
             "{"
             + "\"enemy\":\""
@@ -313,23 +319,11 @@ public class GameTelemetry : MonoBehaviour
             + "\""
             + "}";
 
-        SendEvent(
-            "enemy_killed",
-            json
-        );
+        SendEvent("enemy_killed", json);
     }
-
-    // =========================================================
-    // HEADSHOT
-    // =========================================================
 
     public void Headshot(string enemyName = "")
     {
-        Debug.Log(
-            "[SecureFPS TEST] HEADSHOT DETECTED: " +
-            enemyName
-        );
-
         string json =
             "{"
             + "\"enemy\":\""
@@ -337,15 +331,8 @@ public class GameTelemetry : MonoBehaviour
             + "\""
             + "}";
 
-        SendEvent(
-            "headshot",
-            json
-        );
+        SendEvent("headshot", json);
     }
-
-    // =========================================================
-    // PLAYER DEATH
-    // =========================================================
 
     public void PlayerDeath()
     {
@@ -355,20 +342,9 @@ public class GameTelemetry : MonoBehaviour
         }
 
         playerDeathSent = true;
-
-        Debug.Log(
-            "[SecureFPS TEST] PLAYER DEATH DETECTED"
-        );
-
-        SendEvent(
-            "player_death","{}"
-        );
+        SendEvent("player_death", "{}");
         GameCompleted();
     }
-
-    // =========================================================
-    // GAME COMPLETED
-    // =========================================================
 
     public void GameCompleted()
     {
@@ -378,20 +354,8 @@ public class GameTelemetry : MonoBehaviour
         }
 
         gameCompleted = true;
-
-        Debug.Log(
-            "[SecureFPS TEST] GAME COMPLETED"
-        );
-
-        SendEvent(
-            "game_completed",
-            "{}"
-        );
+        SendEvent("game_completed", "{}");
     }
-
-    // =========================================================
-    // PLAYER BEHAVIOR
-    // =========================================================
 
     public void PlayerBehavior(
         float speed,
@@ -404,59 +368,35 @@ public class GameTelemetry : MonoBehaviour
         string json =
             "{"
             + "\"speed\":"
-            + speed.ToString(
-                CultureInfo.InvariantCulture
-            )
+            + speed.ToString(CultureInfo.InvariantCulture)
             + ","
             + "\"position\":{"
             + "\"x\":"
-            + x.ToString(
-                CultureInfo.InvariantCulture
-            )
+            + x.ToString(CultureInfo.InvariantCulture)
             + ","
             + "\"y\":"
-            + y.ToString(
-                CultureInfo.InvariantCulture
-            )
+            + y.ToString(CultureInfo.InvariantCulture)
             + ","
             + "\"z\":"
-            + z.ToString(
-                CultureInfo.InvariantCulture
-            )
+            + z.ToString(CultureInfo.InvariantCulture)
             + "},"
             + "\"grounded\":"
             + grounded.ToString().ToLower()
             + "}";
 
-        SendEvent(
-            "player_behavior",
-            json
-        );
+        SendEvent("player_behavior", json);
     }
-
-    // =========================================================
-    // AIM BEHAVIOR
-    // =========================================================
 
     public void AimBehavior(float rotationChange)
     {
         string json =
             "{"
             + "\"rotation_change\":"
-            + rotationChange.ToString(
-                CultureInfo.InvariantCulture
-            )
+            + rotationChange.ToString(CultureInfo.InvariantCulture)
             + "}";
 
-        SendEvent(
-            "aim_behavior",
-            json
-        );
+        SendEvent("aim_behavior", json);
     }
-
-    // =========================================================
-    // JSON ESCAPE
-    // =========================================================
 
     private string EscapeJson(string value)
     {
@@ -470,4 +410,3 @@ public class GameTelemetry : MonoBehaviour
             .Replace("\"", "\\\"");
     }
 }
-

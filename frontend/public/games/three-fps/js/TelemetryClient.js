@@ -2,6 +2,7 @@
  * SecureFPS: Real Gameplay Telemetry & ML Anti-Cheat Client
  * Streams authentic player kinematics, aiming angular deltas, and combat
  * events to Flask /api/game-events and processes live ML risk scores.
+ * Phase 1 additions: 10Hz aim_sample, target_acquired, weapon_fire aim_error, hit_detail.
  */
 class TelemetryClient {
   constructor(apiBase = "") {
@@ -18,6 +19,14 @@ class TelemetryClient {
     this.lastPitch = 0;
     this.movementInterval = 2.0; // Every 2.0 seconds (matches Unity PlayerTelemetry.cs)
     this.aimInterval = 0.5;      // Every 0.5 seconds (matches Unity PlayerTelemetry.cs)
+    this.aimSampleInterval = 0.1;// Every 0.1 seconds (Phase 1 10Hz kinematics)
+    this.lastAimSample10HzTime = 0;
+    this.lastSampleYawDeg = 0;
+    this.lastSamplePitchDeg = 0;
+    this.eventSequence = 0;
+    this.eventQueue = [];
+    this.batchFlushInterval = 1500;
+    this.batchTimer = setInterval(() => this.flushQueue(), this.batchFlushInterval);
 
     this.initEvents();
   }
@@ -27,6 +36,8 @@ class TelemetryClient {
     window.addEventListener('fps:telemetry_fire', (e) => {
       this.sendEvent('weapon_fire', {
         weapon: e.detail?.weapon || 'P-24 Carbine',
+        aim_error_deg: e.detail?.aim_error_deg != null ? Number(e.detail.aim_error_deg) : null,
+        target_id: e.detail?.target_id || null,
         timestamp: performance.now() / 1000
       });
     });
@@ -36,6 +47,25 @@ class TelemetryClient {
         target_id: e.detail?.target || 'bot_target',
         damage: e.detail?.damage || 34,
         headshot: !!e.detail?.headshot,
+        timestamp: performance.now() / 1000
+      });
+    });
+
+    window.addEventListener('fps:telemetry_hit_detail', (e) => {
+      this.sendEvent('hit_detail', {
+        target_id: e.detail?.target_id || 'bot_target',
+        body_part: e.detail?.body_part || 'body',
+        distance: e.detail?.distance != null ? Number(e.detail.distance) : 10.0,
+        damage: e.detail?.damage != null ? Number(e.detail.damage) : 34,
+        timestamp: performance.now() / 1000
+      });
+    });
+
+    window.addEventListener('fps:telemetry_target_acquired', (e) => {
+      this.sendEvent('target_acquired', {
+        enemy_id: e.detail?.enemy_id || 'bot_target',
+        distance: e.detail?.distance != null ? Number(e.detail.distance) : 10.0,
+        visible_through_wall: !!e.detail?.visible_through_wall,
         timestamp: performance.now() / 1000
       });
     });
@@ -80,6 +110,7 @@ class TelemetryClient {
       this.isSessionActive = false;
       this.sessionId = null;
       this.gameToken = null;
+      this.eventSequence = 0;
       const response = await fetch(`${this.apiBase}/game/start`, {
         method: 'POST',
         credentials: 'include',
@@ -150,7 +181,26 @@ class TelemetryClient {
       });
     }
 
-    // 2. Aim Angular Telemetry (every 0.5 seconds)
+    // 1b. Fast 10Hz Aim Sampling (every 0.1s, angles in degrees)
+    if (now - this.lastAimSample10HzTime >= this.aimSampleInterval) {
+      const dt = Math.max(0.001, now - this.lastAimSample10HzTime);
+      this.lastAimSample10HzTime = now;
+      const yawDeg = ((controller.yaw * (180 / Math.PI)) % 360 + 360) % 360;
+      const pitchDeg = Math.max(-90, Math.min(90, controller.pitch * (180 / Math.PI)));
+      let dYaw = Math.abs(yawDeg - this.lastSampleYawDeg);
+      if (dYaw > 180) dYaw = 360 - dYaw;
+      const dPitch = Math.abs(pitchDeg - this.lastSamplePitchDeg);
+      const angVel = Math.hypot(dYaw, dPitch) / dt;
+      this.lastSampleYawDeg = yawDeg;
+      this.lastSamplePitchDeg = pitchDeg;
+      this.sendEvent('aim_sample', {
+        angular_velocity_deg_s: parseFloat(angVel.toFixed(2)),
+        yaw: parseFloat(yawDeg.toFixed(2)),
+        pitch: parseFloat(pitchDeg.toFixed(2))
+      });
+    }
+
+    // 2. Legacy Aim Angular Telemetry (every 0.5 seconds)
     if (now - this.lastAimSampleTime >= this.aimInterval) {
       this.lastAimSampleTime = now;
       const deltaYaw = Math.abs(controller.yaw - this.lastYaw);
@@ -171,35 +221,77 @@ class TelemetryClient {
       return;
     }
 
-    const payload = {
-      session_id: this.sessionId,
-      game_token: this.gameToken,
+    this.eventSequence = (this.eventSequence || 0) + 1;
+    telemetryData.seq = this.eventSequence;
+    if (telemetryData.timestamp === undefined) {
+      telemetryData.timestamp = parseFloat((performance.now() / 1000).toFixed(4));
+    }
+
+    // Critical match lifecycle events flush and send immediately
+    if (eventType === 'game_completed' || eventType === 'game_started') {
+      await this.flushQueue();
+      const payload = {
+        session_id: this.sessionId,
+        game_token: this.gameToken,
+        event_type: eventType,
+        game: 'CyberStrike_3D',
+        seq: this.eventSequence,
+        timestamp: telemetryData.timestamp,
+        telemetry: telemetryData
+      };
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        await fetch(`${this.apiBase}/game-events`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+      } catch (e) {}
+      return;
+    }
+
+    // Queue standard telemetry for batch transmission
+    this.eventQueue.push({
       event_type: eventType,
-      game: 'CyberStrike_3D',
-      telemetry: telemetryData
-    };
+      telemetry: telemetryData,
+      seq: this.eventSequence,
+      timestamp: telemetryData.timestamp
+    });
+
+    if (this.eventQueue.length >= 20) {
+      this.flushQueue();
+    }
+  }
+
+  async flushQueue() {
+    if (!this.sessionId || !this.gameToken || this.eventQueue.length === 0) return;
+    const batch = this.eventQueue.splice(0, this.eventQueue.length);
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
       const response = await fetch(`${this.apiBase}/game-events`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          session_id: this.sessionId,
+          game_token: this.gameToken,
+          game: 'CyberStrike_3D',
+          events: batch
+        }),
         signal: controller.signal
       });
-
       clearTimeout(timeoutId);
-
       if (response.ok) {
         const data = await response.json();
         this.handleDetectionResponse(data);
       }
-    } catch (err) {
-      // Non-blocking telemetry network logging - never disrupts gameplay
-    }
+    } catch (err) {}
   }
 
   handleDetectionResponse(data) {
@@ -258,6 +350,12 @@ class TelemetryClient {
     if (!this.sessionId) return;
     const sessId = this.sessionId;
     this.isSessionActive = false;
+
+    // Ensure all pending queued telemetry events are flushed to backend before ending session
+    try {
+      await this.flushQueue();
+    } catch (_) {}
+
     this.sessionId = null;
     this.gameToken = null;
     try {
@@ -274,7 +372,10 @@ class TelemetryClient {
           reason: completed ? 'match_completed' : 'player_exit',
           kills: details.kills || 0,
           deaths: details.deaths || 0,
-          accuracy: details.accuracy || 0
+          shots: details.shots || 0,
+          hits: details.hits || 0,
+          accuracy: details.accuracy || 0,
+          kdr: details.kdr || 0
         }),
         signal: controller.signal
       });

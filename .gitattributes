@@ -1,0 +1,15 @@
+# Git LFS & Binary File Attributes
+*.glb binary
+*.gltf text
+*.wasm binary
+*.data binary
+*.unitypackage binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.mp3 binary
+*.wav binary
+*.ogg binary
+*.joblib binary

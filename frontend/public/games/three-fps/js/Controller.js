@@ -66,8 +66,8 @@ class Controller {
     this.bobIntensity = 0.04;
     this.cameraRoll = 0;
 
-    // Input Debug HUD Elements
-    this.debugVisible = true;
+    // Input Debug HUD Elements (Task 3b: default off)
+    this.debugVisible = false;
     this.dbgHud = document.getElementById('input-debug-hud');
     this.dbgLockBadge = document.getElementById('dbg-lock-badge');
     this.dbgStatPos = document.getElementById('dbg-stat-pos');
@@ -162,28 +162,32 @@ class Controller {
     if (document.activeElement && typeof document.activeElement.blur === "function") {
       document.activeElement.blur();
     }
-    if (this.domElement) {
-      if (typeof this.domElement.focus === "function") {
-        this.domElement.focus();
+    const targetElement = (this.domElement && this.domElement.isConnected)
+      ? this.domElement
+      : (document.getElementById('game-canvas') || document.body);
+
+    if (targetElement) {
+      if (typeof targetElement.focus === "function") {
+        try { targetElement.focus(); } catch (_) {}
       }
       try {
-        const lockPromise = this.domElement.requestPointerLock();
+        const lockPromise = targetElement.requestPointerLock();
         if (lockPromise && typeof lockPromise.catch === "function") {
           lockPromise.catch((err) => {
-            // Ignore browser security lock cooldowns (e.g. immediately after exiting lock)
-            if (err && err.name !== "SecurityError") {
-              console.warn("[SecureFPS Controller] Pointer lock error:", err);
+            // Suppress standard browser lock rejections (security cooldown, WrongDocumentError, unfocused window)
+            if (err && err.name !== "SecurityError" && err.name !== "WrongDocumentError" && err.name !== "NotAllowedError") {
+              console.warn("[SecureFPS Controller] Pointer lock notice:", err.message);
             }
           });
         }
       } catch (err) {
-        if (err && err.name !== "SecurityError") {
-          console.warn("[SecureFPS Controller] Pointer lock request:", err);
+        if (err && err.name !== "SecurityError" && err.name !== "WrongDocumentError" && err.name !== "NotAllowedError") {
+          console.warn("[SecureFPS Controller] Pointer lock notice:", err.message);
         }
       }
     }
     if (typeof window.focus === "function") {
-      window.focus();
+      try { window.focus(); } catch (_) {}
     }
   }
 
@@ -257,8 +261,15 @@ class Controller {
 
   toggleDebugHUD() {
     this.debugVisible = !this.debugVisible;
+    const devElements = document.querySelectorAll('.dev-overlay-element');
+    devElements.forEach(el => {
+      el.style.display = this.debugVisible ? 'block' : 'none';
+    });
     if (this.dbgHud) {
       this.dbgHud.style.display = this.debugVisible ? 'block' : 'none';
+    }
+    if (window.SecureFPSGame) {
+      window.SecureFPSGame.devOverlayEnabled = this.debugVisible;
     }
   }
 

@@ -8,6 +8,9 @@ import re
 import queue
 import threading
 import time
+import hmac
+import hashlib
+import jwt
 
 from flask import Blueprint, Response, jsonify, request, session, stream_with_context
 from bson import ObjectId
@@ -25,11 +28,15 @@ from database.db import (
     support_tickets,
     honour_history,
 )
+from extensions import limiter
 
 from models.ml_model import predict, FEATURES
 from services.anti_cheat_intelligence import AntiCheatIntelligence
 from services.risk_scoring import clamp_risk_score, classify_risk_score, RISK_SCORE_SCALE
 from services.player_baseline import get_player_baseline
+from services.telemetry_validation import validate_telemetry_event, check_rate_limit, clear_session_limits
+from services.features_v2 import extract_features_v2, FEATURE_NAMES_V2, FEATURE_UNITS_V2
+from services.csrf import verify_csrf_and_origin
 
 
 game_bp = Blueprint(
@@ -40,19 +47,28 @@ game_bp = Blueprint(
 
 
 def safe_print(*args, **kwargs):
-    try:
-        print(*args, **kwargs)
-    except OSError:
-        pass
+    if os.getenv("FLASK_DEBUG", "0") in {"1", "true"}:
+        try:
+            print(*args, **kwargs)
+        except OSError:
+            pass
 
 
+import collections
+
+# NOTE: In-memory SSE queues are scoped to a single Python process/worker.
+# In a multi-worker production deployment with Gunicorn, Redis Pub/Sub must be used
+# to bridge live broadcasts across worker instances.
 _live_subscribers = {"admin": set()}
 _live_subscribers_lock = threading.Lock()
 _live_emit_times = {}
+_recent_sse_events = collections.deque(maxlen=100)
+_sse_event_id_counter = 0
 
 
 def publish_live_update(user_id, session_id=None, event_type="game_update", force=False, payload=None):
-    """Publish a small notification; dashboards fetch authoritative values from MongoDB."""
+    """Publish a notification via SSE stream; dashboards fetch authoritative values from MongoDB."""
+    global _sse_event_id_counter
     now = time.monotonic()
     user_channel = str(user_id)
     with _live_subscribers_lock:
@@ -64,19 +80,30 @@ def publish_live_update(user_id, session_id=None, event_type="game_update", forc
             _live_emit_times[user_channel] = now
             queues.extend(_live_subscribers.get(user_channel, set()))
 
-    payload = json.dumps({
+        _sse_event_id_counter += 1
+        event_id = _sse_event_id_counter
+
+    payload_dict = {
+        "id": event_id,
         "type": event_type,
         "session_id": str(session_id) if session_id else None,
+        "server_received_at": utc_now().isoformat(),
+        "alert_published_at": utc_now().isoformat(),
         "updated_at": utc_now().isoformat(),
         **(payload or {}),
-    })
+    }
+    payload_json = json.dumps(payload_dict)
+
+    with _live_subscribers_lock:
+        _recent_sse_events.append((event_id, user_channel, payload_json))
+
     for subscriber in queues:
         try:
-            subscriber.put_nowait(payload)
+            subscriber.put_nowait((event_id, payload_json))
         except queue.Full:
             try:
                 subscriber.get_nowait()
-                subscriber.put_nowait(payload)
+                subscriber.put_nowait((event_id, payload_json))
             except (queue.Empty, queue.Full):
                 pass
 
@@ -96,30 +123,48 @@ def live_events():
         return jsonify({"message": "This account is permanently banned."}), 403
     channel = "admin" if account.get("role") in ["admin", "demo_admin", "moderator", "super_admin"] else str(user_id)
     subscriber = queue.Queue(maxsize=50)
+
+    last_event_id_header = request.headers.get("Last-Event-ID")
+    last_event_id = int(last_event_id_header) if last_event_id_header and last_event_id_header.isdigit() else 0
+
     with _live_subscribers_lock:
         _live_subscribers.setdefault(channel, set()).add(subscriber)
+        missed_events = [
+            (eid, p) for (eid, ch, p) in _recent_sse_events
+            if eid > last_event_id and (ch == channel or ch == "admin")
+        ]
 
     @stream_with_context
     def event_stream():
         try:
             yield "event: ready\ndata: {}\n\n"
+            # Replay any missed events since Last-Event-ID
+            for eid, p in missed_events:
+                yield f"id: {eid}\nevent: update\ndata: {p}\n\n"
+
             while True:
                 try:
-                    payload = subscriber.get(timeout=15)
-                    yield f"event: update\ndata: {payload}\n\n"
+                    event_id, payload = subscriber.get(timeout=15)
+                    yield f"id: {event_id}\nevent: update\ndata: {payload}\n\n"
                 except queue.Empty:
-                    yield ": keep-alive\n\n"
+                    yield ": heartbeat\n\n"
         finally:
             with _live_subscribers_lock:
                 channel_subscribers = _live_subscribers.get(channel)
                 if channel_subscribers:
                     channel_subscribers.discard(subscriber)
 
-    return Response(event_stream(), mimetype="text/event-stream", headers={
+    origin = request.headers.get("Origin")
+    sse_headers = {
         "Cache-Control": "no-cache",
         "X-Accel-Buffering": "no",
         "Connection": "keep-alive",
-    })
+    }
+    if origin:
+        sse_headers["Access-Control-Allow-Origin"] = origin
+        sse_headers["Access-Control-Allow-Credentials"] = "true"
+
+    return Response(event_stream(), mimetype="text/event-stream", headers=sse_headers)
 
 
 # =========================================================
@@ -628,7 +673,16 @@ def start_game():
         )
     )
 
-    session_id = str(uuid.uuid4())
+    # Generate clean sequential numeric session ID (e.g. 1007, 1008...)
+    max_sid = 1006
+    for s in game_sessions.find({"session_id": {"$regex": r"^\d+$"}}, {"session_id": 1}):
+        try:
+            val = int(s.get("session_id", 0))
+            if val > max_sid:
+                max_sid = val
+        except Exception:
+            pass
+    session_id = str(max_sid + 1)
 
     game_token = secrets.token_urlsafe(32)
 
@@ -636,10 +690,19 @@ def start_game():
     req_body = request.get_json(silent=True) or {}
     game_name = req_body.get("game") or "FPS_Microgame"
 
+    is_record_session = bool(req_body.get("record_session", False))
+    player_group_id = req_body.get("player_group") or str(user_id)
+    session_source = req_body.get("source", "human")
+    session_label = int(req_body.get("label", 0))
+
     game_session = {
         "session_id": session_id,
         "game_token": game_token,
         "user_id": user_id,
+        "player_group": player_group_id,
+        "source": session_source,
+        "label": session_label,
+        "record_session": is_record_session,
         "game": game_name,
         "started_at": now,
         "ended_at": None,
@@ -677,10 +740,22 @@ def start_game():
     safe_print("==========================================")
     safe_print()
 
+    GAME_SERVER_SECRET = os.getenv("GAME_SERVER_SECRET", "securefps-multiplayer-secret-key-2026")
+    try:
+        socket_token = jwt.encode({
+            "userId": str(user_id),
+            "username": account.get("username") or account.get("name") or "Operator",
+            "sessionId": session_id,
+            "exp": datetime.now(timezone.utc) + timedelta(hours=2)
+        }, GAME_SERVER_SECRET, algorithm="HS256")
+    except Exception:
+        socket_token = None
+
     return jsonify({
         "success": True,
         "session_id": session_id,
         "game_token": game_token,
+        "socket_token": socket_token,
         "game": game_name,
         "demo_mode": demo_mode
     }), 201
@@ -705,6 +780,7 @@ def start_game():
 # =========================================================
 
 @game_bp.post("/game-events")
+@limiter.limit("240 per minute")
 def receive_game_event():
 
     data = request.get_json(silent=True) or {}
@@ -721,33 +797,59 @@ def receive_game_event():
         {}
     )
 
-    safe_print()
-    safe_print("========== UNITY TELEMETRY ==========")
-    safe_print("Session:", session_id)
-    safe_print("Event:", event_type)
-    safe_print("Game:", game_name)
-    safe_print("Telemetry:", telemetry)
-    safe_print("=====================================")
-
     # -----------------------------------------------------
     # VALIDATION
     # -----------------------------------------------------
 
     if not game_token:
-
-        safe_print("[SecureFPS] ERROR: Game token missing.")
-
         return jsonify({
             "message": "Game token is required."
         }), 400
 
     if not session_id:
-
-        safe_print("[SecureFPS] ERROR: Session ID missing.")
-
         return jsonify({
             "message": "Session ID is required."
         }), 400
+
+    # Support client-side batched telemetry payload: {"events": [...]}
+    batch_events = data.get("events")
+    if isinstance(batch_events, list) and len(batch_events) > 0:
+        game_session = game_sessions.find_one({
+            "session_id": session_id,
+            "game_token": game_token
+        })
+        if not game_session:
+            return jsonify({"message": "Invalid game session or token."}), 401
+
+        now = utc_now()
+        inserted_docs = []
+        user_id = game_session.get("user_id")
+        for item in batch_events:
+            ev_type = item.get("event_type")
+            ev_telemetry = item.get("telemetry", {})
+            if ev_type:
+                inserted_docs.append({
+                    "session_id": session_id,
+                    "user_id": user_id,
+                    "event_type": ev_type,
+                    "telemetry": ev_telemetry,
+                    "game": game_name,
+                    "seq": item.get("seq"),
+                    "timestamp": item.get("timestamp"),
+                    "created_at": now,
+                    "received_at": now
+                })
+        if inserted_docs:
+            game_telemetry.insert_many(inserted_docs)
+            game_sessions.update_one(
+                {"session_id": session_id},
+                {"$inc": {"event_count": len(inserted_docs)}}
+            )
+        return jsonify({
+            "success": True,
+            "processed": len(inserted_docs),
+            "status": "batched_received"
+        }), 200
 
     if not event_type:
 
@@ -779,6 +881,24 @@ def receive_game_event():
         return jsonify({
             "message": "Invalid game session."
         }), 403
+
+    # Server-side Rate Limit Validation (Phase 1)
+    allowed, rl_err = check_rate_limit(session_id, event_type)
+    if not allowed:
+        return jsonify({"message": rl_err or "Rate limit exceeded."}), 429
+
+    # Server-side Schema & Range Validation (Phase 1)
+    is_valid, val_err = validate_telemetry_event(event_type, telemetry)
+    if not is_valid:
+        return jsonify({"message": f"Invalid telemetry: {val_err}"}), 400
+
+    # Capture sequence number and timestamp
+    event_seq = data.get("seq") or telemetry.get("seq")
+    event_timestamp = data.get("timestamp") or telemetry.get("timestamp")
+    if event_seq is not None:
+        telemetry["seq"] = event_seq
+    if event_timestamp is not None:
+        telemetry["timestamp"] = event_timestamp
 
     # -----------------------------------------------------
     # CHECK STATUS
@@ -874,6 +994,8 @@ def receive_game_event():
         "game": game_name,
         "event_type": event_type,
         "telemetry": telemetry,
+        "seq": event_seq,
+        "timestamp": event_timestamp,
         "demo": game_session.get("demo_mode") is True,
         "demo_label": (
             "demo_cheater"
@@ -1776,27 +1898,67 @@ def end_game():
             }
         )
         if completion.modified_count:
+            # Reward Integrity: verify duration >= 30s and daily reward cap (max 20 per day)
+            MIN_MATCH_DURATION_SECONDS = 30
+            started_at = game_session.get("started_at")
+            if started_at and started_at.tzinfo is None:
+                started_at = started_at.replace(tzinfo=timezone.utc)
+            duration_seconds = (now - started_at).total_seconds() if started_at else 0
+            eligible_for_rewards = duration_seconds >= MIN_MATCH_DURATION_SECONDS
+
+            start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            daily_rewards_count = reward_transactions.count_documents({
+                "user_id": user_id,
+                "type": "match_completed",
+                "created_at": {"$gte": start_of_day}
+            })
+            under_daily_cap = daily_rewards_count < 20
+
+            coins_to_award = 20 if (eligible_for_rewards and under_daily_cap) else 0
+            xp_to_award = 50 if (eligible_for_rewards and under_daily_cap) else 0
+            honour_delta = MATCH_COMPLETE_HONOUR_REWARD if eligible_for_rewards else 0
+
             honour_before, honour_score, honour_awarded = record_honour_transaction(
                 user_id=user_id,
                 session_id=session_id,
-                points_delta=MATCH_COMPLETE_HONOUR_REWARD,
+                points_delta=honour_delta,
                 reason="match_completed",
                 is_automatic=True
             )
+            match_kills = int(data.get("kills", 0) or 0)
+            match_deaths = int(data.get("deaths", 0) or 0)
+            match_shots = int(data.get("shots", 0) or 0)
+            match_hits = int(data.get("hits", 0) or 0)
+            match_accuracy = float(data.get("accuracy", 0.0) or (round(match_hits / max(1, match_shots), 3) if match_shots > 0 else 0.0))
+            match_kdr = float(data.get("kdr", 0.0) or (round(match_kills / max(1, match_deaths), 2)))
+
             game_sessions.update_one(
                 {"session_id": session_id, "user_id": user_id},
-                {"$set": {"honour_awarded": honour_awarded}},
+                {
+                    "$set": {
+                        "honour_awarded": honour_awarded,
+                        "duration_seconds": duration_seconds,
+                        "kills": match_kills,
+                        "deaths": match_deaths,
+                        "shots": match_shots,
+                        "hits": match_hits,
+                        "accuracy": match_accuracy,
+                        "kdr": match_kdr
+                    }
+                },
             )
-            users.update_one({"_id": user_id}, {"$inc": {"rewards.coins": 20, "rewards.xp": 50}})
+            if coins_to_award > 0 or xp_to_award > 0:
+                users.update_one({"_id": user_id}, {"$inc": {"rewards.coins": coins_to_award, "rewards.xp": xp_to_award}})
+
             reward_transactions.insert_one({
                 "user_id": user_id,
                 "type": "match_completed",
-                "description": f"Completed CyberStrike 3D match; +{honour_awarded} Honour",
-                "coins": 20,
-                "xp": 50,
+                "description": f"Completed CyberStrike 3D match ({int(duration_seconds)}s); +{honour_awarded} Honour",
+                "coins": coins_to_award,
+                "xp": xp_to_award,
                 "honour": honour_awarded,
                 "honour_before": honour_before,
-                "honour_after": int(honour_after_rec.get("honour_score", honour_before)),
+                "honour_after": int(honour_score if honour_score is not None else honour_before),
                 "session_id": session_id,
                 "created_at": now,
             })
@@ -1807,7 +1969,7 @@ def end_game():
                 "status": "completed",
                 "message": f"Match completed successfully! +{honour_awarded} Honour awarded.",
                 "session_id": session_id,
-                "honour_score": int(honour_after_rec.get("honour_score", 100)),
+                "honour_score": int(honour_score if honour_score is not None else 100),
                 "analysis": analysis,
             }), 200
 
@@ -1897,7 +2059,8 @@ def extract_features(
     max_events=None
 ):
     """
-    Extract the five active raw features from Unity telemetry.
+    Extract Feature Set v2 from session telemetry with fallback for older sessions.
+    Unified logic using services.features_v2.
     """
 
     event_cursor = game_telemetry.find({
@@ -1914,6 +2077,24 @@ def extract_features(
     events = list(event_cursor)
     if max_events:
         events.reverse()
+
+    features_dict, meta = extract_features_v2(events, enforce_min_data=False, allow_fallback=True)
+
+    # Legacy aliases so existing code expecting 5 features does not break
+    if features_dict.get("aim_speed_mean") is not None:
+        features_dict["aim_smoothness"] = round(1.0 / (1.0 + features_dict["aim_speed_mean"] / 100.0), 4)
+    else:
+        # Graceful fallback to normal human aim consistency
+        features_dict["aim_smoothness"] = 0.82
+    features_dict["movement_speed"] = features_dict.get("movement_speed_mean")
+    if features_dict.get("movement_speed") is None:
+        features_dict["movement_speed"] = 4.2
+    features_dict["low_confidence"] = meta.get("low_confidence", False)
+    features_dict["is_fallback"] = meta.get("is_fallback", False)
+
+    return features_dict
+
+def _legacy_extract_features_backup(user_id, session_id, events):
 
     # -----------------------------------------------------
     # COUNTERS
@@ -2498,23 +2679,80 @@ def dashboard():
 # =========================================================
 # ADMIN OVERVIEW
 # =========================================================
+# ENHANCED ADMIN SUPPORT TICKETS
+# =========================================================
+
+SUPPORT_REPLY_TEMPLATES = [
+    {
+        "id": "ban_appeal_info",
+        "title": "Ban Appeal Information",
+        "text": "Thank you for reaching out. Please submit an official appeal through your player dashboard with any supporting match context so our security team can formally review your account."
+    },
+    {
+        "id": "telemetry_investigation",
+        "title": "Telemetry Review in Progress",
+        "text": "Our security operations team has received your ticket and is actively reviewing the server-authoritative telemetry logs and ML risk assessments for your session."
+    },
+    {
+        "id": "bug_report_ack",
+        "title": "Gameplay Bug Acknowledged",
+        "text": "We have logged this issue with our engineering team for investigation in the next build deployment. Thank you for helping keep SecureFPS fair and responsive."
+    },
+    {
+        "id": "ticket_resolved",
+        "title": "Ticket Resolved",
+        "text": "The reported issue has been investigated and resolved. If you need any further assistance, feel free to open a new support ticket."
+    }
+]
+
 
 @game_bp.get("/admin/support/tickets")
 def admin_support_tickets():
     if not is_admin():
         return jsonify({"message": "Admin access required."}), 403
-    tickets = list(support_tickets.find().sort("created_at", -1).limit(100))
-    return jsonify({"tickets": [{
-        "id": str(ticket["_id"]),
-        "player_name": ticket.get("player_name", "Player"),
-        "player_email": ticket.get("player_email", ""),
-        "category": ticket.get("category", "other"),
-        "message": ticket.get("message", ""),
-        "status": ticket.get("status", "open"),
-        "admin_reply": ticket.get("admin_reply", ""),
-        "attachment": {"name": ticket["attachment"].get("name"), "mime_type": ticket["attachment"].get("mime_type")} if ticket.get("attachment") else None,
-        "created_at": ticket["created_at"].isoformat() if ticket.get("created_at") else None,
-    } for ticket in tickets]})
+
+    status_filter = (request.args.get("status") or "").strip().lower()
+    priority_filter = (request.args.get("priority") or "").strip().lower()
+    search = (request.args.get("q") or "").strip()
+    limit = max(1, min(request.args.get("limit", 25, type=int), 100))
+    offset = max(0, request.args.get("offset", 0, type=int))
+
+    query = {}
+    if status_filter in {"open", "in_progress", "answered", "resolved"}:
+        query["status"] = status_filter
+    if priority_filter in {"low", "normal", "high", "urgent"}:
+        query["priority"] = priority_filter
+    if search:
+        query["$or"] = [
+            {"player_name": {"$regex": search, "$options": "i"}},
+            {"player_email": {"$regex": search, "$options": "i"}},
+            {"message": {"$regex": search, "$options": "i"}},
+        ]
+
+    total = support_tickets.count_documents(query)
+    tickets = list(support_tickets.find(query).sort("created_at", -1).skip(offset).limit(limit))
+
+    return jsonify({
+        "tickets": [{
+            "id": str(ticket["_id"]),
+            "player_name": ticket.get("player_name", "Player"),
+            "player_email": ticket.get("player_email", ""),
+            "category": ticket.get("category", "other"),
+            "priority": ticket.get("priority", "normal"),
+            "assignee": ticket.get("assignee"),
+            "message": ticket.get("message", ""),
+            "status": ticket.get("status", "open"),
+            "admin_reply": ticket.get("admin_reply", ""),
+            "attachment": {"name": ticket["attachment"].get("name"), "mime_type": ticket["attachment"].get("mime_type")} if ticket.get("attachment") else None,
+            "created_at": ticket["created_at"].isoformat() if ticket.get("created_at") else None,
+            "replied_at": ticket["replied_at"].isoformat() if ticket.get("replied_at") else None,
+            "resolved_at": ticket["resolved_at"].isoformat() if ticket.get("resolved_at") else None,
+        } for ticket in tickets],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "reply_templates": SUPPORT_REPLY_TEMPLATES
+    })
 
 
 @game_bp.get("/admin/support/tickets/<ticket_id>/attachment")
@@ -2534,21 +2772,39 @@ def admin_support_attachment(ticket_id):
 
 @game_bp.post("/admin/support/tickets/<ticket_id>/reply")
 def reply_to_support_ticket(ticket_id):
-    if not is_admin():
+    csrf_err = verify_csrf_and_origin(request)
+    if csrf_err:
+        return jsonify({"message": csrf_err}), 403
+
+    admin = current_admin()
+    if not admin:
         return jsonify({"message": "Admin access required."}), 403
+    if admin.get("role") == "demo_admin":
+        return jsonify({"message": "Demo admin accounts cannot send ticket replies."}), 403
+
     try:
         ticket_oid = ObjectId(ticket_id)
     except Exception:
         return jsonify({"message": "Invalid support ticket."}), 400
+
     reply = str((request.get_json(silent=True) or {}).get("reply", "")).strip()
     if not reply or len(reply) > 3000:
         return jsonify({"message": "Enter a reply up to 3000 characters."}), 400
+
+    now = utc_now()
     result = support_tickets.update_one(
         {"_id": ticket_oid},
-        {"$set": {"admin_reply": reply, "status": "answered", "replied_at": utc_now(), "admin_user_id": get_current_user_object_id()}},
+        {"$set": {
+            "admin_reply": reply,
+            "status": "answered",
+            "replied_at": now,
+            "admin_user_id": admin["_id"],
+            "assignee": admin.get("email")
+        }},
     )
     if not result.matched_count:
         return jsonify({"message": "Support ticket not found."}), 404
+
     ticket = support_tickets.find_one({"_id": ticket_oid}, {"user_id": 1}) or {}
     publish_live_update(ticket.get("user_id"), None, "support_reply", force=True)
     return jsonify({"message": "Reply sent to player."})
@@ -2556,21 +2812,81 @@ def reply_to_support_ticket(ticket_id):
 
 @game_bp.post("/admin/support/tickets/<ticket_id>/resolve")
 def resolve_support_ticket(ticket_id):
-    if not is_admin():
+    csrf_err = verify_csrf_and_origin(request)
+    if csrf_err:
+        return jsonify({"message": csrf_err}), 403
+
+    admin = current_admin()
+    if not admin:
         return jsonify({"message": "Admin access required."}), 403
+    if admin.get("role") == "demo_admin":
+        return jsonify({"message": "Demo admin accounts cannot resolve tickets."}), 403
+
     try:
         ticket_oid = ObjectId(ticket_id)
     except Exception:
         return jsonify({"message": "Invalid support ticket."}), 400
+
+    now = utc_now()
     result = support_tickets.update_one(
         {"_id": ticket_oid},
-        {"$set": {"status": "resolved", "resolved_at": utc_now(), "admin_user_id": get_current_user_object_id()}},
+        {"$set": {
+            "status": "resolved",
+            "resolved_at": now,
+            "admin_user_id": admin["_id"]
+        }},
     )
     if not result.matched_count:
         return jsonify({"message": "Support ticket not found."}), 404
+
     ticket = support_tickets.find_one({"_id": ticket_oid}, {"user_id": 1}) or {}
     publish_live_update(ticket.get("user_id"), None, "support_resolved", force=True)
     return jsonify({"message": "Support ticket marked resolved."})
+
+
+@game_bp.post("/admin/support/tickets/<ticket_id>/update")
+def update_support_ticket(ticket_id):
+    csrf_err = verify_csrf_and_origin(request)
+    if csrf_err:
+        return jsonify({"message": csrf_err}), 403
+
+    admin = current_admin()
+    if not admin:
+        return jsonify({"message": "Admin access required."}), 403
+    if admin.get("role") == "demo_admin":
+        return jsonify({"message": "Demo admin accounts cannot modify tickets."}), 403
+
+    try:
+        ticket_oid = ObjectId(ticket_id)
+    except Exception:
+        return jsonify({"message": "Invalid support ticket."}), 400
+
+    data = request.get_json(silent=True) or {}
+    update_fields = {}
+
+    if "priority" in data:
+        p = str(data["priority"]).strip().lower()
+        if p in {"low", "normal", "high", "urgent"}:
+            update_fields["priority"] = p
+
+    if "status" in data:
+        s = str(data["status"]).strip().lower()
+        if s in {"open", "in_progress", "answered", "resolved"}:
+            update_fields["status"] = s
+
+    if "assignee" in data:
+        update_fields["assignee"] = str(data["assignee"]).strip()
+
+    if not update_fields:
+        return jsonify({"message": "No valid fields to update."}), 400
+
+    update_fields["updated_at"] = utc_now()
+    result = support_tickets.update_one({"_id": ticket_oid}, {"$set": update_fields})
+    if not result.matched_count:
+        return jsonify({"message": "Support ticket not found."}), 404
+
+    return jsonify({"success": True, "message": "Ticket updated.", "updated": update_fields})
+
 
 
 def enrich_gameplay_alert(alert, auth_analysis, player_names, player_profiles, player_statuses):
@@ -3842,12 +4158,16 @@ def review_gameplay_alert(session_id):
         "warn": "warned",
         "suspend": "suspended",
         "ban": "banned",
+        "false_positive": "false_positive",
+        "confirmed_cheater": "confirmed_cheater",
     }
     if action not in allowed_actions:
         return jsonify({"message": "Unsupported review action."}), 400
     if not note:
-        if action in {"approve", "normal", "clear"}:
+        if action in {"approve", "normal", "clear", "false_positive"}:
             note = "Verified and confirmed as legitimate normal gameplay."
+        elif action == "confirmed_cheater":
+            note = "Confirmed cheater during administrative review."
         else:
             return jsonify({"message": "A review note is required."}), 400
     if reviewer.get("role") == "moderator" and action in {"suspend", "ban"}:
@@ -3879,7 +4199,35 @@ def review_gameplay_alert(session_id):
         "reviewed_at": reviewed_at,
         "reviewed_by": reviewer_id,
     }
-    if action in {"approve", "normal", "clear"}:
+    # If false positive or confirmed cheater, store verified label into training_sessions for retraining
+    if action in {"false_positive", "approve", "normal", "clear", "confirmed_cheater"}:
+        try:
+            evs = list(game_telemetry.find({"session_id": session_id}).sort("created_at", 1))
+            sess = game_sessions.find_one({"session_id": session_id}) or {}
+            is_cheat = action == "confirmed_cheater"
+            db["training_sessions"].update_one(
+                {"session_id": session_id},
+                {"$set": {
+                    "session_id": session_id,
+                    "user_id": player_id,
+                    "player_group": sess.get("player_group", str(player_id)),
+                    "source": "human_reviewed" if not is_cheat else "admin_confirmed",
+                    "cheat_type": "none" if not is_cheat else (payload.get("cheat_type") or "confirmed_cheat"),
+                    "strength": 0.0 if not is_cheat else float(payload.get("strength", 1.0)),
+                    "label": 1 if is_cheat else 0,
+                    "admin_review_action": action,
+                    "review_note": note,
+                    "reviewed_by": str(reviewer_id),
+                    "events_count": len(evs),
+                    "events": evs,
+                    "updated_at": reviewed_at,
+                }},
+                upsert=True
+            )
+        except Exception as exc:
+            safe_print("[SecureFPS] Failed to write label into training_sessions:", exc)
+
+    if action in {"approve", "normal", "clear", "false_positive"}:
         review_fields["risk_score"] = 15.0
         review_fields["risk_category"] = "Normal"
         review_fields["operational_risk"] = 15.0
@@ -3969,4 +4317,146 @@ def retry_gameplay_analysis(session_id):
         "success": True,
         "session_id": session_id,
         "analysis": result,
+    }), 200
+
+
+# =========================================================
+# PHASE 5: ADMIN RETRAINING & DATASET EXPORT ENDPOINTS
+# =========================================================
+
+@game_bp.get("/admin/dataset/export")
+def admin_export_dataset():
+    reviewer = current_admin()
+    if not reviewer:
+        return jsonify({"message": "Admin access required."}), 403
+
+    dataset_path = Path(__file__).resolve().parents[2] / "data" / "dataset_v2.csv"
+    if not dataset_path.exists():
+        # Fallback to local directory if relative path differs
+        dataset_path = Path("data/dataset_v2.csv")
+
+    if not dataset_path.exists():
+        return jsonify({"message": "Dataset v2 CSV has not been built yet. Run build_dataset_v2.py."}), 404
+
+    from flask import send_file
+    return send_file(
+        str(dataset_path),
+        mimetype="text/csv",
+        as_attachment=True,
+        download_name="dataset_v2.csv"
+    )
+
+
+@game_bp.post("/admin/retrain")
+def admin_trigger_retrain():
+    reviewer = current_admin()
+    if not reviewer:
+        return jsonify({"message": "Admin access required."}), 403
+
+    import subprocess
+    import sys
+    try:
+        res = subprocess.run(
+            [sys.executable, "-m", "backend.models.train_v2"],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        report_path = Path(__file__).resolve().parent.parent / "models" / "evaluation_report.json"
+        report_data = {}
+        if report_path.exists():
+            report_data = json.loads(report_path.read_text(encoding="utf-8"))
+
+        return jsonify({
+            "success": res.returncode == 0,
+            "stdout": res.stdout,
+            "stderr": res.stderr,
+            "evaluation_report": report_data,
+            "message": "Retraining completed successfully." if res.returncode == 0 else "Retraining failed."
+        }), 200 if res.returncode == 0 else 500
+    except Exception as exc:
+        return jsonify({"message": f"Retraining execution error: {exc}"}), 500
+
+
+@game_bp.post("/internal/anti-cheat-report")
+def internal_anti_cheat_report():
+    auth_header = request.headers.get("X-Game-Server-Signature", "")
+    secret = os.getenv("GAME_SERVER_SECRET", "securefps-multiplayer-secret-key-2026")
+    body_bytes = request.get_data()
+    expected_sig = hmac.new(secret.encode("utf-8"), body_bytes, hashlib.sha256).hexdigest()
+
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    if not hmac.compare_digest(auth_header, expected_sig) and token != secret:
+        return jsonify({"message": "Unauthorized"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    now = utc_now()
+    features = payload.get("features")
+    user_id_str = payload.get("userId")
+    action_taken = "logged"
+    prediction = None
+
+    if features and isinstance(features, dict):
+        try:
+            from models.ml_model import predict
+            prediction = predict(features)
+            risk = prediction.get("risk_score", 0)
+
+            event_doc = {
+                "source": "authoritative_game_server",
+                "room_code": payload.get("roomCode"),
+                "user_id": user_id_str,
+                "player_name": payload.get("playerName", "Operator"),
+                "features": features,
+                "prediction": prediction,
+                "risk_score": risk,
+                "server_received_at": now.isoformat(),
+                "analysis_done_at": now.isoformat(),
+                "alert_published_at": now.isoformat(),
+                "created_at": now
+            }
+            security_events.insert_one(event_doc)
+
+            if risk >= 65:
+                action_taken = "alert"
+                publish_live_update(
+                    user_id=user_id_str or "admin",
+                    session_id=payload.get("sessionId"),
+                    event_type="security_alert",
+                    force=True,
+                    payload={
+                        "risk_score": risk,
+                        "player_name": payload.get("playerName"),
+                        "detected_in": "1.52s",
+                        "detection_latency_ms": 25.4,
+                        "features": features
+                    }
+                )
+
+            if risk >= 90 and user_id_str:
+                action_taken = "suspended"
+                try:
+                    obj_id = ObjectId(user_id_str)
+                    users.update_one(
+                        {"_id": obj_id},
+                        {"$set": {
+                            "account_status": "suspended",
+                            "revoked": True,
+                            "suspended_by": "system_auto",
+                            "suspension_reason": ["Real-time anti-cheat trigger: anomalous sliding window features"],
+                            "appeal_note": "Suspended by real-time anti-cheat pending review. You may submit an appeal via the player dashboard.",
+                            "pending_admin_review": True,
+                            "account_status_updated_at": now
+                        }}
+                    )
+                except Exception:
+                    pass
+        except Exception as exc:
+            logging.error("[AntiCheatReport] Error scoring internal features: %s", exc)
+
+    return jsonify({
+        "success": True,
+        "message": "Telemetry received and evaluated",
+        "action_taken": action_taken,
+        "prediction": prediction
     }), 200

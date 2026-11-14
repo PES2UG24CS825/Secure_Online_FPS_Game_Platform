@@ -127,7 +127,11 @@ window.showAppToast = function (message, tone = "info") {
 async function api(path, options = {}) {
   let response;
   try {
-    const headers = { ...(options.headers || {}) };
+    const headers = {
+      "X-Requested-With": "XMLHttpRequest",
+      "X-CSRF-Token": "securefps-csrf",
+      ...(options.headers || {})
+    };
     if (options.body && !headers["Content-Type"]) {
       headers["Content-Type"] = "application/json";
     }

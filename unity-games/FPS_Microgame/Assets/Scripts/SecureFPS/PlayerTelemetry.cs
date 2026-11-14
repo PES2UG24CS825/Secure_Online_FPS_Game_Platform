@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class PlayerTelemetry : MonoBehaviour
 {
@@ -10,73 +11,103 @@ public class PlayerTelemetry : MonoBehaviour
     [SerializeField]
     private float aimSendInterval = 0.5f;
 
+    [SerializeField]
+    private float aimSampleInterval = 0.1f; // 10Hz kinematics (Phase 1)
+
     private float movementTimer;
     private float aimTimer;
+    private float aimSampleTimer;
 
     private CharacterController characterController;
+    private Transform movementTransform;
 
     private Vector3 lastPosition;
     private Vector3 lastForward;
+    private Vector3 lastAimSampleForward;
 
     private float elapsedSinceMovementSample;
+    private HashSet<string> currentTargetsInCone = new HashSet<string>();
 
     private void Start()
     {
-        characterController =
-            GetComponent<CharacterController>();
+        characterController = GetComponentInParent<CharacterController>();
 
-        lastPosition =
-            transform.position;
+        movementTransform = characterController != null
+            ? characterController.transform
+            : transform;
 
-        lastForward =
-            transform.forward;
+        lastPosition = movementTransform.position;
+        lastForward = transform.forward;
+        lastAimSampleForward = transform.forward;
 
-        movementTimer =
-            sendInterval;
-
-        aimTimer =
-            aimSendInterval;
+        movementTimer = sendInterval;
+        aimTimer = aimSendInterval;
+        aimSampleTimer = aimSampleInterval;
 
         elapsedSinceMovementSample = 0f;
 
-        Debug.Log(
-            "[SecureFPS] PlayerTelemetry started."
-        );
+        Debug.Log("[SecureFPS] PlayerTelemetry started with 10Hz aim_sample.");
     }
 
     private void Update()
     {
         movementTimer -= Time.deltaTime;
         aimTimer -= Time.deltaTime;
-
-        elapsedSinceMovementSample +=
-            Time.deltaTime;
+        aimSampleTimer -= Time.deltaTime;
+        elapsedSinceMovementSample += Time.deltaTime;
 
         // ---------------------------------------------
-        // MOVEMENT TELEMETRY
+        // 1. FAST 10Hz AIM SAMPLE TELEMETRY (every 0.1s)
         // ---------------------------------------------
+        if (aimSampleTimer <= 0f)
+        {
+            SendAimSample();
+            aimSampleTimer = aimSampleInterval;
+        }
 
+        // ---------------------------------------------
+        // 2. MOVEMENT TELEMETRY (every 2.0s)
+        // ---------------------------------------------
         if (movementTimer <= 0f)
         {
             SendPlayerBehavior();
-
-            movementTimer =
-                sendInterval;
-
+            movementTimer = sendInterval;
             elapsedSinceMovementSample = 0f;
         }
 
         // ---------------------------------------------
-        // AIM TELEMETRY
+        // 3. LEGACY AIM BEHAVIOR (every 0.5s)
         // ---------------------------------------------
-
         if (aimTimer <= 0f)
         {
             SendAimBehavior();
-
-            aimTimer =
-                aimSendInterval;
+            aimTimer = aimSendInterval;
         }
+    }
+
+    // =========================================================
+    // 10Hz AIM SAMPLE
+    // =========================================================
+
+    private void SendAimSample()
+    {
+        if (GameTelemetry.Instance == null) return;
+
+        Vector3 currentForward = transform.forward;
+        float angleDeg = Vector3.Angle(lastAimSampleForward, currentForward);
+        float dt = Mathf.Max(0.001f, aimSampleInterval);
+        float angularVelocityDegS = angleDeg / dt;
+
+        float yaw = transform.eulerAngles.y;
+        float pitch = transform.eulerAngles.x;
+        if (pitch > 180f) pitch -= 360f;
+
+        if (!float.IsNaN(angularVelocityDegS) && !float.IsInfinity(angularVelocityDegS))
+        {
+            GameTelemetry.Instance.AimSample(angularVelocityDegS, yaw, pitch);
+        }
+
+        lastAimSampleForward = currentForward;
     }
 
     // =========================================================
@@ -85,40 +116,28 @@ public class PlayerTelemetry : MonoBehaviour
 
     private void SendPlayerBehavior()
     {
-        if (GameTelemetry.Instance == null)
-        {
-            Debug.LogError(
-                "[SecureFPS] GameTelemetry.Instance not found."
-            );
+        if (GameTelemetry.Instance == null) return;
 
-            return;
-        }
-
-        Vector3 currentPosition =
-            transform.position;
-
-        float distance =
-            Vector3.Distance(
-                currentPosition,
-                lastPosition
-            );
-
+        Vector3 currentPosition = movementTransform.position;
+        float distance = Vector3.Distance(currentPosition, lastPosition);
         float speed = 0f;
-
-        if (elapsedSinceMovementSample > 0f)
-        {
-            speed =
-                distance /
-                elapsedSinceMovementSample;
-        }
-
-        bool grounded = false;
 
         if (characterController != null)
         {
-            grounded =
-                characterController.isGrounded;
+            speed = characterController.velocity.magnitude;
         }
+        else if (elapsedSinceMovementSample > 0f)
+        {
+            speed = distance / elapsedSinceMovementSample;
+        }
+
+        if (float.IsNaN(speed) || float.IsInfinity(speed))
+        {
+            lastPosition = currentPosition;
+            return;
+        }
+
+        bool grounded = characterController != null && characterController.isGrounded;
 
         GameTelemetry.Instance.PlayerBehavior(
             speed,
@@ -128,8 +147,7 @@ public class PlayerTelemetry : MonoBehaviour
             grounded
         );
 
-        lastPosition =
-            currentPosition;
+        lastPosition = currentPosition;
     }
 
     // =========================================================
@@ -138,105 +156,75 @@ public class PlayerTelemetry : MonoBehaviour
 
     private void SendAimBehavior()
     {
-        if (GameTelemetry.Instance == null)
+        if (GameTelemetry.Instance == null) return;
+
+        Vector3 currentForward = transform.forward;
+        float rotationChange = Vector3.Angle(lastForward, currentForward);
+
+        if (float.IsNaN(rotationChange) || float.IsInfinity(rotationChange))
         {
+            lastForward = currentForward;
             return;
         }
 
-        Vector3 currentForward =
-            transform.forward;
-
-        float rotationChange =
-            Vector3.Angle(
-                lastForward,
-                currentForward
-            );
-
-        GameTelemetry.Instance.AimBehavior(
-            rotationChange
-        );
-
-        lastForward =
-            currentForward;
+        GameTelemetry.Instance.AimBehavior(rotationChange);
+        lastForward = currentForward;
     }
 
     // =========================================================
-    // OPTIONAL PUBLIC EVENTS
+    // PUBLIC EVENTS
     // =========================================================
 
-    public void ReportWeaponFire(
-        string weaponName
-    )
+    public void ReportTargetAcquired(string enemyId, float distance, bool visibleThroughWall)
     {
-        if (GameTelemetry.Instance == null)
-        {
-            return;
-        }
-
-        GameTelemetry.Instance.WeaponFire(
-            weaponName
-        );
+        if (GameTelemetry.Instance == null) return;
+        GameTelemetry.Instance.TargetAcquired(enemyId, distance, visibleThroughWall);
     }
 
-    public void ReportPlayerHit(
-        float damage
-    )
+    public void ReportHitDetail(string targetId, string bodyPart, float distance, float damage)
     {
-        if (GameTelemetry.Instance == null)
-        {
-            return;
-        }
-
-        GameTelemetry.Instance.PlayerHit(
-            damage
-        );
+        if (GameTelemetry.Instance == null) return;
+        GameTelemetry.Instance.HitDetail(targetId, bodyPart, distance, damage);
     }
 
-    public void ReportEnemyKilled(
-        string enemyName
-    )
+    public void ReportWeaponFire(string weaponName, float aimErrorDeg = -1f, string targetId = null)
     {
-        if (GameTelemetry.Instance == null)
-        {
-            return;
-        }
-
-        GameTelemetry.Instance.EnemyKilled(
-            enemyName
-        );
+        if (GameTelemetry.Instance == null) return;
+        GameTelemetry.Instance.WeaponFire(weaponName, aimErrorDeg, targetId);
     }
 
-    public void ReportHeadshot(
-        string enemyName
-    )
+    public void ReportWeaponFire(string weaponName)
     {
-        if (GameTelemetry.Instance == null)
-        {
-            return;
-        }
+        ReportWeaponFire(weaponName, -1f, null);
+    }
 
-        GameTelemetry.Instance.Headshot(
-            enemyName
-        );
+    public void ReportPlayerHit(float damage)
+    {
+        if (GameTelemetry.Instance == null) return;
+        GameTelemetry.Instance.PlayerHit(damage);
+    }
+
+    public void ReportEnemyKilled(string enemyName)
+    {
+        if (GameTelemetry.Instance == null) return;
+        GameTelemetry.Instance.EnemyKilled(enemyName);
+    }
+
+    public void Headshot(string enemyName)
+    {
+        if (GameTelemetry.Instance == null) return;
+        GameTelemetry.Instance.Headshot(enemyName);
     }
 
     public void ReportPlayerDeath()
     {
-        if (GameTelemetry.Instance == null)
-        {
-            return;
-        }
-
+        if (GameTelemetry.Instance == null) return;
         GameTelemetry.Instance.PlayerDeath();
     }
 
     public void ReportGameCompleted()
     {
-        if (GameTelemetry.Instance == null)
-        {
-            return;
-        }
-
+        if (GameTelemetry.Instance == null) return;
         GameTelemetry.Instance.GameCompleted();
     }
 }

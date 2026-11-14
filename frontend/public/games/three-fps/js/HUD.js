@@ -27,6 +27,7 @@ class HUD {
     this.matchAssists = document.getElementById('match-assists');
     this.matchStreak = document.getElementById('match-streak');
     this.matchPing = document.getElementById('match-ping');
+    this.cleanFpsBadge = document.getElementById('clean-fps-badge');
     this.damageVignette = document.getElementById('damage-vignette');
     this.directionalDamageContainer = document.getElementById('directional-damage-container');
     this.floatingDamageContainer = document.getElementById('floating-damage-container');
@@ -58,6 +59,7 @@ class HUD {
       const frameTimeMs = (1000 / (this.fps || 1)).toFixed(1);
       if (this.hudFps) this.hudFps.textContent = `${this.fps} FPS`;
       if (this.hudFrameTime) this.hudFrameTime.textContent = `${frameTimeMs} ms`;
+      if (this.cleanFpsBadge) this.cleanFpsBadge.textContent = `${this.fps} FPS`;
 
       const renderer = window.SecureFPSGame?.renderer;
       if (renderer && renderer.info && renderer.info.render) {
@@ -318,7 +320,7 @@ class HUD {
     setTimeout(() => {
       row.style.opacity = '0';
       setTimeout(() => row.remove(), 400);
-    }, 4500);
+    }, 4000);
   }
 
   escapeHtml(str) {
@@ -349,8 +351,54 @@ class HUD {
     if (this.matchStreak) this.matchStreak.textContent = streak;
   }
 
+  updateNetworkStats(pingMs, jitterMs = 0, packetLoss = 0) {
+    if (this.matchPing) {
+      let str = `${Math.round(pingMs)}ms`;
+      if (jitterMs > 0) str += ` ±${Math.round(jitterMs)}`;
+      if (packetLoss > 0) str += ` (${packetLoss.toFixed(1)}% loss)`;
+      this.matchPing.textContent = str;
+    }
+  }
+
   updatePing(pingMs) {
     if (this.matchPing) this.matchPing.textContent = `${pingMs}ms`;
+  }
+
+  /**
+   * Update Top-Center Compact Match Header (Task 3a)
+   */
+  updateMatchHeader(info) {
+    if (!info) return;
+    const modeTag = document.getElementById('hud-mode-tag');
+    if (modeTag && info.mode) {
+      modeTag.textContent = info.mode;
+    }
+    const playerCountEl = document.getElementById('match-player-count');
+    if (playerCountEl && info.playerCountText) {
+      playerCountEl.textContent = info.playerCountText;
+    }
+    const killsEl = document.getElementById('match-kills');
+    if (killsEl && info.kills !== undefined) {
+      killsEl.textContent = info.kills;
+    }
+    const killsTargetEl = document.getElementById('match-kills-target');
+    if (killsTargetEl) {
+      if (info.targetKills) {
+        killsTargetEl.textContent = ` / ${info.targetKills}`;
+        killsTargetEl.style.display = 'inline';
+      } else {
+        killsTargetEl.textContent = '';
+        killsTargetEl.style.display = 'none';
+      }
+    }
+    const timerEl = document.getElementById('match-timer');
+    if (timerEl && info.timeText) {
+      timerEl.textContent = info.timeText;
+    }
+    const pingEl = document.getElementById('match-ping');
+    if (pingEl && info.pingText) {
+      pingEl.textContent = info.pingText;
+    }
   }
 
   setCrosshairColor(colorKey) {
