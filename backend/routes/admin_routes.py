@@ -1836,9 +1836,16 @@ def list_recent_logins():
     admin_ids = [u["_id"] for u in admin_users]
     admin_emails = [u.get("email", "").lower() for u in admin_users if u.get("email")]
 
+    GENUINE_PLAYER_EMAILS = ["sudh@gmail.com", "pk123@gmail.com", "sudi12@gamil.com", "varun1234@gmail.com"]
+    GENUINE_ADMIN_EMAILS = ["admin1@gmail.com", "superadmin@securefps.io"]
+
     query = {}
     if role_filter == "player":
-        genuine_players = list(users.find({"role": "player", "account_status": {"$ne": "deleted"}}, {"_id": 1, "email": 1}))
+        genuine_players = list(users.find({
+            "email": {"$in": GENUINE_PLAYER_EMAILS},
+            "role": "player",
+            "account_status": {"$ne": "deleted"}
+        }, {"_id": 1, "email": 1}))
         player_ids = [u["_id"] for u in genuine_players] + [str(u["_id"]) for u in genuine_players]
         player_emails = [u.get("email", "").lower() for u in genuine_players if u.get("email")]
         query = {
@@ -1853,7 +1860,7 @@ def list_recent_logins():
         query = {
             "$or": [
                 {"user_id": {"$in": admin_ids_str}},
-                {"identifier": {"$in": admin_emails}}
+                {"identifier": {"$in": GENUINE_ADMIN_EMAILS}}
             ]
         }
 
@@ -1899,11 +1906,13 @@ def list_recent_logins():
             "time": format_iso(d.get("created_at"))
         })
 
-    target_role_query = (
-        {"role": "player"} if role_filter == "player"
-        else ({"role": {"$in": ["admin", "super_admin"]}} if role_filter == "admin"
-        else {"role": {"$in": ["player", "admin", "super_admin"]}})
-    )
+    if role_filter == "player":
+        target_role_query = {"role": "player", "email": {"$in": GENUINE_PLAYER_EMAILS}}
+    elif role_filter == "admin":
+        target_role_query = {"role": {"$in": ["admin", "normal_admin", "super_admin"]}, "email": {"$in": GENUINE_ADMIN_EMAILS}}
+    else:
+        target_role_query = {"email": {"$in": GENUINE_PLAYER_EMAILS + GENUINE_ADMIN_EMAILS}}
+
     accounts_list = []
     for u in users.find({**target_role_query, "account_status": {"$ne": "deleted"}}).sort("created_at", 1):
         u_email = (u.get("email") or "").lower()

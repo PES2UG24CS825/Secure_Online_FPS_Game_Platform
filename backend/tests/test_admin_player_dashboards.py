@@ -66,6 +66,16 @@ class AdminPlayerDashboardSecurityTests(unittest.TestCase):
         })
         self.player_oid = res.inserted_id
 
+    def tearDown(self):
+        # Restore admin1 to normal_admin
+        users.update_one({"email": self.admin_email}, {"$set": {"role": "normal_admin", "is_super_admin": False}})
+        # Delete temporary test player and demo admin
+        users.delete_one({"_id": self.player_oid})
+        users.delete_one({"email": self.demo_admin_email})
+        # Clean any related test records
+        sessions_db.delete_many({"user_id": self.player_oid})
+        login_history.delete_many({"identifier": self.player_email})
+
     def _login_as(self, email, password):
         client = app.test_client()
         resp = client.post(

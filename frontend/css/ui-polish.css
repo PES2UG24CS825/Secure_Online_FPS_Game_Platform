@@ -96,7 +96,7 @@ a:focus-visible {
   border-left: 4px solid #2563EB;
   border-radius: 10px;
   background: #FFFFFF;
-  color: #F1F5F9;
+  color:#1E1B4B;
   box-shadow: 0 12px 30px rgba(27, 23, 48, .18);
   font-size: 13px;
   font-weight: 700;
@@ -147,7 +147,7 @@ a:focus-visible {
   padding: 8px 10px;
   border: 1px solid #DDD6FE;
   border-radius: 10px;
-  color: #F1F5F9;
+  color:#1E1B4B;
 }
 
 .loading-skeleton span {

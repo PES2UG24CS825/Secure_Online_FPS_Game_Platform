@@ -367,7 +367,7 @@ def ensure_default_admin():
                     "mfa_enabled": True,
                     "created_at": datetime.now(timezone.utc)
                 },
-                "$set": {"role": "admin"}
+                "$set": {"role": "normal_admin", "is_super_admin": False}
             },
             upsert=True
         )
