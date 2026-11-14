@@ -68,3 +68,7 @@ backend/uploads/banners/*.png
 backend/uploads/banners/*.jpg
 !backend/uploads/avatars/.gitkeep
 !backend/uploads/banners/.gitkeep
+
+# Cache and data dumps
+data/sessions_cache.json
+*.cache.json
