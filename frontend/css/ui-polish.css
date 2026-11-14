@@ -162,3 +162,32 @@ a:focus-visible {
 @keyframes skeleton-shimmer {
   to { background-position: -200% 0; }
 }
+
+/* Universal Table & Card Text Contrast Fix */
+table th, .admin-table-wrap th {
+  color: #334155 !important;
+  font-weight: 700 !important;
+}
+table td, table td *,
+.admin-table-wrap td, .admin-table-wrap td *,
+#threatSuspiciousLoginsTableBody td, #threatSuspiciousLoginsTableBody td *,
+#auditLogTableBody td, #auditLogTableBody td *,
+tbody td, tbody td * {
+  color: #1E1B4B;
+}
+table td code, .admin-table-wrap td code {
+  background: #EDE9FE !important;
+  color: #5B21B6 !important;
+  font-weight: 700 !important;
+}
+table td strong, .admin-table-wrap td strong {
+  color: #0F172A !important;
+  font-weight: 700 !important;
+}
+table td small, .admin-table-wrap td small {
+  color: #334155 !important;
+}
+table td small.muted, .admin-table-wrap td small.muted {
+  color: #64748B !important;
+}
+

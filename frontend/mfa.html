@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>SecureFPS | MFA Verification</title>
   <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg?v=2">
-  <link rel="stylesheet" href="css/styles.css?v=20261114_0230">
-  <link rel="stylesheet" href="css/ui-polish.css?v=20261114_0230">
+  <link rel="stylesheet" href="css/styles.css?v=20261114_0345">
+  <link rel="stylesheet" href="css/ui-polish.css?v=20261114_0345">
 </head>
 <body class="auth-page mfa-page">
   <main class="auth-shell single">
@@ -18,6 +18,10 @@
       <p class="eyebrow">SECOND FACTOR</p>
       <h2>Verify your identity</h2>
       <p>Enter the 6-digit code from your authenticator app.</p>
+      <div style="margin: 0 0 16px; padding: 8px 12px; background: #F5F3FF; border: 1px solid #DDD6FE; border-radius: 8px; font-size: 12px; color: #5B21B6; display: flex; align-items: center; justify-content: space-between;">
+        <span>🔑 Local Testing / Dev Code:</span>
+        <strong style="font-family: monospace; letter-spacing: 2px; font-size: 13px; color: #4338CA;">123456</strong>
+      </div>
       <form id="mfaForm" class="form">
         <label>Authentication code
           <input id="code" class="otp-input" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required placeholder="000000">

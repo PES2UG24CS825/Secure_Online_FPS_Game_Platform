@@ -1427,4 +1427,100 @@ table.threat-table td:first-child {
   padding-top: 8px;
 }
 
+/* =========================================================================
+   UNIVERSAL HIGH-CONTRAST DATA & TABLE TEXT (PREVENTS FAINT/WHITE TEXT)
+   ========================================================================= */
+table th, .admin-table-wrap th {
+  color: #334155 !important;
+  font-weight: 700 !important;
+  font-size: 11px !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+}
+
+table td, table td *,
+.admin-table-wrap td, .admin-table-wrap td *,
+#threatSuspiciousLoginsTableBody td, #threatSuspiciousLoginsTableBody td *,
+#auditLogTableBody td, #auditLogTableBody td *,
+tbody td, tbody td * {
+  color: #1E1B4B;
+}
+
+table td code, .admin-table-wrap td code,
+#threatSuspiciousLoginsTableBody td code,
+#auditLogTableBody td code {
+  background: #EDE9FE !important;
+  color: #5B21B6 !important;
+  font-weight: 700 !important;
+  font-family: ui-monospace, monospace !important;
+  padding: 3px 7px !important;
+  border-radius: 5px !important;
+  border: 1px solid #DDD6FE !important;
+}
+
+table td strong, .admin-table-wrap td strong,
+#threatSuspiciousLoginsTableBody td strong,
+#auditLogTableBody td strong {
+  color: #0F172A !important;
+  font-weight: 700 !important;
+}
+
+table td small, .admin-table-wrap td small {
+  color: #334155 !important;
+  font-weight: 500 !important;
+}
+
+table td small.muted, .admin-table-wrap td small.muted,
+table td .text-muted, table td .muted {
+  color: #64748B !important;
+  font-weight: 500 !important;
+}
+
+/* Badges across all admin tables */
+.badge-danger, .badge.badge-danger {
+  background: #FEE2E2 !important;
+  color: #991B1B !important;
+  border: 1px solid #FCA5A5 !important;
+  font-weight: 700 !important;
+  padding: 3px 8px !important;
+  border-radius: 999px !important;
+}
+
+.badge-cyan, .badge.badge-cyan {
+  background: #EDE9FE !important;
+  color: #5B21B6 !important;
+  border: 1px solid #C4B5FD !important;
+  font-weight: 700 !important;
+  padding: 3px 8px !important;
+  border-radius: 999px !important;
+}
+
+.badge-deleted, .badge.badge-deleted {
+  background: #F1F5F9 !important;
+  color: #334155 !important;
+  border: 1px solid #CBD5E1 !important;
+  font-weight: 700 !important;
+  padding: 3px 8px !important;
+  border-radius: 999px !important;
+}
+
+.badge-success, .badge.badge-success {
+  background: #DCFCE7 !important;
+  color: #14532D !important;
+  border: 1px solid #86EFAC !important;
+  font-weight: 700 !important;
+  padding: 3px 8px !important;
+  border-radius: 999px !important;
+}
+
+.badge-warning, .badge.badge-warning {
+  background: #FEF3C7 !important;
+  color: #78350F !important;
+  border: 1px solid #FCD34D !important;
+  font-weight: 700 !important;
+  padding: 3px 8px !important;
+  border-radius: 999px !important;
+}
+
+
 
