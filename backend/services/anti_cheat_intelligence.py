@@ -216,9 +216,9 @@ class AntiCheatIntelligence:
         kills = audit["counts"]["kills"]
 
         violations = audit["physical_violations"]
-        has_speed_hack = len(violations["speed_violations"]) >= 3
-        has_fire_rate_hack = len(violations["fire_rate_violations"]) >= 2
-        has_aim_snap_hack = len(violations["aim_snap_violations"]) >= 4
+        has_speed_hack = len(violations["speed_violations"]) >= 5
+        has_fire_rate_hack = len(violations["fire_rate_violations"]) >= 3
+        has_aim_snap_hack = len(violations["aim_snap_violations"]) >= 12
 
         # Physical impossibility check
         hard_cheat_evidence = []
@@ -226,10 +226,11 @@ class AntiCheatIntelligence:
             hard_cheat_evidence.append(f"Impossible movement speed detected ({len(violations['speed_violations'])} samples > {MAX_PERMISSIBLE_SPEED} m/s)")
         if has_fire_rate_hack:
             hard_cheat_evidence.append(f"Weapon fire rate exceeded physical limits (> {MAX_CARBINE_FIRE_RATE} rounds/s)")
-        if has_aim_snap_hack:
+        if has_aim_snap_hack and not is_bot_mode:
             hard_cheat_evidence.append(f"Repeated instant angle snapping detected ({len(violations['aim_snap_violations'])} instances)")
 
-        is_bot_mode = game_mode.lower() in ("solo", "play_with_bots", "training", "bots", "fps_microgame")
+        mode = str(game_mode or "").lower()
+        is_bot_mode = mode in ("solo", "play_with_bots", "training", "bots", "fps_microgame") or mode.startswith("bot")
 
         # Skill assessment
         is_skilled_human = False
@@ -314,7 +315,9 @@ class AntiCheatIntelligence:
         """
         # 1. If physical violations exist (speedhack, triggerbot, instant snap), risk is high
         if human_eval["hard_cheat_evidence"]:
-            return 92.5, "high"
+            evidence_count = len(human_eval["hard_cheat_evidence"])
+            risk = 82.5 if evidence_count == 1 else 88.0
+            return risk, "high"
 
         # 2. If session has incomplete combat
         if human_eval["review_category"] == "Analysis incomplete":
@@ -327,28 +330,7 @@ class AntiCheatIntelligence:
         # Standard 60/40 weighted formula
         raw_risk = round(100.0 * (0.60 * rf_p + 0.40 * iso_s), 2)
 
-        # 4. Skilled Human False-Positive Elimination:
-        # If Random Forest flagged cheater purely due to high accuracy in bot mode,
-        # but there is zero physical cheat evidence:
-        if human_eval["is_skilled_human"] and not human_eval["hard_cheat_evidence"]:
-            # Dampen false alarm from synthetic model over-fitting
-            # An elite human against bots should stay well below the 50.0 alert threshold
-            calibrated_risk = min(raw_risk, 38.5)
-            severity = "low"
-            return calibrated_risk, severity
-
-        # 5. Isolation Forest alone cannot drive risk into alert territory
-        if rf_result == "normal" and iso_result == "anomaly":
-            # Cap risk score at 39.0 so IF anomaly never triggers a false alert (threshold is 50.0)
-            calibrated_risk = min(raw_risk, 39.0)
-            return calibrated_risk, "low"
-
-        # 6. Standard alert thresholds
-        if raw_risk >= 75.0:
-            severity = "high"
-        elif raw_risk >= 50.0:
-            severity = "medium"
-        else:
-            severity = "low"
-
-        return raw_risk, severity
+        # 4. No positive server-validated physical evidence means no high/critical risk.
+        # RF/IF alone, accuracy, or historical model skew cannot exceed the monitoring band.
+        calibrated_risk = min(raw_risk, 39.0)
+        return calibrated_risk, "low"

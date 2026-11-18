@@ -153,7 +153,7 @@ function attachSupportListeners(container) {
       const textarea = document.getElementById(`reply-text-${ticketId}`);
       const reply = (textarea?.value || '').trim();
       if (!reply) {
-        alert('Please enter a reply before sending.');
+        window.showAppAlert('Please enter a reply before sending.');
         return;
       }
 
@@ -168,7 +168,7 @@ function attachSupportListeners(container) {
         if (!resp.ok) throw new Error(data.message || 'Failed to send reply');
         await loadSupportTickets();
       } catch (err) {
-        alert(`Error: ${err.message}`);
+        window.showAppAlert(`Error: ${err.message}`, { tone: "error" });
         btn.disabled = false;
       }
     });
@@ -188,7 +188,7 @@ function attachSupportListeners(container) {
         if (!resp.ok) throw new Error(data.message || 'Failed to resolve ticket');
         await loadSupportTickets();
       } catch (err) {
-        alert(`Error: ${err.message}`);
+        window.showAppAlert(`Error: ${err.message}`, { tone: "error" });
         btn.disabled = false;
       }
     });

@@ -29,6 +29,25 @@ document.addEventListener('DOMContentLoaded', () => {
   initGame();
 });
 
+function showGameStartupFailure(message) {
+  for (const id of ['pause-overlay', 'scoreboard-overlay', 'death-overlay']) {
+    document.getElementById(id)?.classList.remove('active');
+  }
+  for (const id of ['match-complete-overlay', 'training-complete-overlay', 'voluntary-exit-modal']) {
+    const layer = document.getElementById(id);
+    if (layer) layer.style.display = 'none';
+  }
+  const section = document.getElementById('game-start-failure');
+  document.getElementById('game-start-failure-message').textContent = message;
+  document.getElementById('loader-progress-box').style.display = 'none';
+  document.getElementById('main-menu-hub').style.display = 'none';
+  document.getElementById('loading-overlay').classList.remove('hidden');
+  section.hidden = false;
+  const retry = document.getElementById('game-start-retry');
+  retry.onclick = () => window.location.reload();
+  retry.focus();
+}
+
 /**
  * Step-by-step asynchronous game initialization with progress visualizer
  */
@@ -55,6 +74,14 @@ async function initGame() {
       antialias: true,
       powerPreference: 'high-performance'
     });
+    canvas.addEventListener('webglcontextlost', event => {
+      event.preventDefault();
+      cancelAnimationFrame(window.SecureFPSGame.animationFrameId);
+      window.SecureFPSGame.isInitialized = false;
+      window.SecureFPSGame.isPaused = false;
+      document.exitPointerLock?.();
+      showGameStartupFailure('The graphics context was lost. Reload to restart the arena.');
+    }, { once: true });
     renderer.setSize(window.innerWidth, window.innerHeight, false);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
@@ -141,6 +168,7 @@ async function initGame() {
 
     // Attach Window Event Handlers & Pause Navigation
     initWindowEvents(controller, gameMode, telemetry, multiplayer);
+    initGameDialogFocus();
 
     // Initialize Live Dev Weapon Calibration Sliders (F3 overlay)
     initWeaponCalibrationSliders();
@@ -150,10 +178,8 @@ async function initGame() {
 
   } catch (error) {
     console.error('[SecureFPS] Game initialization failed:', error);
-    if (statusEl) {
-      statusEl.textContent = `INITIALIZATION FAILED: ${error.message}`;
-      statusEl.style.color = '#ff0055';
-    }
+    window.SecureFPSGame.isInitialized = false;
+    showGameStartupFailure('The arena could not start. Reload the game or return to the dashboard.');
   }
 }
 
@@ -230,7 +256,7 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
 
     gameMode.startMatch();
     if (mode !== 'training') {
-      await telemetry.startSession();
+      await telemetry.startSession(mode, mode === 'bots' ? gameMode.difficulty : 'normal');
     }
     onWindowResize();
   }
@@ -261,7 +287,7 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
     });
 
     if (tabKey === 'multiplayer') {
-      multiplayer.connect();
+      void multiplayer.connect().catch(() => {});
     }
   }
 
@@ -417,8 +443,9 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
   });
 
   window.addEventListener('fps:mp_error', (e) => {
-    if (serverStatusText) serverStatusText.textContent = 'OFFLINE (:4001)';
+    if (serverStatusText) serverStatusText.textContent = 'UNAVAILABLE';
     if (serverStatusPill) serverStatusPill.style.color = '#fbbf24';
+    showError(e.detail.message || 'Multiplayer is unavailable.');
   });
 
   if (btnCreateRoom) {
@@ -584,7 +611,7 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
 
   window.addEventListener('fps:game_start', async (e) => {
     window.gameAudio.resume();
-    gameMode.setMode('multiplayer');
+    gameMode.setMode('multiplayer', e.detail.matchDuration);
     window.SecureFPSGame.isMenuOpen = false;
     loadingOverlay.classList.add('hidden');
 
@@ -626,8 +653,6 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
     await telemetry.startSession();
     onWindowResize();
 
-    // Show synchronized 3-second deployment countdown
-    showMatchCountdown();
   });
 
   // =========================================================================
@@ -920,36 +945,34 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
   const canvas = document.getElementById('game-canvas');
   const loadingOverlay = document.getElementById('loading-overlay');
 
-  // Handle Pointer Lock State Changes
-  window.addEventListener('fps:pointerlock', (e) => {
-    const isLocked = e.detail.locked;
-    const prompt = document.getElementById('pointer-lock-prompt');
-    if (prompt) {
-      prompt.style.display = (!isLocked && !window.SecureFPSGame.isMenuOpen) ? 'flex' : 'none';
-    }
+  const prompt = document.getElementById('pointer-lock-prompt');
+  const dialogs = [...document.querySelectorAll('[aria-modal="true"], #death-overlay')];
+  const isVisible = layer => layer.getClientRects().length && getComputedStyle(layer).visibility === 'visible';
+  const isInMatch = () => loadingOverlay.classList.contains('hidden') && !window.SecureFPSGame.isMenuOpen;
+  const canEngage = () => isInMatch() && !controller.isLocked && !window.SecureFPSGame.isPaused && !dialogs.some(isVisible);
 
-    if (isLocked) {
-      if (pauseOverlay) pauseOverlay.classList.remove('active');
+  window.addEventListener('fps:pointerlock', (event) => {
+    if (event.detail.locked) {
+      pauseOverlay.classList.remove('active');
       window.SecureFPSGame.isPaused = false;
-    } else {
-      // NEVER show blocking pause menu in multiplayer mode!
-      if (gameMode?.currentMode === 'multiplayer') {
-        return;
-      }
-      if (loadingOverlay && loadingOverlay.classList.contains('hidden') && !window.SecureFPSGame.isMenuOpen) {
-        if (pauseOverlay) pauseOverlay.classList.add('active');
-        window.SecureFPSGame.isPaused = true;
-      }
+    } else if (gameMode.currentMode !== 'multiplayer' && isInMatch() && !dialogs.some(isVisible)) {
+      pauseOverlay.classList.add('active');
+      window.SecureFPSGame.isPaused = true;
     }
   });
 
-  // Prompt click handler
-  const promptEl = document.getElementById('pointer-lock-prompt');
-  if (promptEl) {
-    promptEl.addEventListener('click', () => {
-      controller.requestLock();
-    });
+  const updateEngagePrompt = () => {
+    prompt.style.display = canEngage() ? 'flex' : 'none';
+  };
+  const engageObserver = new MutationObserver(updateEngagePrompt);
+  for (const layer of [...dialogs, loadingOverlay]) {
+    engageObserver.observe(layer, { attributes: true, attributeFilter: ['class', 'style', 'hidden', 'open'] });
   }
+  window.addEventListener('fps:pointerlock', updateEngagePrompt);
+  prompt.addEventListener('click', () => {
+    if (canEngage()) controller.requestLock();
+  });
+  updateEngagePrompt();
 
   // Action 1: Resume Combat
   if (resumeBtn) {
@@ -976,11 +999,9 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
   // Action 3: Open Multiplayer Lobby from Pause
   if (pauseLobbyBtn) {
     pauseLobbyBtn.addEventListener('click', () => {
-      if (pauseOverlay) pauseOverlay.classList.remove('active');
-      window.SecureFPSGame.isMenuOpen = true;
-      if (loadingOverlay) loadingOverlay.classList.remove('hidden');
-      const menuOp = window.SecureFPSGame.menuOperator;
-      if (menuOp && menuOp.root) menuOp.root.visible = true;
+      if (telemetry?.isSessionActive) void telemetry.endGameSession(false);
+      controller.resetKeys();
+      returnToMainMenu();
       const tabMp = document.getElementById('tab-multiplayer');
       if (tabMp) tabMp.click();
     });
@@ -1040,7 +1061,7 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
   // Action 4: Return to Main Menu (With Honour Confirmation during active match)
   if (pauseMainMenuBtn) {
     pauseMainMenuBtn.addEventListener('click', () => {
-      const isMatchActive = gameMode && gameMode.isMatchActive && !gameMode.isMatchEnded;
+      const isMatchActive = gameMode && gameMode.matchActive && !gameMode.isMatchCompleted;
       if (isMatchActive) {
         promptVoluntaryExit(() => returnToMainMenu());
       } else {
@@ -1052,7 +1073,7 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
   // Action 5: Safe Exit to Player Dashboard (With Honour Confirmation during active match)
   if (pauseExitDashboardBtn) {
     pauseExitDashboardBtn.addEventListener('click', () => {
-      const isMatchActive = gameMode && gameMode.isMatchActive && !gameMode.isMatchEnded;
+      const isMatchActive = gameMode && gameMode.matchActive && !gameMode.isMatchCompleted;
       if (isMatchActive) {
         promptVoluntaryExit(() => safeExitToDashboard(telemetry));
       } else {
@@ -1143,10 +1164,7 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
     const durSecs = (dur % 60).toString().padStart(2, '0');
     setEl('mc-duration', `${durMins}:${durSecs}`);
     setEl('mc-score', `${(detail.score || 0).toLocaleString()} PTS`);
-    const curHonour = window.localPlayerHonour ?? 100;
-    const nextHonour = Math.min(100, curHonour + 5);
-    window.localPlayerHonour = nextHonour;
-    setEl('mc-honour-val', `${nextHonour}/100 (+5 MATCH COMPLETED)`);
+    setEl('mc-honour-val', 'Pending match processing');
 
     mcOverlay.style.display = 'flex';
 
@@ -1154,6 +1172,8 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
     if (matchCompleteCountdownTimer) clearInterval(matchCompleteCountdownTimer);
     let secondsLeft = 6;
     const countdownEl = document.getElementById('mc-countdown-seconds');
+    const countdownDestination = document.getElementById('mc-countdown-destination');
+    if (countdownDestination) countdownDestination.textContent = detail.mode === 'multiplayer' ? 'lobby' : 'main menu';
     if (countdownEl) countdownEl.textContent = secondsLeft;
 
     matchCompleteCountdownTimer = setInterval(() => {
@@ -1163,7 +1183,7 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
         clearInterval(matchCompleteCountdownTimer);
         matchCompleteCountdownTimer = null;
         mcOverlay.style.display = 'none';
-        returnToMainMenu();
+        returnToMainMenu({ keepRoom: detail.mode === 'multiplayer' });
       }
     }, 1000);
   });
@@ -1175,6 +1195,10 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
       if (matchCompleteCountdownTimer) { clearInterval(matchCompleteCountdownTimer); matchCompleteCountdownTimer = null; }
       const mcOverlay = document.getElementById('match-complete-overlay');
       if (mcOverlay) mcOverlay.style.display = 'none';
+      if (gameMode.currentMode === 'multiplayer') {
+        returnToMainMenu({ keepRoom: true });
+        return;
+      }
       deployLocalMatch(gameMode.currentMode, gameMode.difficulty);
     });
   }
@@ -1250,7 +1274,7 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
     });
   }
 
-  function returnToMainMenu() {
+  function returnToMainMenu({ keepRoom = false } = {}) {
     const loadingOverlay = document.getElementById("loading-overlay");
     const pauseOverlay = document.getElementById("pause-overlay");
     const mcOverlay = document.getElementById("match-complete-overlay");
@@ -1285,14 +1309,15 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
 
     // Reset match state
     if (window.SecureFPSGame?.gameMode) {
-      window.SecureFPSGame.gameMode.isMatchActive = false;
-      window.SecureFPSGame.gameMode.isMatchEnded = false;
+      window.SecureFPSGame.gameMode.matchActive = false;
+      window.SecureFPSGame.gameMode.isMatchCompleted = false;
     }
 
     // Leave room if in multiplayer match
-    if (window.SecureFPSGame?.multiplayer?.isInRoom) {
+    if (!keepRoom && window.SecureFPSGame?.multiplayer?.isInRoom) {
       window.SecureFPSGame.multiplayer.leaveRoom();
     }
+    if (keepRoom) document.getElementById('tab-multiplayer')?.click();
 
     // Reset weapons state (ADS / scopes)
     if (window.SecureFPSGame?.weapons) {
@@ -1331,7 +1356,7 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
 
   // Scoreboard [TAB] key handler
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'Tab') {
+    if (e.code === 'Tab' && controller.isLocked && !window.SecureFPSGame.isPaused && !gameMode.isMatchCompleted) {
       e.preventDefault();
       if (scoreboardOverlay && !window.SecureFPSGame.isMenuOpen) {
         updateScoreboardTable(gameMode, multiplayer);
@@ -1351,7 +1376,7 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
   // Canvas click to lock if paused and clicked
   if (canvas) {
     canvas.addEventListener('click', () => {
-      if (loadingOverlay && loadingOverlay.classList.contains('hidden') && !controller.isLocked && !window.SecureFPSGame.isMenuOpen && !window.SecureFPSGame.isPaused) {
+      if (canEngage()) {
         controller.requestLock();
       }
     });
@@ -1360,6 +1385,52 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
   // Viewport resize handler
   window.addEventListener('resize', onWindowResize);
   window.addEventListener('orientationchange', onWindowResize);
+}
+
+function initGameDialogFocus() {
+  const targets = {
+    'pause-overlay': 'resume-btn',
+    'match-complete-overlay': 'btn-match-menu',
+    'training-complete-overlay': 'btn-training-menu',
+    'voluntary-exit-modal': 'btn-cancel-exit-match'
+  };
+  const layers = Object.keys(targets).map(id => document.getElementById(id)).filter(Boolean);
+  const focusStack = new Map();
+  let active;
+  const visible = element => Boolean(element?.getClientRects().length);
+  const dismiss = layer => document.getElementById(targets[layer.id]);
+  const observer = new MutationObserver(() => {
+    const next = [...layers].reverse().find(visible);
+    if (next === active) return;
+    const previousFocus = active && focusStack.get(active);
+    if (active && !visible(active)) focusStack.delete(active);
+    active = next;
+    if (next) {
+      if (!focusStack.has(next)) focusStack.set(next, document.activeElement);
+      dismiss(next)?.focus({ preventScroll: true });
+    } else if (visible(previousFocus)) {
+      previousFocus.focus({ preventScroll: true });
+    }
+  });
+  for (const layer of layers) observer.observe(layer, { attributes: true, attributeFilter: ['class', 'style'] });
+
+  document.addEventListener('keydown', event => {
+    if (!active || !visible(active)) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      dismiss(active)?.click();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const controls = [...active.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled)')].filter(visible);
+    if (!controls.length) return;
+    const index = controls.indexOf(document.activeElement);
+    if (index === -1 || (event.shiftKey ? index === 0 : index === controls.length - 1)) {
+      event.preventDefault();
+      (event.shiftKey ? controls.at(-1) : controls[0]).focus();
+    }
+  }, true);
 }
 
 function updateScoreboardTable(gameMode, multiplayer) {
@@ -1387,7 +1458,7 @@ function updateScoreboardTable(gameMode, multiplayer) {
   rows.push({
     name: localName,
     isLocal: true,
-    status: (gameMode?.playerHealth || 100) > 0 ? 'ACTIVE' : 'RESPAWNING',
+    status: (gameMode?.playerHealth ?? 100) > 0 ? 'ACTIVE' : 'RESPAWNING',
     kills: kills,
     deaths: deaths,
     kd: kd,
@@ -1401,8 +1472,8 @@ function updateScoreboardTable(gameMode, multiplayer) {
     if (botManager && botManager.bots) {
       botManager.bots.forEach(b => {
         const botDead = b.isDead;
-        const bKills = b.kills || 0;
-        const bDeaths = b.deaths || (botDead ? 1 : 0);
+        const bKills = gameMode.botScores[b.name]?.kills ?? 0;
+        const bDeaths = gameMode.botScores[b.name]?.deaths ?? 0;
         const bKd = bDeaths > 0 ? (bKills / bDeaths).toFixed(2) : (bKills > 0 ? bKills.toFixed(2) : '0.00');
         const bScore = bKills * 100 + (botDead ? 0 : 50);
         rows.push({
@@ -1653,8 +1724,9 @@ function renderLoop() {
           const diffStr = (gameMode.difficulty || 'normal').toUpperCase();
           modeTag = `BOTS • ${diffStr}`;
           const botMgr = window.SecureFPSGame?.botManager;
-          const aliveBots = botMgr?.bots ? botMgr.bots.filter(b => !b.isDead).length : 0;
-          const totalBots = botMgr?.bots ? botMgr.bots.length : 4;
+          const activeBots = botMgr?.bots ? botMgr.bots.filter(b => b.isActive) : [];
+          const aliveBots = activeBots.filter(b => !b.isDead).length;
+          const totalBots = activeBots.length;
           const isPlayerAlive = (gameMode.playerHealth || 100) > 0 ? 1 : 0;
           const totalAlive = aliveBots + isPlayerAlive;
           const totalPlayers = totalBots + 1;

@@ -64,22 +64,22 @@ export async function initPlayersSection() {
   if (btnHonourReset) btnHonourReset.addEventListener('click', () => sendPlayerHonourAdjustment(undefined, 100, 'Admin full honour restoration'));
 
   const btnResetMfa = document.getElementById('btnResetMfa');
-  if (btnResetMfa) btnResetMfa.addEventListener('click', () => {
-    if (confirm('Are you sure you want to reset MFA for this player? They will need to set up their authenticator again on next sign-in.')) {
+  if (btnResetMfa) btnResetMfa.addEventListener('click', async () => {
+    if (await window.showAppConfirm('Are you sure you want to reset MFA for this player? They will need to set up their authenticator again on next sign-in.')) {
       sendPlayerSecurityAction('reset-mfa', 'MFA has been successfully reset.');
     }
   });
 
   const btnRevokeSessions = document.getElementById('btnRevokeSessions');
-  if (btnRevokeSessions) btnRevokeSessions.addEventListener('click', () => {
-    if (confirm('Are you sure you want to revoke all active sessions for this player?')) {
+  if (btnRevokeSessions) btnRevokeSessions.addEventListener('click', async () => {
+    if (await window.showAppConfirm('Are you sure you want to revoke all active sessions for this player?')) {
       sendPlayerSecurityAction('revoke-sessions', 'All active sessions revoked.');
     }
   });
 
   const btnForcePassReset = document.getElementById('btnForcePassReset');
-  if (btnForcePassReset) btnForcePassReset.addEventListener('click', () => {
-    if (confirm('Force this player to reset their password on next sign-in?')) {
+  if (btnForcePassReset) btnForcePassReset.addEventListener('click', async () => {
+    if (await window.showAppConfirm('Force this player to reset their password on next sign-in?')) {
       sendPlayerSecurityAction('force-password-reset', 'Password reset flagged.');
     }
   });
@@ -397,16 +397,17 @@ export async function openPlayerMatchesModal(id, name, email) {
   const tbody = document.getElementById('modalMatchesTableBody');
   if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">Loading combat sessions…</td></tr>';
 
-  modal.showModal();
+  if (!modal.open) modal.showModal();
 
   try {
-    const resp = await fetch(`/api/admin/players/${id}`, {
+    const resp = await fetch(`${window.API_BASE}/admin/players/${encodeURIComponent(id)}`, {
       credentials: 'include',
       headers: { 'X-Requested-With': 'XMLHttpRequest' }
     });
     if (!resp.ok) throw new Error('Failed to load player match history');
     const data = await resp.json();
 
+    if (!modal.open || activePlayerModalId !== id) return;
     const stats = data.stats || {};
     const totalM = document.getElementById('modalTotalMatches');
     const totalK = document.getElementById('modalTotalKills');

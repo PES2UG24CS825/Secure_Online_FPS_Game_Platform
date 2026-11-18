@@ -11,6 +11,7 @@ from bson import ObjectId
 from PIL import Image
 import bcrypt
 
+from services.reward_catalog import reward_catalog
 from database.db import (
     game_events,
     game_sessions,
@@ -398,7 +399,14 @@ def update_profile_customization():
         avatar = "custom"
     if banner_image:
         banner = "custom"
-    if avatar not in allowed_avatars | {"custom"} or banner not in allowed_banners | {"custom"}:
+
+    user_doc = users.find_one({"_id": ObjectId(user_id)}) or {}
+    existing_custom = user_doc.get("profile_customization") or {}
+    if not isinstance(avatar, str) or not isinstance(banner, str) or (
+        avatar not in allowed_avatars and avatar != existing_custom.get("avatar")
+    ) or (
+        banner not in allowed_banners and banner != existing_custom.get("banner")
+    ):
         return jsonify({"message": "Choose an available avatar and banner."}), 400
 
     def valid_image_data(value):
@@ -425,11 +433,8 @@ def update_profile_customization():
     if not valid_image_data(avatar_image) or not valid_image_data(banner_image):
         return jsonify({"message": "Upload a valid JPG, PNG, or WebP image under 512 KB."}), 400
 
-    user_doc = users.find_one({"_id": ObjectId(user_id)}) or {}
-    existing_custom = user_doc.get("profile_customization", {})
-
-    avatar_url = existing_custom.get("avatar_url")
-    banner_url = existing_custom.get("banner_url")
+    avatar_url = existing_custom.get("avatar_url") if avatar == existing_custom.get("avatar") else None
+    banner_url = existing_custom.get("banner_url") if banner == existing_custom.get("banner") else None
 
     # Resize and store as WebP
     if avatar_image:
@@ -633,6 +638,9 @@ def get_matches():
         if raw_score is None and game_session.get("risk_score") is not None:
             raw_score = game_session.get("risk_score")
         clamped_score = clamp_risk_score(raw_score)
+        human_evaluation = analysis.get("human_evaluation") or {}
+        if not human_evaluation.get("hard_cheat_evidence"):
+            clamped_score = min(clamped_score if clamped_score is not None else 0.0, 39.0)
         classification = classify_risk_score(clamped_score)
 
         result_matches.append({
@@ -658,6 +666,8 @@ def get_matches():
             "risk_category": classification["category"],
             "risk_meaning": classification["meaning"],
             "risk_action": classification["action"],
+            "human_evaluation": analysis.get("human_evaluation") or {},
+            "reward_credit": game_session.get("reward_credit") or {},
             "random_forest": result.get("random_forest") or analysis.get("random_forest", "normal"),
             "random_forest_probability": result.get("random_forest_probability"),
             "isolation_forest": result.get("isolation_forest") or analysis.get("isolation_forest", "anomaly"),
@@ -789,11 +799,30 @@ def get_rewards():
     if not user_id:
         return jsonify({"message": "Authentication required."}), 401
     user_oid = ObjectId(user_id)
-    user = users.find_one({"_id": user_oid}, {"rewards": 1}) or {}
+    user = users.find_one({"_id": user_oid}, {"rewards": 1, "profile_customization": 1, "honour_score": 1}) or {}
     rewards = user.get("rewards") or {}
     total_matches = game_sessions.count_documents({"user_id": user_oid, "status": "completed"}) + matches.count_documents({"user_id": user_oid})
     total_kills = game_telemetry.count_documents({"user_id": user_oid, "event_type": "enemy_killed"})
-    transactions = list(reward_transactions.find({"user_id": user_oid}).sort("created_at", -1).limit(10))
+    transactions = list(reward_transactions.find({"user_id": user_oid}).sort("created_at", -1).limit(30))
+    transactions.extend(rewards.get("purchase_history") or [])
+    credited_sessions = {row.get("session_id") for row in transactions if row.get("type") == "match_completed"}
+    activity = rewards.get("activity") or []
+    transactions.extend(row for row in activity if row.get("session_id") not in credited_sessions)
+    credited_sessions.update(row.get("session_id") for row in activity)
+    transactions.extend(rewards.get("adjustments") or [])
+    transactions.sort(key=lambda row: row["created_at"].isoformat() if row.get("created_at") else "", reverse=True)
+    transactions = transactions[:30]
+    catalog = reward_catalog(REWARD_STORE)
+    appearance = user.get("profile_customization") or {}
+    slots = {}
+    for key in rewards.get("owned_items") or []:
+        item = catalog.get(key, {})
+        category = item.get("category")
+        if category in {"avatar", "banner"} and (
+            key == appearance.get(category)
+            or (item.get(f"{category}_key") and item[f"{category}_key"] == appearance.get(category))
+        ):
+            slots[category] = key
     return jsonify({
         "coins": int(rewards.get("coins", 0)),
         "xp": int(rewards.get("xp", 0)),
@@ -802,6 +831,21 @@ def get_rewards():
         "last_daily_login": rewards.get("last_daily_login"),
         "owned_items": rewards.get("owned_items", []),
         "equipped_item": rewards.get("equipped_item"),
+        "equipped_slots": slots,
+        "match_processing": [
+            {
+                "session_id": row.get("session_id"), "status": row.get("status"),
+                "game": row.get("game"), "analysis_status": row.get("analysis_status"),
+                "reward_status": "credited" if row.get("session_id") in credited_sessions else (row.get("reward_credit") or {}).get("status"),
+                "ended_at": row["ended_at"].isoformat() if row.get("ended_at") else None,
+                "kills": row.get("kills"), "deaths": row.get("deaths"), "accuracy": row.get("accuracy"),
+            }
+            for row in game_sessions.find(
+                {"user_id": user_oid, "status": {"$in": ["completed", "active", "processing"]}},
+                {"session_id": 1, "status": 1, "game": 1, "reward_credit.status": 1, "analysis_status": 1,
+                 "ended_at": 1, "kills": 1, "deaths": 1, "accuracy": 1},
+            ).sort("started_at", -1).limit(8)
+        ],
         "achievements": [
             {
                 "id": a["id"],
@@ -817,7 +861,7 @@ def get_rewards():
             }
             for a in ACHIEVEMENTS
         ],
-        "store": [{"id": item_id, **item} for item_id, item in REWARD_STORE.items() if not item.get("hidden")],
+        "store": [{"id": item_id, **item} for item_id, item in catalog.items() if item["available"] or item.get("pair") or item_id in (rewards.get("owned_items") or [])],
         "transactions": [{
             "type": item.get("type", "reward"),
             "description": item.get("description", "Reward earned"),
@@ -874,25 +918,32 @@ def purchase_reward_item():
     user_id = current_user()
     if not user_id:
         return jsonify({"message": "Authentication required."}), 401
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"message": "Choose an item to buy."}), 400
     item_id = data.get("item_id")
     if not isinstance(item_id, str):
         return jsonify({"message": "That store item is not available."}), 404
-    item = REWARD_STORE.get(item_id)
-    if not item:
+    item = reward_catalog(REWARD_STORE).get(item_id)
+    if not item or not item.get("available"):
         return jsonify({"message": "That store item is not available."}), 404
+    if "price" in data and (type(data["price"]) is not int or data["price"] != item["price"]):
+        return jsonify({"message": "The price changed. Refresh the shop and confirm again."}), 409
+    purchase = {
+        "item_id": item_id, "type": "purchase", "description": f"Purchased {item['name']}",
+        "coins": -item["price"], "xp": 0, "created_at": datetime.now(timezone.utc),
+    }
     user_oid = ObjectId(user_id)
     result = users.update_one(
         {"_id": user_oid, "rewards.coins": {"$gte": item["price"]}, "rewards.owned_items": {"$ne": item_id}},
-        {"$inc": {"rewards.coins": -item["price"]}, "$addToSet": {"rewards.owned_items": item_id}},
+        {"$inc": {"rewards.coins": -item["price"]}, "$addToSet": {"rewards.owned_items": item_id}, "$push": {"rewards.purchase_history": purchase}},
     )
     if not result.modified_count:
         user = users.find_one({"_id": user_oid}, {"rewards": 1}) or {}
         rewards = user.get("rewards") or {}
         if item_id in rewards.get("owned_items", []):
-            return jsonify({"message": "You already own this badge."}), 409
-        return jsonify({"message": "You do not have enough coins for this badge."}), 409
-    reward_transactions.insert_one({"user_id": user_oid, "type": "purchase", "description": f"Purchased {item['name']}", "coins": -item["price"], "xp": 0, "created_at": datetime.now(timezone.utc)})
+            return jsonify({"message": "You already own this item."}), 409
+        return jsonify({"message": "You do not have enough coins for this item."}), 409
     return jsonify({"message": f"Purchased {item['name']}.", "item_id": item_id})
 
 
@@ -901,25 +952,45 @@ def equip_reward_item():
     user_id = current_user()
     if not user_id:
         return jsonify({"message": "Authentication required."}), 401
-    item_id = (request.get_json(silent=True) or {}).get("item_id")
-    if item_id is not None and (not isinstance(item_id, str) or item_id not in REWARD_STORE):
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or "item_id" not in data:
+        return jsonify({"message": "Choose an item to equip."}), 400
+    item_id = data["item_id"]
+    catalog = reward_catalog(REWARD_STORE)
+    if item_id is not None and (not isinstance(item_id, str) or item_id not in catalog):
         return jsonify({"message": "That store item is not available."}), 404
     user_oid = ObjectId(user_id)
     query = {"_id": user_oid}
     update = {"$unset": {"rewards.equipped_item": ""}}
     applied_avatar = None
     applied_banner = None
+    artwork = None
     if item_id:
-        item = REWARD_STORE[item_id]
+        item = catalog[item_id]
         query["rewards.owned_items"] = item_id
-        update_set = {"rewards.equipped_item": item_id}
-        if item.get("category") == "avatar" and item.get("avatar_key"):
+        update_set = {}
+        category = item.get("category")
+        if category in {"avatar", "banner"} and item.get("preview", "").startswith("/public/cosmetics/"):
+            if not item["artwork_ready"]:
+                return jsonify({"message": "Artwork is unavailable."}), 409
+            artwork = item["preview"]
+            update_set[f"profile_customization.{category}_url"] = artwork
+            update_set[f"profile_customization.{category}"] = item_id
+            applied_avatar = item_id if category == "avatar" else None
+            applied_banner = item_id if category == "banner" else None
+        elif category == "avatar" and item.get("avatar_key"):
+            update_set["profile_customization.avatar_url"] = None
             update_set["profile_customization.avatar"] = item["avatar_key"]
             applied_avatar = item["avatar_key"]
         elif item.get("category") == "banner" and item.get("banner_key"):
+            update_set["profile_customization.banner_url"] = None
             update_set["profile_customization.banner"] = item["banner_key"]
             applied_banner = item["banner_key"]
+        else:
+            update_set["rewards.equipped_item"] = item_id
         update = {"$set": update_set}
+        if category in {"avatar", "banner"}:
+            update["$unset"] = {f"profile_customization.{category}_image": ""}
     result = users.update_one(query, update)
     if not result.matched_count:
         return jsonify({"message": "Purchase this item before equipping it."}), 409
@@ -927,6 +998,7 @@ def equip_reward_item():
         "message": "Equipment updated successfully.",
         "equipped_item": item_id,
         "avatar": applied_avatar,
+        "artwork": artwork,
         "banner": applied_banner
     })
 
@@ -1291,42 +1363,7 @@ def get_notifications():
     limit = max(1, min(request.args.get("limit", 20, type=int), 50))
 
     notes = list(player_notifications.find({"user_id": user_oid}).sort("created_at", -1).limit(limit))
-    if not notes:
-        # Seed engaging, actionable player notifications (Requirement 5)
-        now_dt = datetime.now(timezone.utc)
-        user_doc = users.find_one({"_id": user_oid}) or {}
-        username = user_doc.get("username", "Operator")
-        seed_notifs = [
-            {
-                "user_id": user_oid,
-                "type": "reward",
-                "title": f"Welcome back, {username}! 🎁",
-                "message": "You have unclaimed daily coins and match earnings waiting in your Tactical Armory. Claim your streak bonus now!",
-                "read": False,
-                "created_at": now_dt
-            },
-            {
-                "user_id": user_oid,
-                "type": "security",
-                "title": "🛡️ Fair-Play Verified",
-                "message": "Your recent combat telemetry passed all server-authoritative ML anti-cheat checks with 0.0% anomaly risk.",
-                "read": False,
-                "created_at": now_dt
-            },
-            {
-                "user_id": user_oid,
-                "type": "mission",
-                "title": "⚡ CyberStrike Proving Grounds",
-                "message": "3D tactical combat arena is active. Complete today's match to earn +50 Coins and +100 XP.",
-                "read": False,
-                "created_at": now_dt
-            }
-        ]
-        player_notifications.insert_many(seed_notifs)
-        notes = list(player_notifications.find({"user_id": user_oid}).sort("created_at", -1).limit(limit))
-
     unread_count = player_notifications.count_documents({"user_id": user_oid, "read": False})
-
     return jsonify({
         "notifications": [
             {
@@ -1479,7 +1516,7 @@ def export_player_data():
         return jsonify({"message": "Authentication required."}), 401
 
     user_oid = ObjectId(user_id)
-    user = users.find_one({"_id": user_oid}, {"password_hash": 0, "mfa_secret": 0})
+    user = users.find_one({"_id": user_oid}, {"password_hash": 0, "mfa_secret": 0, "recovery_codes": 0})
     if not user:
         return jsonify({"message": "User not found."}), 404
 
@@ -1492,16 +1529,20 @@ def export_player_data():
     # Logins
     logins = list(login_history.find({"user_id": user_oid}))
 
-    def serialize_doc(d):
-        out = {}
-        for k, v in d.items():
-            if isinstance(v, ObjectId):
-                out[k] = str(v)
-            elif isinstance(v, datetime):
-                out[k] = v.isoformat()
-            else:
-                out[k] = v
-        return out
+    rewards = user.get("rewards") or {}
+    rewards_logs.extend(rewards.get("purchase_history") or [])
+    rewards_logs.extend(rewards.get("adjustments") or [])
+
+    def serialize_doc(value):
+        if isinstance(value, dict):
+            return {key: serialize_doc(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [serialize_doc(item) for item in value]
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if isinstance(value, ObjectId):
+            return str(value)
+        return value
 
     export_payload = {
         "export_date": datetime.now(timezone.utc).isoformat(),

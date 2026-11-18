@@ -6,7 +6,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
-from database.db import db, users, sessions_db, login_history
+from database.db import db, users, sessions_db, login_history, system_config
 
 # Collections for security tokens and audit logs
 email_verifications = db["email_verifications"]
@@ -169,15 +169,22 @@ def reset_password_with_token(token, new_password_hash):
     user_id = record["user_id"]
     users.update_one(
         {"_id": user_id},
-        {"$set": {"password_hash": new_password_hash, "password_updated_at": datetime.now(timezone.utc)},
+        {"$set": {"password_hash": new_password_hash, "force_password_reset": False, "password_updated_at": datetime.now(timezone.utc)},
          "$unset": {"active_auth_session_id": ""}}
     )
     sessions_db.update_many({"user_id": user_id, "is_active": True}, {"$set": {"is_active": False}})
     return True, "Password reset successfully. Please log in with your new password."
 
-def generate_backup_recovery_codes(user_id):
+def player_login_paused(user):
+    if user.get("role", "player") not in {"player", "demo_player"}:
+        return False
+    config = system_config.find_one({"type": "global_config"}, {"security_policies.emergency_lockdown": 1}) or {}
+    return config.get("security_policies", {}).get("emergency_lockdown") is True
+
+
+def generate_backup_recovery_codes(user_id, *, password_hash=None):
     """
-    Generates 8 single-use alphanumeric backup recovery codes (e.g. 'ABCD-1234').
+    Generates 8 single-use backup recovery codes with 128 bits of randomness each.
     Stores them securely as SHA-256 hashes in MongoDB.
     Returns the plain-text codes once for the user to write down or download.
     """
@@ -185,24 +192,26 @@ def generate_backup_recovery_codes(user_id):
     hashed_records = []
 
     for _ in range(8):
-        code_part1 = secrets.token_hex(2).upper()
-        code_part2 = secrets.token_hex(2).upper()
-        code = f"{code_part1}-{code_part2}"
+        token = secrets.token_hex(16).upper()
+        code = "-".join(token[i:i + 8] for i in range(0, len(token), 8))
         plain_codes.append(code)
 
-        # Hash code using SHA-256 with salt
+        # Keep the hash format compatible with previously issued codes.
         hashed = hashlib.sha256(f"secfps:{code}".encode("utf-8")).hexdigest()
         hashed_records.append({"hash": hashed, "used": False, "used_at": None})
 
     user_oid = ObjectId(user_id) if isinstance(user_id, str) else user_id
-    users.update_one(
-        {"_id": user_oid},
+    query = {"_id": user_oid}
+    if password_hash is not None:
+        query["password_hash"] = password_hash
+    result = users.update_one(
+        query,
         {"$set": {
             "recovery_codes": hashed_records,
             "recovery_codes_generated_at": datetime.now(timezone.utc)
         }}
     )
-    return plain_codes
+    return plain_codes if result.matched_count else None
 
 def verify_backup_recovery_code(user_id, code):
     """
@@ -218,14 +227,19 @@ def verify_backup_recovery_code(user_id, code):
     for idx, c in enumerate(codes):
         if c.get("hash") == hashed and not c.get("used"):
             # Mark code as consumed
-            users.update_one(
-                {"_id": user_oid, f"recovery_codes.{idx}.used": False},
+            result = users.update_one(
+                {
+                    "_id": user_oid,
+                    f"recovery_codes.{idx}.hash": hashed,
+                    f"recovery_codes.{idx}.used": False,
+                },
                 {"$set": {
                     f"recovery_codes.{idx}.used": True,
                     f"recovery_codes.{idx}.used_at": datetime.now(timezone.utc)
                 }}
             )
-            return True, "Backup recovery code accepted."
+            if result.modified_count:
+                return True, "Backup recovery code accepted."
 
     return False, "Invalid or already used recovery code."
 

@@ -41,39 +41,6 @@ const overviewDate = (value) => {
   return `${day} ${month} ${year}, ${hours}:${minutes}:${seconds}`;
 };
 
-function getRiskBreakdown(score) {
-  const values = {
-    "Aim behavior": Math.min(100, Math.round(score * 1.8)),
-    "Reaction time": Math.min(100, Math.round(score * 1.05)),
-    Movement: Math.min(100, Math.round(score * 0.7)),
-    "Input patterns": Math.min(100, Math.round(score * 0.5)),
-    "Account / IP": Math.min(100, Math.round(score * 0.2))
-  };
-  return values;
-}
-
-function updateRiskBreakdown(score) {
-  const values = getRiskBreakdown(score);
-  const elementIds = {
-    "Aim behavior": "riskAim",
-    "Reaction time": "riskReaction",
-    Movement: "riskMovement",
-    "Input patterns": "riskInput",
-    "Account / IP": "riskAccount"
-  };
-  Object.entries(values).forEach(([name, value]) => {
-    const key = elementIds[name];
-    const fill = document.getElementById(`${key}Fill`);
-    const label = document.getElementById(`${key}Value`);
-    if (fill) {
-      fill.style.width = `${value}%`;
-      fill.style.background = value >= 70 ? "#B91C1C" : value >= 40 ? "#B45309" : "#0f766e";
-    }
-    if (label) label.textContent = String(value);
-  });
-  const topFactor = Object.entries(values).sort((left, right) => right[1] - left[1])[0];
-  return topFactor && topFactor[1] >= 30 ? `${topFactor[0]} (${topFactor[1]})` : "None";
-}
 
 const avatarPortraits = {
   "default-operator": "public/avatars/default-operator.png",
@@ -86,11 +53,11 @@ const avatarPortraits = {
   "celestial-sovereign": "public/avatars/celestial-sovereign.png"
 };
 const bannerScenes = new Set([
-  "default-banner", "sakura", "frontline", "dawn", "neon", "battlefield", "command-center", "cyber-metropolis", "orbital-bastion", "nebula-eternity"
+  "sakura", "frontline", "dawn", "neon"
 ]);
 let playerDashboardLoading = false;
 let appearanceControlsBound = false;
-let currentAppearance = { avatar: "default-operator", banner: "default-banner", avatar_image: null, banner_image: null };
+let currentAppearance = { avatar: "chibi-male-2", banner: "sakura", avatar_image: null, banner_image: null };
 let appearanceDirty = false;
 let renderPlayerAppearance = () => {};
 let playerLiveEvents = null;
@@ -109,7 +76,10 @@ function showMatchReview(match) {
     ? reportedSeverity
     : score == null ? "unknown" : score >= 75 ? "high" : score >= 50 ? "medium" : "low";
   const honourReward = match.honour_awarded == null ? "" : ` and +${Number(match.honour_awarded)} Honour`;
-  const rewardNotice = `Match reward: +20 coins and +50 XP${honourReward}.`;
+  const rewardTransaction = match.reward_credit?.transaction;
+  const rewardNotice = rewardTransaction
+    ? `Server reward: +${Number(rewardTransaction.xp || 0)} XP and +${Number(rewardTransaction.coins || 0)} coins${honourReward}.`
+    : `Match reward is pending${honourReward}.`;
   const title = document.getElementById("matchReviewTitle");
   const message = document.getElementById("matchReviewMessage");
   const countdown = document.getElementById("matchReviewCountdown");
@@ -158,7 +128,17 @@ document.getElementById("matchReviewBackdrop")?.addEventListener("click", () => 
 function connectPlayerLiveEvents() {
   if (playerLiveEvents || !window.EventSource) return;
   playerLiveEvents = new EventSource(`${window.API_BASE}/live/events`, { withCredentials: true });
-  playerLiveEvents.addEventListener("update", () => loadPlayerDashboard());
+  playerLiveEvents.addEventListener("update", event => {
+    loadPlayerDashboard();
+    try {
+      const update = JSON.parse(event.data);
+      if ((update.type === "analysis_complete" || update.type === "reward_credit") && typeof loadRewards === "function") {
+        loadRewards();
+      }
+    } catch {
+      // The dashboard refresh above still runs for updates without a payload.
+    }
+  });
   playerLiveEvents.onopen = () => {
     const status = document.getElementById("playerLiveStatus");
     if (status) status.textContent = `Live · updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
@@ -188,8 +168,11 @@ function matchCard(match) {
   const badge = state === "terminated_banned" ? "bad" : state === "completed" ? "good" : state === "active" ? "warn" : "gray";
   const duration = match.duration == null ? "—" : `${Math.max(0, Number(match.duration))}s`;
   const accuracyStr = match.accuracy == null ? "—" : `${Number(match.accuracy).toFixed(1)}%`;
-  const coinsEarned = Math.min(50, Math.max(15, (Number(match.kills) || 0) * 2 + 10));
-  const xpEarned = (Number(match.kills) || 0) * 50 + 100;
+  const reward = match.reward_credit?.transaction || null;
+  const rewardStatus = String(match.reward_credit?.status || "pending");
+  const rewardText = reward
+    ? `Rewards: +${Number(reward.xp || 0)} XP · +${Number(reward.coins || 0)} Coins`
+    : rewardStatus === "credited" ? "Rewards: credited" : "Rewards: pending";
   const analysisStatus = String(match.analysis_status || "pending").replaceAll("_", " ");
   return `<article class="match-card" data-session-id="${escapeHtml(match.session_id || match.id || match.match_id)}">
     <div class="match-card-head"><div><span class="match-card-kicker">${escapeHtml(match.game || "CyberStrike 3D")}${match.demo_test ? ` · ${playerText(match.hacker_profile || "hacker demo")}` : ""}</span><h3>Match ${playerText(match.match_id || "—")}</h3><div class="match-card-date">${playerText(playerDate(match.date))}</div></div><div style="display:flex; align-items:center; gap:8px;"><button type="button" class="match-drilldown-btn ghost-btn" data-session-id="${escapeHtml(match.session_id || match.id || match.match_id)}" style="background:transparent; border:1px solid var(--player-border,#38bdf8); border-radius:4px; padding:3px 8px; color:var(--player-blue,#38bdf8); cursor:pointer; font-size:11px;">Details</button><span class="badge ${badge}">${playerText(state === "terminated_banned" ? "PERMANENTLY BANNED" : state)}</span></div></div>
@@ -197,8 +180,7 @@ function matchCard(match) {
     <div class="match-risk"><span>Security risk score</span><strong>${playerText(playerRisk(match.risk_score))} ${match.risk_category ? `<span class="badge ${match.risk_category === 'Normal' ? 'good' : match.risk_category === 'Monitoring' ? 'warn' : 'bad'}">${escapeHtml(match.risk_category)}</span>` : ''}</strong></div>
     <div class="match-features-strip" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid rgba(148,163,184,0.18); font-size:11px;">
       <span style="background:rgba(14,165,233,0.1); color:#0284c7; padding:4px 10px; border-radius:6px; font-weight:600;">🛡️ Fair Play Verified</span>
-      <span style="background:rgba(245,158,11,0.1); color:#d97706; padding:4px 10px; border-radius:6px; font-weight:600;">⭐ +${xpEarned} XP</span>
-      <span style="background:rgba(16,185,129,0.1); color:#059669; padding:4px 10px; border-radius:6px; font-weight:600;">🪙 +${coinsEarned} Coins</span>
+      <span style="background:rgba(245,158,11,0.1); color:#d97706; padding:4px 10px; border-radius:6px; font-weight:600;">⭐ ${escapeHtml(rewardText)}</span>
     </div>
   </article>`;
 }
@@ -386,9 +368,9 @@ async function loadPlayerDashboard() {
         : null;
       trendCaption.textContent = delta == null ? "Latest completed match analysis" : `${delta <= 0 ? "Down" : "Up"} ${Math.abs(delta)} pts vs. last ${previousScores.length} matches`;
     }
-    const breakdownScore = risk == null ? 0 : Math.max(0, Math.min(100, Number(risk)));
-    const strongestFactor = updateRiskBreakdown(breakdownScore);
-    if (topFactor) topFactor.textContent = `Top factor: ${strongestFactor}`;
+    if (topFactor) topFactor.textContent = latestScoredMatch?.human_evaluation?.explanation
+      ? `Server assessment: ${latestScoredMatch.human_evaluation.explanation}`
+      : "Server assessment: awaiting completed match analysis";
 
     document.getElementById("matchesCount").textContent = matchesData ? Number(matchesData.total_matches ?? completedMatches.length) : "Unavailable";
     const matchesSummary = document.getElementById("matchesSummary");
@@ -482,12 +464,13 @@ async function loadPlayerDashboard() {
         if (reasonText) {
           reasonText.textContent = profileData?.ban_reason || securityData?.ban_reason || "Account restricted due to fair-play security violation.";
         }
-        loadBanAppealStatus();
+
       } else {
         bannedOverlay.hidden = true;
       }
     }
 
+    loadBanAppealStatus();
     // Notification center data load
     loadNotifications();
 
@@ -630,12 +613,12 @@ async function loadPlayerDashboard() {
       const customAvatar = profileData?.profile_customization?.avatar_url || profileData?.profile_customization?.avatar_image || null;
       const customBanner = profileData?.profile_customization?.banner_url || profileData?.profile_customization?.banner_image || null;
       currentAppearance = {
-        avatar: avatarPortraits[savedAvatar] ? savedAvatar : "default-operator",
+        avatar: avatarPortraits[savedAvatar] ? savedAvatar : "chibi-male-2",
         banner: bannerScenes.has(savedBanner)
           ? savedBanner
-          : customBanner ? "custom" : "default-banner",
+          : "sakura",
         avatar_image: customAvatar,
-        banner_image: customBanner
+        banner_image: null
       };
     }
     const profileBanner = document.getElementById("profileBanner");
@@ -647,15 +630,19 @@ async function loadPlayerDashboard() {
     const leaderboardMascot = document.getElementById("leaderboardMascotSticker");
     const rewardsMascot = document.getElementById("rewardsMascotSticker");
     const securityMascot = document.getElementById("securityMascotSticker");
-    const matchesMascot = document.getElementById("matchesMascotSticker");
     const profileDisplayName = document.getElementById("profileDisplayName");
     const profileDisplayEmail = document.getElementById("profileDisplayEmail");
     renderPlayerAppearance = () => {
       if (profileBanner) profileBanner.dataset.banner = currentAppearance.banner;
-      document.body.dataset.playerBanner = bannerScenes.has(currentAppearance.banner) ? currentAppearance.banner : "frontline";
+      document.body.dataset.playerBanner = bannerScenes.has(currentAppearance.banner) ? currentAppearance.banner : "sakura";
       if (profileBanner) profileBanner.style.backgroundImage = currentAppearance.banner_image
-        ? `linear-gradient(0deg, rgba(5, 13, 24, .08), rgba(5, 13, 24, .08)), url("${currentAppearance.banner_image}")`
+        ? `linear-gradient(0deg, rgba(5, 13, 24, .28), rgba(5, 13, 24, .12)), url("${currentAppearance.banner_image}")`
         : "";
+      if (currentAppearance.banner_image) {
+        document.body.style.setProperty("--player-scene-image", `url(${JSON.stringify(currentAppearance.banner_image)})`);
+      } else {
+        document.body.style.removeProperty("--player-scene-image");
+      }
       const selectedPortrait = avatarPortraits[currentAppearance.avatar] || "";
       const avatarImage = currentAppearance.avatar_image || selectedPortrait;
       const isChibi = Boolean(currentAppearance.avatar && currentAppearance.avatar.startsWith("chibi-"));
@@ -676,7 +663,6 @@ async function loadPlayerDashboard() {
       if (leaderboardMascot) leaderboardMascot.src = chibiMascot;
       if (rewardsMascot) rewardsMascot.src = chibiMascot;
       if (securityMascot) securityMascot.src = chibiMascot;
-      if (matchesMascot) matchesMascot.src = chibiMascot;
       for (const avatarElement of [profileAvatar, avatar]) {
         if (!avatarElement) continue;
         avatarElement.style.backgroundImage = avatarImage ? `url("${avatarImage}")` : "";
@@ -700,31 +686,23 @@ async function loadPlayerDashboard() {
       (rew?.owned_items || []).forEach(id => ownedSet.add(id));
 
       const ALL_AVATARS_ORDERED = [
-        { key: "default-operator", name: "Recruit Operative (Default Starter)", img: "public/avatars/default-operator.png", isDefault: true },
-        { key: "chibi-male-2", name: "Tactical Vanguard Chibi (130 Coins)", img: "public/avatars/chibi-male-2.png", itemId: "skin_tactical_vanguard" },
-        { key: "chibi-male-1", name: "Cyber Infiltrator Chibi (140 Coins)", img: "public/avatars/chibi-male-1.png", itemId: "skin_cyber_ninja" },
-        { key: "chibi-female-1", name: "Neon Valkyrie Chibi (150 Coins)", img: "public/avatars/chibi-female-1.png", itemId: "skin_neon_valkyrie" },
-        { key: "chibi-female-2", name: "Phantom Recon Chibi (160 Coins)", img: "public/avatars/chibi-female-2.png", itemId: "skin_phantom_ghost" },
-        { key: "ghost-specops", name: "Ghost Spec-Ops Avatar (200 Coins)", img: "public/avatars/ghost-specops.png", itemId: "skin_ghost_specops" },
-        { key: "valkyrie-void", name: "Valkyrie Void Avatar (220 Coins)", img: "public/avatars/valkyrie-void.png", itemId: "skin_valkyrie_void" },
-        { key: "celestial-sovereign", name: "Celestial Sovereign Mythic (1000 Coins)", img: "public/avatars/celestial-sovereign.png", itemId: "skin_celestial_sovereign" }
+        { key: "chibi-male-1", name: "Silver-haired chibi", img: "public/avatars/chibi-male-1.png" },
+        { key: "chibi-male-2", name: "Dark-haired chibi", img: "public/avatars/chibi-male-2.png" }
       ];
 
       const ALL_BANNERS_ORDERED = [
-        { key: "default-banner", name: "Proving Ground (Default Starter)", isDefault: true },
-        { key: "command-center", name: "Command Ops Center (100 Coins)", itemId: "banner_command_center" },
-        { key: "battlefield", name: "Frontline Battlefield (120 Coins)", itemId: "banner_battlefield" },
-        { key: "dawn", name: "Sakura Dawn Arena (180 Coins)", itemId: "banner_sakura_dawn" },
-        { key: "frontline", name: "Combat Outpost (200 Coins)", itemId: "banner_sakura_frontline" },
-        { key: "neon", name: "Neon Sakura Arena (220 Coins)", itemId: "banner_sakura_neon" },
-        { key: "sakura", name: "Cosmic Blossom (250 Coins)", itemId: "banner_cosmic_cherry" },
-        { key: "orbital-bastion", name: "Orbital Bastion (280 Coins)", itemId: "banner_orbital_bastion" },
-        { key: "cyber-metropolis", name: "Cyber Metropolis (300 Coins)", itemId: "banner_cyber_metropolis" },
-        { key: "nebula-eternity", name: "Nebula Eternity Mythic (1000 Coins)", itemId: "banner_nebula_eternity" }
+        { key: "sakura", name: "Cosmic Sakura", isDefault: true },
+        { key: "frontline", name: "Sakura Frontline" },
+        { key: "dawn", name: "Sakura Dawn" },
+        { key: "neon", name: "Neon Sakura" }
       ];
 
       if (avatarContainer) {
-        const ownedAvs = ALL_AVATARS_ORDERED.filter(a => a.isDefault || ownedSet.has(a.itemId) || currentAppearance.avatar === a.key);
+        const ownedAvs = ALL_AVATARS_ORDERED.filter(a =>
+          a.isDefault ||
+          ownedSet.has(a.itemId) ||
+          currentAppearance.avatar === a.key
+        );
         avatarContainer.innerHTML = ownedAvs.map(a => `
           <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="${a.key}" aria-label="${a.name}" title="${a.name}" aria-pressed="${String(a.key === currentAppearance.avatar)}">
             <img src="${a.img}" alt="${a.name}" style="${a.key.startsWith('chibi') ? 'object-fit:contain;' : 'object-fit:cover; border-radius:50%;'} width:44px; height:44px;">
@@ -733,7 +711,7 @@ async function loadPlayerDashboard() {
       }
 
       if (bannerContainer) {
-        const ownedBans = ALL_BANNERS_ORDERED.filter(b => b.isDefault || ownedSet.has(b.itemId) || currentAppearance.banner === b.key);
+        const ownedBans = ALL_BANNERS_ORDERED;
         bannerContainer.innerHTML = ownedBans.map(b => `
           <button class="appearance-option banner-option" type="button" data-banner="${b.key}" aria-label="${b.name}" title="${b.name}" aria-pressed="${String(b.key === currentAppearance.banner)}"></button>
         `).join("");
@@ -759,47 +737,17 @@ async function loadPlayerDashboard() {
         appearanceDirty = true;
         renderPlayerAppearance();
       });
-      document.getElementById("bannerUpload")?.addEventListener("change", async (event) => {
-        const input = event.currentTarget;
-        const file = input.files?.[0];
-        if (!file) return;
-        const status = document.getElementById("appearanceStatus");
-        try {
-          currentAppearance.banner_image = await prepareProfileImage(file, "banner");
-          currentAppearance.banner = "custom";
-          appearanceDirty = true;
-          renderPlayerAppearance();
-          if (status) status.textContent = "Banner preview ready. Save appearance to apply it.";
-        } catch (uploadError) {
-          if (status) status.textContent = uploadError.message;
-        } finally {
-          input.value = "";
-        }
-      });
-      document.getElementById("avatarUpload")?.addEventListener("change", async (event) => {
-        const input = event.currentTarget;
-        const file = input.files?.[0];
-        if (!file) return;
-        const status = document.getElementById("appearanceStatus");
-        try {
-          currentAppearance.avatar_image = await prepareProfileImage(file, "avatar");
-          currentAppearance.avatar = "custom";
-          appearanceDirty = true;
-          renderPlayerAppearance();
-          if (status) status.textContent = "Profile photo preview ready. Save appearance to apply it.";
-        } catch (uploadError) {
-          if (status) status.textContent = uploadError.message;
-        } finally {
-          input.value = "";
-        }
-      });
       document.getElementById("saveAppearance")?.addEventListener("click", async (event) => {
       const button = event.currentTarget;
       const status = document.getElementById("appearanceStatus");
       button.disabled = true;
       if (status) status.textContent = "Saving…";
       try {
-        await api("/player/profile/customization", { method: "PUT", body: JSON.stringify(currentAppearance) });
+        await api("/player/profile/customization", { method: "PUT", body: JSON.stringify({
+          ...currentAppearance,
+          avatar_image: currentAppearance.avatar_image?.startsWith("data:") ? currentAppearance.avatar_image : null,
+          banner_image: currentAppearance.banner_image?.startsWith("data:") ? currentAppearance.banner_image : null,
+        }) });
         appearanceDirty = false;
         if (status) status.textContent = "Appearance saved.";
       } catch (saveError) {
@@ -937,10 +885,14 @@ if (changePasswordForm) {
 }
 
 const generateRecoveryCodesBtn = document.getElementById("generateRecoveryCodesBtn");
-if (generateRecoveryCodesBtn) {
-  generateRecoveryCodesBtn.addEventListener("click", async () => {
-    const password = prompt("Please confirm your current password to generate emergency recovery codes:");
-    if (!password) return;
+const generateRecoveryCodesForm = document.getElementById("generateRecoveryCodesForm");
+if (generateRecoveryCodesForm && generateRecoveryCodesBtn) {
+  generateRecoveryCodesForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (generateRecoveryCodesBtn.disabled) return;
+    const password = document.getElementById("recoveryCurrentPassword").value;
+    generateRecoveryCodesForm.reset();
+    generateRecoveryCodesBtn.disabled = true;
 
     const msg = document.getElementById("recoveryCodesMsg");
     const display = document.getElementById("recoveryCodesDisplay");
@@ -952,7 +904,11 @@ if (generateRecoveryCodesBtn) {
         body: JSON.stringify({ password })
       });
       if (res.recovery_codes && grid) {
-        grid.innerHTML = res.recovery_codes.map(c => `<div style="background:#fff;padding:6px;border-radius:4px;border:1px solid #e2e8f0;text-align:center;">${c}</div>`).join("");
+        grid.replaceChildren(...res.recovery_codes.map(code => {
+          const item = document.createElement("code");
+          item.textContent = code;
+          return item;
+        }));
         if (display) display.style.display = "block";
         if (msg) {
           msg.hidden = false;
@@ -966,6 +922,8 @@ if (generateRecoveryCodesBtn) {
         msg.style.color = "#EF4444";
         msg.textContent = err.message || "Could not generate recovery codes.";
       }
+    } finally {
+      generateRecoveryCodesBtn.disabled = false;
     }
   });
 }
@@ -973,7 +931,7 @@ if (generateRecoveryCodesBtn) {
 const revokeOtherSessionsBtn = document.getElementById("revokeOtherSessionsBtn");
 if (revokeOtherSessionsBtn) {
   revokeOtherSessionsBtn.addEventListener("click", async () => {
-    if (!confirm("Are you sure you want to log out all other devices and browser sessions?")) return;
+    if (!await window.showAppConfirm("Are you sure you want to log out all other devices and browser sessions?")) return;
 
     const msg = document.getElementById("revokeSessionsMsg");
     try {
@@ -1017,10 +975,12 @@ async function loadBanAppealStatus() {
             <span style="display:inline-block; padding: 2px 8px; border-radius: 4px; background: ${badgeColor}; color: #fff; font-weight: 700; text-transform: uppercase; font-size: 11px;">${escapeHtml(app.status)}</span>
           </div>
           <p style="margin: 6px 0 0 0; color: var(--player-muted, #94a3b8);">Submitted on: ${escapeHtml(overviewDate(app.created_at))}</p>
-          <p style="margin: 4px 0 0 0;"><strong>Your Statement:</strong> ${escapeHtml(app.reason)}</p>
+          <p style="margin: 4px 0 0 0;"><strong>Your Statement:</strong> ${escapeHtml(app.appeal_text)}</p>
           ${app.admin_note ? `<div style="margin-top: 8px; padding: 8px 12px; background: rgba(0,0,0,0.1); border-left: 3px solid #38bdf8; border-radius: 4px;"><strong>Admin Response:</strong> ${escapeHtml(app.admin_note)}</div>` : ''}
         </div>
       `;
+      const profileStatus = document.getElementById("appealStatusContent");
+      if (profileStatus) profileStatus.innerHTML = statusBox.innerHTML;
       form.hidden = true;
     } else {
       statusBox.hidden = true;
@@ -1036,23 +996,26 @@ const banAppealForm = document.getElementById("banAppealForm");
 if (banAppealForm) {
   banAppealForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const reasonInput = document.getElementById("banAppealReason");
-    const msg = document.getElementById("banAppealMsg");
+    const reasonInput = document.getElementById("appealTextInput");
+    const msg = document.getElementById("appealStatusNotice");
     const reason = reasonInput?.value?.trim() || "";
 
-    if (reason.length < 10) {
+    if (Array.from(reason).length < 15) {
       if (msg) {
         msg.hidden = false;
         msg.style.color = "#ef4444";
-        msg.textContent = "Please provide at least 10 characters explaining your appeal.";
+        msg.textContent = "Please provide at least 15 characters explaining your appeal.";
       }
       return;
     }
 
+    const submitButton = banAppealForm.querySelector('[type=submit]');
+    if (submitButton.disabled) return;
+    submitButton.disabled = true;
     try {
       const res = await api("/player/appeal", {
         method: "POST",
-        body: JSON.stringify({ reason })
+        body: JSON.stringify({ appeal_text: reason })
       });
       if (msg) {
         msg.hidden = false;
@@ -1060,13 +1023,15 @@ if (banAppealForm) {
         msg.textContent = res.message || "Appeal submitted for security administrator review.";
       }
       banAppealForm.reset();
-      loadBanAppealStatus();
+      await loadBanAppealStatus();
     } catch (err) {
       if (msg) {
         msg.hidden = false;
         msg.style.color = "#ef4444";
         msg.textContent = err.message || "Could not submit appeal.";
       }
+    } finally {
+      submitButton.disabled = false;
     }
   });
 }
@@ -1087,15 +1052,6 @@ async function loadNotifications() {
       if (unreadCount > 0) {
         badge.textContent = String(unreadCount);
         badge.hidden = false;
-        // Welcome back notification toast (Requirement 5)
-        if (!sessionStorage.getItem("securefps_welcomed")) {
-          sessionStorage.setItem("securefps_welcomed", "true");
-          setTimeout(() => {
-            if (window.showAppToast) {
-              window.showAppToast("🎁 Welcome back! You have unclaimed match rewards & +25 Daily Coins ready to claim.", "info");
-            }
-          }, 800);
-        }
       } else {
         badge.hidden = true;
       }
@@ -1112,7 +1068,7 @@ async function loadNotifications() {
               <small style="font-size:10px; color:#6D28D9; font-weight:600;">${escapeHtml(overviewDate(n.created_at))}</small>
             </div>
             <div style="font-size:12px; line-height:1.4; color:#334155;">${escapeHtml(n.message)}</div>
-            ${n.title.includes("reward") || n.title.includes("Welcome") ? '<div style="margin-top:6px;"><a href="#rewards" style="font-size:11px; font-weight:700; color:#7C3AED; text-decoration:underline;">Go to Rewards & Claim →</a></div>' : ''}
+            ${n.type === "support_reply" ? '<a href="#support">View support tickets</a>' : ""}
           </div>
         `).join("");
       }
@@ -1162,36 +1118,34 @@ if (markNotifsReadBtn) {
 // MATCH DETAIL DRILL-DOWN (Item 14)
 // =========================================================================
 
+let matchDetailVersion = 0;
 async function openMatchDetail(sessionId) {
   const modal = document.getElementById("matchDetailModal");
   const title = document.getElementById("modalMatchTitle");
   const content = document.getElementById("matchDetailContent");
-  if (!modal || !content) return;
+  if (!modal || !content || !sessionId) return;
+  const version = ++matchDetailVersion;
 
   if (title) title.textContent = `Match Detail: ${sessionId || "Drill-Down"}`;
-  content.innerHTML = '<div class="skeleton-box" style="height:120px;"></div>';
+  content.innerHTML = '<p role="status">Loading match details…</p>';
   if (typeof modal.showModal === "function") {
-    modal.showModal();
+    if (!modal.open) modal.showModal();
   } else {
     modal.setAttribute("open", "");
   }
 
   try {
     const data = await api(`/player/matches/${encodeURIComponent(sessionId)}`);
+    if (version !== matchDetailVersion || !modal.open) return;
     const feats = data.features || {};
     const timeline = data.timeline || [];
 
     content.innerHTML = `
-      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px;">
+      <div class="match-features-grid">
         <div class="feat-stat-box"><strong>${escapeHtml(data.kills)} / ${escapeHtml(data.deaths)}</strong><small>Kills / Deaths</small></div>
         <div class="feat-stat-box"><strong>${escapeHtml(data.kdr)}</strong><small>K/D Ratio</small></div>
         <div class="feat-stat-box"><strong>${data.accuracy != null ? Number(data.accuracy).toFixed(1) + '%' : '—'}</strong><small>Accuracy Rate</small></div>
         <div class="feat-stat-box"><strong>${data.duration_seconds != null ? data.duration_seconds + 's' : '—'}</strong><small>Duration</small></div>
-      </div>
-
-      <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--player-border, #334155); border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
-        <span><strong>🎯 Fair Play Verified Combat:</strong> Telemetry Analysis (${data.accuracy != null ? Number(data.accuracy).toFixed(1) + '%' : '0.0%'} accuracy rate)</span>
-        <span class="badge good" style="font-size: 11px;">Verified</span>
       </div>
 
       <h4 style="margin: 14px 0 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--player-muted, #94a3b8);">Anti-Cheat Telemetry Feature Analysis</h4>
@@ -1205,7 +1159,7 @@ async function openMatchDetail(sessionId) {
       </div>
 
       <h4 style="margin: 14px 0 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--player-muted, #94a3b8);">Match Combat Timeline</h4>
-      <div style="max-height: 160px; overflow-y: auto; border: 1px solid var(--player-border, #334155); border-radius: 6px; padding: 8px; background: rgba(0,0,0,0.1);">
+      <div class="match-timeline" tabindex="0" aria-label="Match combat timeline">
         ${timeline.length ? timeline.map(ev => `
           <div style="display:flex; justify-content:space-between; font-size: 12px; padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,0.05);">
             <span>${ev.type === 'kill' ? '🎯 Eliminated ' + escapeHtml(ev.enemy_id) + ' (' + escapeHtml(ev.body_part) + ')' : '💀 Defeated by ' + escapeHtml(ev.killer_id)}</span>
@@ -1215,7 +1169,8 @@ async function openMatchDetail(sessionId) {
       </div>
     `;
   } catch (err) {
-    content.innerHTML = `<div style="color:#ef4444; padding:12px;">Could not load match details: ${escapeHtml(err.message)}</div>`;
+    if (version !== matchDetailVersion || !modal.open) return;
+    content.innerHTML = `<div role="alert" class="ui-error">Could not load match details: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -1247,7 +1202,7 @@ document.addEventListener("click", (e) => {
 // GDPR DATA EXPORT & SELF-SERVICE DELETION (Item 14)
 // =========================================================================
 
-const exportPlayerDataBtn = document.getElementById("exportPlayerDataBtn");
+const exportPlayerDataBtn = document.getElementById("downloadMyDataBtn");
 if (exportPlayerDataBtn) {
   exportPlayerDataBtn.addEventListener("click", () => {
     window.location.href = `${window.API_BASE}/player/export-data`;
@@ -1263,8 +1218,7 @@ const deleteAccountError = document.getElementById("deleteAccountError");
 
 const closeDeleteModal = () => {
   if (deleteAccountModal) {
-    deleteAccountModal.hidden = true;
-    deleteAccountModal.style.display = "none";
+    if (deleteAccountModal.open) deleteAccountModal.close();
   }
   if (deleteAccountPassword) deleteAccountPassword.value = "";
   if (deleteAccountError) {
@@ -1277,8 +1231,7 @@ const selfDeleteAccountBtn = document.getElementById("selfDeleteAccountBtn");
 if (selfDeleteAccountBtn) {
   selfDeleteAccountBtn.addEventListener("click", () => {
     if (deleteAccountModal) {
-      deleteAccountModal.hidden = false;
-      deleteAccountModal.style.display = "flex";
+      if (!deleteAccountModal.open) deleteAccountModal.showModal();
       if (deleteAccountPassword) deleteAccountPassword.focus();
     }
   });
@@ -1287,6 +1240,7 @@ if (selfDeleteAccountBtn) {
 if (closeDeleteModalBtn) closeDeleteModalBtn.addEventListener("click", closeDeleteModal);
 if (cancelDeleteAccountBtn) cancelDeleteAccountBtn.addEventListener("click", closeDeleteModal);
 if (deleteAccountModal) {
+  deleteAccountModal.addEventListener("close", closeDeleteModal);
   deleteAccountModal.addEventListener("click", (e) => {
     if (e.target === deleteAccountModal) closeDeleteModal();
   });
@@ -1294,7 +1248,7 @@ if (deleteAccountModal) {
 
 if (confirmDeleteAccountBtn) {
   confirmDeleteAccountBtn.addEventListener("click", async () => {
-    const password = deleteAccountPassword ? deleteAccountPassword.value.trim() : "";
+    const password = deleteAccountPassword ? deleteAccountPassword.value : "";
     if (!password) {
       if (deleteAccountError) {
         deleteAccountError.hidden = false;
@@ -1312,7 +1266,7 @@ if (confirmDeleteAccountBtn) {
         body: JSON.stringify({ password })
       });
       closeDeleteModal();
-      alert(res.message || "Account successfully deleted.");
+      await window.showAppAlert(res.message || "Account successfully deleted.");
       setTimeout(() => {
         window.location.href = "login.html";
       }, 500);

@@ -14,14 +14,14 @@ const WEAPON_REGISTRY = (typeof WeaponConfig !== "undefined" && WeaponConfig.WEA
     slot: 1,
     damage: 25,
     headshotMultiplier: 2.0, // 50 Headshot
-    fireRate: 0.11, // ~545 RPM
+    fireRate: 0.13, // ~460 RPM
     bulletSpeed: 240, // 240 m/s
     tracerColor: 0xffb703,
     tracerLength: 0.65,
     tracerRadius: 0.016,
     magSize: 30,
     magAmmo: 30,
-    reserveAmmo: 120,
+    reserveAmmo: 180,
     reloadDuration: 1.6,
     baseSpread: 0.004,
     recoilKickZ: 0.08,
@@ -37,14 +37,14 @@ const WEAPON_REGISTRY = (typeof WeaponConfig !== "undefined" && WeaponConfig.WEA
     slot: 2,
     damage: 18,
     headshotMultiplier: 2.0, // 36 Headshot
-    fireRate: 0.07, // ~850 RPM
+    fireRate: 0.09, // ~665 RPM
     bulletSpeed: 175, // 175 m/s
     tracerColor: 0xffaa00,
     tracerLength: 0.45,
     tracerRadius: 0.014,
     magSize: 35,
     magAmmo: 35,
-    reserveAmmo: 140,
+    reserveAmmo: 210,
     reloadDuration: 1.3,
     baseSpread: 0.007,
     recoilKickZ: 0.05,
@@ -60,14 +60,14 @@ const WEAPON_REGISTRY = (typeof WeaponConfig !== "undefined" && WeaponConfig.WEA
     slot: 3,
     damage: 80,
     headshotMultiplier: 1.375, // 110 Headshot
-    fireRate: 1.1, // Bolt-Action ~55 RPM
+    fireRate: 1.25, // Bolt-Action ~48 RPM
     bulletSpeed: 420, // 420 m/s
     tracerColor: 0x00f0ff,
     tracerLength: 1.2,
     tracerRadius: 0.022,
     magSize: 5,
     magAmmo: 5,
-    reserveAmmo: 25,
+    reserveAmmo: 30,
     reloadDuration: 2.4,
     baseSpread: 0.0005,
     recoilKickZ: 0.18,
@@ -83,14 +83,14 @@ const WEAPON_REGISTRY = (typeof WeaponConfig !== "undefined" && WeaponConfig.WEA
     slot: 4,
     damage: 22,
     headshotMultiplier: 2.0, // 44 Headshot
-    fireRate: 0.15, // Semi-Auto ~400 RPM
+    fireRate: 0.18, // Semi-Auto ~330 RPM
     bulletSpeed: 150, // 150 m/s
     tracerColor: 0xffd166,
     tracerLength: 0.35,
     tracerRadius: 0.013,
     magSize: 17,
     magAmmo: 17,
-    reserveAmmo: 68,
+    reserveAmmo: 85,
     reloadDuration: 1.2,
     baseSpread: 0.005,
     recoilKickZ: 0.06,
@@ -131,7 +131,7 @@ class WeaponManager {
 
     // Viewmodel Positioning & Animation State
     this.weaponRoot = new THREE.Object3D();
-    this.defaultPos = new THREE.Vector3(0.24, -0.22, -0.48);
+    this.defaultPos = new THREE.Vector3(0.28, -0.25, -0.52);
     this.adsPos = new THREE.Vector3(0, -0.19, -0.38);
     this.isAiming = false;
     this.currentAimAlpha = 0;
@@ -171,31 +171,32 @@ class WeaponManager {
 
   initViewmodels() {
     this.weaponRoot.position.copy(this.defaultPos);
+    this.weaponRoot.scale.setScalar(0.88);
     this.camera.add(this.weaponRoot);
 
     // Common Materials
     const metalMat = new THREE.MeshStandardMaterial({
-      color: 0x1f2937,
+      color: 0x252a31,
       roughness: 0.35,
       metalness: 0.85
     });
 
     const polymerMat = new THREE.MeshStandardMaterial({
-      color: 0x111827,
+      color: 0x171a1f,
       roughness: 0.7,
       metalness: 0.2
     });
 
     const glassMat = new THREE.MeshBasicMaterial({
-      color: 0x00f0ff,
+      color: 0x8fa2a1,
       transparent: true,
       opacity: 0.6
     });
 
     // 1. Build P-24 Tactical Assault Rifle Viewmodel (Matching Reference Image)
     const carbineGroup = new THREE.Group();
-    const tanMagMat = new THREE.MeshStandardMaterial({ color: 0x826c50, roughness: 0.6, metalness: 0.2 });
-    const reticleMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
+    const tanMagMat = new THREE.MeshStandardMaterial({ color: 0x5f5649, roughness: 0.72, metalness: 0.12 });
+    const reticleMat = new THREE.MeshBasicMaterial({ color: 0xb6c4c1 });
 
     // Receiver (Upper & Lower)
     const cReceiver = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.085, 0.38), metalMat);
@@ -224,14 +225,20 @@ class WeaponManager {
     carbineGroup.add(cOpticReticle);
 
     // Forward Handguard & Barrel
-    const cBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.30, 12), metalMat);
+    const cBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.016, 0.34, 16), metalMat);
     cBarrel.rotation.x = Math.PI / 2;
-    cBarrel.position.set(0, 0.02, -0.32);
+    cBarrel.position.set(0, 0.018, -0.34);
     carbineGroup.add(cBarrel);
 
-    const cHandguard = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.054, 0.22), polymerMat);
-    cHandguard.position.set(0, 0.02, -0.28);
+    const cHandguard = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.058, 0.22), polymerMat);
+    cHandguard.position.set(0, 0.018, -0.30);
     carbineGroup.add(cHandguard);
+
+    for (let i = -2; i <= 2; i++) {
+      const rib = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.006, 0.012), metalMat);
+      rib.position.set(0, -0.012, -0.24 + i * 0.038);
+      carbineGroup.add(rib);
+    }
 
     // PEQ-15 Laser Box on Top Front Rail
     const cPeq = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.025, 0.075), tanMagMat);
@@ -244,9 +251,9 @@ class WeaponManager {
     carbineGroup.add(cForegrip);
 
     // Tactical Cylindrical Barrel Suppressor / Silencer
-    const cSuppressor = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.22, 12), metalMat);
+    const cSuppressor = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.024, 0.20, 16), metalMat);
     cSuppressor.rotation.x = Math.PI / 2;
-    cSuppressor.position.set(0, 0.02, -0.54);
+    cSuppressor.position.set(0, 0.018, -0.56);
     carbineGroup.add(cSuppressor);
 
     // 30-Round Curved Magazine (Tan PMAG) with Textured Base
@@ -490,9 +497,9 @@ class WeaponManager {
     const handsGroup = new THREE.Group();
 
     // --- Left Arm & Hand (Supporting forward handguard & vertical grip from below) ---
-    const lForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.044, 0.052, 0.38, 10), sleeveMat);
+    const lForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.068, 0.42, 16), sleeveMat);
     lForearm.rotation.set(0.65, 0.35, -0.65);
-    lForearm.position.set(-0.20, -0.16, -0.14);
+    lForearm.position.set(-0.22, -0.18, -0.14);
     handsGroup.add(lForearm);
 
     // Stitched sleeve cuff
@@ -502,14 +509,16 @@ class WeaponManager {
     handsGroup.add(lCuff);
 
     // Left tactical glove body
-    const lGlove = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.062, 0.095), gloveMat);
-    lGlove.position.set(-0.08, -0.05, -0.23);
+    const lGlove = new THREE.Mesh(new THREE.SphereGeometry(0.070, 16, 10), gloveMat);
+    lGlove.scale.set(0.82, 0.72, 1.18);
+    lGlove.position.set(-0.09, -0.055, -0.26);
     lGlove.rotation.set(0.25, 0.50, -0.30);
     handsGroup.add(lGlove);
 
     // Molded composite hard-knuckle armor guard on left glove
-    const lKnuckles = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.022, 0.035), knuckleMat);
-    lKnuckles.position.set(-0.075, -0.03, -0.25);
+    const lKnuckles = new THREE.Mesh(new THREE.SphereGeometry(0.042, 12, 8), knuckleMat);
+    lKnuckles.scale.set(1.15, 0.42, 0.72);
+    lKnuckles.position.set(-0.075, -0.025, -0.29);
     lKnuckles.rotation.set(0.25, 0.50, -0.30);
     handsGroup.add(lKnuckles);
 
@@ -520,9 +529,9 @@ class WeaponManager {
     handsGroup.add(lThumb);
 
     // --- Right Arm & Hand (Gripping pistol grip & trigger from right) ---
-    const rForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.044, 0.052, 0.38, 10), sleeveMat);
+    const rForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.068, 0.42, 16), sleeveMat);
     rForearm.rotation.set(0.75, -0.30, 0.45);
-    rForearm.position.set(0.16, -0.19, 0.12);
+    rForearm.position.set(0.17, -0.20, 0.12);
     handsGroup.add(rForearm);
 
     // Stitched sleeve cuff
@@ -532,14 +541,16 @@ class WeaponManager {
     handsGroup.add(rCuff);
 
     // Right tactical glove body
-    const rGlove = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.062, 0.090), gloveMat);
-    rGlove.position.set(0.02, -0.07, 0.10);
+    const rGlove = new THREE.Mesh(new THREE.SphereGeometry(0.068, 16, 10), gloveMat);
+    rGlove.scale.set(0.82, 0.72, 1.12);
+    rGlove.position.set(0.025, -0.072, 0.085);
     rGlove.rotation.set(0.35, -0.10, 0.20);
     handsGroup.add(rGlove);
 
     // Molded composite hard-knuckle armor guard on right glove
-    const rKnuckles = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.022, 0.035), knuckleMat);
-    rKnuckles.position.set(0.025, -0.05, 0.09);
+    const rKnuckles = new THREE.Mesh(new THREE.SphereGeometry(0.040, 12, 8), knuckleMat);
+    rKnuckles.scale.set(1.15, 0.42, 0.72);
+    rKnuckles.position.set(0.028, -0.048, 0.078);
     rKnuckles.rotation.set(0.35, -0.10, 0.20);
     handsGroup.add(rKnuckles);
 
@@ -548,6 +559,18 @@ class WeaponManager {
     rTriggerFinger.position.set(-0.01, -0.045, 0.06);
     rTriggerFinger.rotation.set(0.1, 0.2, 0.3);
     handsGroup.add(rTriggerFinger);
+
+    for (let finger = 0; finger < 4; finger++) {
+      const lFinger = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.045, 8), gloveMat);
+      lFinger.rotation.x = Math.PI / 2;
+      lFinger.position.set(-0.125 + finger * 0.012, -0.052, -0.275);
+      handsGroup.add(lFinger);
+
+      const rFinger = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.040, 8), gloveMat);
+      rFinger.rotation.x = Math.PI / 2;
+      rFinger.position.set(-0.010 + finger * 0.012, -0.055, 0.095);
+      handsGroup.add(rFinger);
+    }
 
     this.weaponRoot.add(handsGroup);
     this.handsGroup = handsGroup;
@@ -892,8 +915,21 @@ class WeaponManager {
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(spreadX, spreadY), this.camera);
 
-    // Query scene for hits (Bots, Remote Players, Arena Colliders)
-    const hits = raycaster.intersectObjects(this.scene.children, true);
+    // Test combat hitboxes first. This prevents visible decorative GLB meshes,
+    // viewmodels, tracers, and effects from intercepting a valid bone-aligned hit.
+    const hitboxMeshes = [];
+    if (botManager?.getHitboxMeshes) hitboxMeshes.push(...botManager.getHitboxMeshes());
+    if (window.SecureFPSGame?.multiplayer?.getHitboxMeshes) {
+      hitboxMeshes.push(...window.SecureFPSGame.multiplayer.getHitboxMeshes());
+    }
+    if (window.SecureFPSGame?.trainingManager?.getHitboxMeshes) {
+      hitboxMeshes.push(...window.SecureFPSGame.trainingManager.getHitboxMeshes());
+    }
+    raycaster.setFromCamera(new THREE.Vector2(spreadX, spreadY), this.camera);
+    const hitboxHits = hitboxMeshes.length ? raycaster.intersectObjects(hitboxMeshes, false) : [];
+    const hits = hitboxHits.length
+      ? hitboxHits
+      : raycaster.intersectObjects(this.scene.children, true);
 
     let targetHit = null;
     let hitPoint = new THREE.Vector3();

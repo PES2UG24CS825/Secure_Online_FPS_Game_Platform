@@ -80,7 +80,7 @@ X_scaled = pd.DataFrame(
 scaler_path = os.path.join(MODEL_DIR, "scaler.pkl")
 joblib.dump(scaler, scaler_path)
 
-print(f"\nScaler saved → {scaler_path}")
+print(f"\nScaler saved -> {scaler_path}")
 
 # ── Train ONLY on normal data ─────────────────────────
 X_normal = X_scaled.loc[y == 0]
@@ -114,7 +114,7 @@ print(f"True Cheater : {cm[1][1]}")
 scores = iso.decision_function(X_scaled)
 
 print("\n=== Anomaly Score Analysis ===")
-print(f"Score range → min: {scores.min():.4f}, max: {scores.max():.4f}")
+print(f"Score range -> min: {scores.min():.4f}, max: {scores.max():.4f}")
 print(f"Cheater avg score: {scores[y==1].mean():.4f}")
 print(f"Normal  avg score: {scores[y==0].mean():.4f}")
 
@@ -122,4 +122,4 @@ print(f"Normal  avg score: {scores[y==0].mean():.4f}")
 model_path = os.path.join(MODEL_DIR, "isolation_forest.pkl")
 joblib.dump(iso, model_path)
 
-print(f"\nIsolation Forest saved → {model_path}")
+print(f"\nIsolation Forest saved -> {model_path}")

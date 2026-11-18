@@ -89,8 +89,9 @@ describe('Combat & Hit Registration Verification', () => {
 
     // Image 3 requirement: strip shows only Fair Play, XP, and Coins (no Weapon or Hits tags)
     assert.match(playerJs, /Fair Play Verified/);
-    assert.match(playerJs, /XP<\/span>/);
-    assert.match(playerJs, /Coins<\/span>/);
+    assert.match(playerJs, /rewardText/);
+    assert.doesNotMatch(playerJs, /xpEarned\s*=|coinsEarned\s*=/);
+    assert.match(playerJs, /reward_credit/);
     assert.doesNotMatch(playerJs, /🎯 Weapon:/);
 
     // Accuracy stat box displays only percentage without total shots in card
@@ -121,5 +122,59 @@ describe('Combat & Hit Registration Verification', () => {
     assert.match(botCode, /this\.position\.y\s*=\s*0\.0;/);
     assert.match(botCode, /!this\.checkCollisionAt\(nextX,\s*nextZ\)/);
     assert.match(botCode, /hasLineOfSight\(targetPos\)/);
+  });
+
+  it('rigged head hitboxes follow skeletal bones and difficulty caps active bots', () => {
+    const opCode = fs.readFileSync(path.join(rootDir, 'js/TacticalOperator.js'), 'utf-8');
+    const botCode = fs.readFileSync(path.join(rootDir, 'js/BotManager.js'), 'utf-8');
+    assert.match(opCode, /this\.headBone\.add\(this\.headMesh\)/);
+    assert.match(opCode, /root\.updateMatrixWorld\(true\)/);
+    assert.match(botCode, /diff\s*===\s*['"]easy['"]\s*\?\s*2/);
+    assert.match(botCode, /diff\s*===\s*['"]normal['"]\s*\?\s*3\s*:\s*4/);
+  });
+
+  it('multiplayer hit confirmations update hit and headshot telemetry', () => {
+    const mpCode = fs.readFileSync(path.join(rootDir, 'js/MultiplayerClient.js'), 'utf-8');
+    const serverCode = fs.readFileSync(path.resolve(rootDir, '../../../../multiplayer-server/server.js'), 'utf-8');
+    assert.match(mpCode, /new CustomEvent\(['"]fps:telemetry_hit['"]/);
+    assert.match(serverCode, /playerState\.headshots\s*=\s*\(playerState\.headshots\s*\|\|\s*0\)\s*\+\s*1/);
+  });
+
+  it('risk calculation is evidence-capped and Settings is removed from player navigation', () => {
+    const riskCode = fs.readFileSync(path.resolve(rootDir, '../../../../backend/services/anti_cheat_intelligence.py'), 'utf-8');
+    const playerHtml = fs.readFileSync(path.resolve(rootDir, '../../../player.html'), 'utf-8');
+    assert.match(riskCode, /calibrated_risk\s*=\s*min\(raw_risk,\s*39\.0\)/);
+    assert.doesNotMatch(playerHtml, /href="#settings"|id="settings"|Player Settings/);
+  });
+
+  it('selected banner becomes the full player UI background', () => {
+    const playerJs = fs.readFileSync(path.resolve(rootDir, '../../../js/player.js'), 'utf-8');
+    const playerCss = fs.readFileSync(path.resolve(rootDir, '../../../css/player.css'), 'utf-8');
+    assert.match(playerJs, /body\.dataset\.playerBanner/);
+    assert.match(playerCss, /body\.player-page[\s\S]*var\(--player-scene-image\)/);
+    assert.match(playerCss, /data-player-banner="sakura"/);
+  });
+
+  it('multiplayer weapons use balanced ammo, realistic viewmodel materials, and health-only armour HUD', () => {
+    const weaponCode = fs.readFileSync(path.join(rootDir, 'js/Weapons.js'), 'utf-8');
+    const sharedCode = fs.readFileSync(path.join(rootDir, 'js/shared/weapon_config.js'), 'utf-8');
+    const modeCode = fs.readFileSync(path.join(rootDir, 'js/GameModeManager.js'), 'utf-8');
+    assert.match(sharedCode, /reserveAmmo:\s*180/);
+    assert.match(sharedCode, /fireRate:\s*0\.13/);
+    assert.match(weaponCode, /weaponRoot\.scale\.setScalar\(0\.88\)/);
+    assert.match(weaponCode, /color:\s*0x252a31/);
+    assert.match(modeCode, /armourCard\.style\.display\s*=\s*this\.currentMode\s*===\s*['"]multiplayer['"]/);
+  });
+
+  it('sidebars use text branding and sticky player topbar is opaque', () => {
+    const playerHtml = fs.readFileSync(path.resolve(rootDir, '../../../player.html'), 'utf-8');
+    const adminHtml = fs.readFileSync(path.resolve(rootDir, '../../../admin.html'), 'utf-8');
+    const playerCss = fs.readFileSync(path.resolve(rootDir, '../../../css/player.css'), 'utf-8');
+    const adminCss = fs.readFileSync(path.resolve(rootDir, '../../../css/admin.css'), 'utf-8');
+    assert.match(playerHtml, /sidebar-brand-text/);
+    assert.match(adminHtml, /sidebar-brand-text/);
+    assert.match(playerCss, /background:\s*#FFFFFF/);
+    assert.match(playerCss, /\.player-topbar\s*\{\s*display:\s*none/);
+    assert.match(adminCss, /admin-sidebar \.brand-lockup\s*\{\s*display:none/);
   });
 });

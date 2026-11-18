@@ -47,6 +47,12 @@
       </div>
 
       <!-- Tactical Operations Main Menu (Revealed once loaded) -->
+      <section id="game-start-failure" class="game-start-failure" hidden>
+        <p role="alert" id="game-start-failure-message"></p>
+        <button id="game-start-retry" type="button">Reload game</button>
+        <a href="../../../player.html">Back to dashboard</a>
+      </section>
+
       <div id="main-menu-hub" style="display: none;">
 
         <!-- Navigation Menu Tabs (6 Options) -->
@@ -88,7 +94,7 @@
             <div class="info-row"><span>MATCH TYPE:</span><strong>Free Roam (No Hostiles)</strong></div>
             <div class="info-row"><span>COMBAT BOTS:</span><strong style="color: #64748b;">Disabled</strong></div>
             <div class="info-row"><span>WEAPONS:</span><strong>Full Arsenal (1-4 Keys)</strong></div>
-            <div class="info-row"><span>TELEMETRY:</span><strong style="color: #10b981;">Active Kinematics Logging</strong></div>
+            <div class="info-row"><span>TELEMETRY:</span><strong style="color: #145738;">Active Kinematics Logging</strong></div>
           </div>
 
           <button id="btn-deploy-solo" class="start-btn" type="button" style="display: block; margin-top: 18px;">
@@ -100,7 +106,7 @@
         <div class="menu-view active" id="view-bots">
           <div class="view-header">
             <h3>Tactical Bot Engagement</h3>
-            <p>Engage realistic adult combat operators calibrated with reaction delays and burst fire</p>
+            <p>Face bots using the Vanguard and Valkyrie tactical operators, with reaction delays and burst fire.</p>
           </div>
 
           <div class="difficulty-grid">
@@ -110,7 +116,7 @@
                 <span class="diff-title">Recruit</span>
               </div>
               <ul class="diff-specs">
-                <li style="color: #00f0ff; font-weight: 700;">🟢 2 Total Players (You + 1 Bot)</li>
+                <li style="color: #5120a4; font-weight: 700;">🟢 2 Total Players (You + 1 Bot)</li>
                 <li>1 Active Attacking Bot</li>
                 <li>2.5s – 3.2s Reaction Delay</li>
                 <li>Low Accuracy (25%)</li>
@@ -125,7 +131,7 @@
                 <span class="diff-title">Operator</span>
               </div>
               <ul class="diff-specs">
-                <li style="color: #00f0ff; font-weight: 700;">🟢 3 Total Players (You + 2 Bots)</li>
+                <li style="color: #5120a4; font-weight: 700;">🟢 3 Total Players (You + 2 Bots)</li>
                 <li>Max 2 Active Attackers</li>
                 <li>1.5s – 2.2s Reaction Delay</li>
                 <li>Balanced Accuracy (38%)</li>
@@ -139,7 +145,7 @@
                 <span class="diff-title">Apex Veteran</span>
               </div>
               <ul class="diff-specs">
-                <li style="color: #00f0ff; font-weight: 700;">🟢 5 Total Players (You + 4 Bots)</li>
+                <li style="color: #5120a4; font-weight: 700;">🟢 5 Total Players (You + 4 Bots)</li>
                 <li>All 4 Active Attackers</li>
                 <li>0.9s – 1.4s Fast Reaction</li>
                 <li>Combat Accuracy (52%)</li>
@@ -452,7 +458,7 @@
                 <span>Custom server address or Cloudflare Tunnel</span>
               </div>
               <div class="setting-control">
-                <input id="setting-server-url" type="text" placeholder="http://127.0.0.1:4001" style="background: rgba(18,26,42,0.9); border: 1px solid rgba(0,240,255,0.3); border-radius: 4px; padding: 4px 8px; color: #00f0ff; font-family: var(--font-mono); font-size: 11px; width: 180px;" />
+                <input id="setting-server-url" type="text" placeholder="http://127.0.0.1:4001" style="background: rgba(18,26,42,0.9); border: 1px solid rgba(0,240,255,0.3); border-radius: 4px; padding: 4px 8px; color: #5120a4; font-family: var(--font-mono); font-size: 11px; width: 180px;" />
               </div>
             </div>
           </div>
@@ -480,7 +486,7 @@
   <!-- =========================================================
        PAUSE / MENU OVERLAY (5 Complete Functional Actions)
        ========================================================= -->
-  <div id="pause-overlay">
+  <div id="pause-overlay" role="dialog" aria-modal="true" aria-label="Pause menu">
     <div class="pause-card">
       <h2 class="pause-title">Simulation Paused</h2>
       <p class="pause-desc">Match suspended. Select an action below or press ESC to resume combat.</p>
@@ -548,7 +554,7 @@
   <!-- =========================================================
        MATCH COMPLETION & WINNER SCREEN OVERLAY
        ========================================================= -->
-  <div id="match-complete-overlay" class="game-modal-overlay" style="display: none;">
+  <div id="match-complete-overlay" role="dialog" aria-modal="true" aria-label="Match results" class="game-modal-overlay" style="display: none;">
     <div class="game-modal-card">
       <div id="mc-banner" class="mc-header-banner victory">VICTORY</div>
       <h2 id="mc-winner-title" class="mc-title">WINNER: OPERATOR (YOU)</h2>
@@ -578,7 +584,7 @@
         <button id="btn-match-dashboard" class="hud-btn exit" type="button">🚪 EXIT TO DASHBOARD</button>
       </div>
       <div id="mc-countdown-box" style="margin-top: 14px; text-align: center; font-size: 13px; color: #94a3b8; font-family: monospace;">
-        Returning to Main Menu in <span id="mc-countdown-seconds" style="color: #00f0ff; font-weight: 700; font-size: 16px;">6</span>s...
+        Returning to <span id="mc-countdown-destination">main menu</span> in <span id="mc-countdown-seconds" style="color: #00f0ff; font-weight: 700; font-size: 16px;">6</span>s...
       </div>
     </div>
   </div>
@@ -586,7 +592,7 @@
   <!-- =========================================================
        TRAINING COURSE COMPLETION OVERLAY
        ========================================================= -->
-  <div id="training-complete-overlay" class="game-modal-overlay" style="display: none;">
+  <div id="training-complete-overlay" role="dialog" aria-modal="true" aria-label="Training results" class="game-modal-overlay" style="display: none;">
     <div class="game-modal-card">
       <div class="mc-header-banner training">TRAINING COMPLETED</div>
       <h2 id="tc-rank-title" class="mc-title">TACTICAL MARKSMAN (A-TIER)</h2>
@@ -708,27 +714,27 @@
       </div>
       <div style="display: flex; flex-direction: column; gap: 5px; font-family: var(--font-mono, monospace);">
         <div>
-          <label style="display:flex; justify-content:space-between; color:#94a3b8;">PosX: <span id="val-wep-pos-x" style="color:#fff;">0.02</span></label>
+          <label for="slider-wep-pos-x" style="display:flex; justify-content:space-between; color:#94a3b8;">PosX: <span id="val-wep-pos-x" style="color:#fff;">0.02</span></label>
           <input type="range" id="slider-wep-pos-x" min="-0.2" max="0.2" step="0.005" value="0.02" style="width:100%;">
         </div>
         <div>
-          <label style="display:flex; justify-content:space-between; color:#94a3b8;">PosY: <span id="val-wep-pos-y" style="color:#fff;">0.05</span></label>
+          <label for="slider-wep-pos-y" style="display:flex; justify-content:space-between; color:#94a3b8;">PosY: <span id="val-wep-pos-y" style="color:#fff;">0.05</span></label>
           <input type="range" id="slider-wep-pos-y" min="-0.2" max="0.2" step="0.005" value="0.05" style="width:100%;">
         </div>
         <div>
-          <label style="display:flex; justify-content:space-between; color:#94a3b8;">PosZ: <span id="val-wep-pos-z" style="color:#fff;">-0.06</span></label>
+          <label for="slider-wep-pos-z" style="display:flex; justify-content:space-between; color:#94a3b8;">PosZ: <span id="val-wep-pos-z" style="color:#fff;">-0.06</span></label>
           <input type="range" id="slider-wep-pos-z" min="-0.2" max="0.2" step="0.005" value="-0.06" style="width:100%;">
         </div>
         <div>
-          <label style="display:flex; justify-content:space-between; color:#94a3b8;">RotX: <span id="val-wep-rot-x" style="color:#fff;">-1.42</span></label>
+          <label for="slider-wep-rot-x" style="display:flex; justify-content:space-between; color:#94a3b8;">RotX: <span id="val-wep-rot-x" style="color:#fff;">-1.42</span></label>
           <input type="range" id="slider-wep-rot-x" min="-3.14" max="3.14" step="0.05" value="-1.42" style="width:100%;">
         </div>
         <div>
-          <label style="display:flex; justify-content:space-between; color:#94a3b8;">RotY: <span id="val-wep-rot-y" style="color:#fff;">0.00</span></label>
+          <label for="slider-wep-rot-y" style="display:flex; justify-content:space-between; color:#94a3b8;">RotY: <span id="val-wep-rot-y" style="color:#fff;">0.00</span></label>
           <input type="range" id="slider-wep-rot-y" min="-3.14" max="3.14" step="0.05" value="0.00" style="width:100%;">
         </div>
         <div>
-          <label style="display:flex; justify-content:space-between; color:#94a3b8;">RotZ: <span id="val-wep-rot-z" style="color:#fff;">0.10</span></label>
+          <label for="slider-wep-rot-z" style="display:flex; justify-content:space-between; color:#94a3b8;">RotZ: <span id="val-wep-rot-z" style="color:#fff;">0.10</span></label>
           <input type="range" id="slider-wep-rot-z" min="-3.14" max="3.14" step="0.05" value="0.10" style="width:100%;">
         </div>
         <button id="dev-copy-weapon-btn" type="button" style="margin-top:6px; padding:5px 8px; background:#00f0ff; color:#060c16; font-weight:700; border:none; border-radius:3px; cursor:pointer; font-size:10px;">Copy Calibrated Values</button>
@@ -874,7 +880,7 @@
   <script src="js/TextureGenerator.js?v=20261113_2340"></script>
   <script src="js/Lighting.js?v=20261113_2340"></script>
   <script src="js/Arena.js?v=20261113_2340"></script>
-  <script src="js/TacticalOperator.js?v=20261113_2340"></script>
+  <script src="js/TacticalOperator.js?v=20261118_operator_pose"></script>
   <script src="js/Controller.js?v=20261113_2340"></script>
   <script src="js/AudioFX.js?v=20261113_2340"></script>
   <script src="js/Weapons.js?v=20261113_2340"></script>
@@ -883,8 +889,8 @@
   <script src="js/GameModeManager.js?v=20261113_2340"></script>
   <script src="js/HUD.js?v=20261113_2340"></script>
   <script src="js/TelemetryClient.js?v=20261113_2340"></script>
-  <script src="js/MultiplayerClient.js?v=20261113_2340"></script>
-  <script src="js/main.js?v=20261113_2340"></script>
+  <script src="js/MultiplayerClient.js?v=20261118_operator_facing"></script>
+  <script src="js/main.js?v=20261118_pause_prompt"></script>
 
   <!-- Screen Edge Damage Vignette -->
   <div id="damage-vignette" class="damage-vignette"></div>
@@ -912,7 +918,7 @@
   <!-- =========================================================
        VOLUNTARY MATCH EXIT CONFIRMATION MODAL
        ========================================================= -->
-  <div id="voluntary-exit-modal" class="hud-modal-overlay" style="display: none;">
+  <div id="voluntary-exit-modal" role="dialog" aria-modal="true" aria-label="Leave match" class="hud-modal-overlay" style="display: none;">
     <div class="hud-modal-card">
       <div class="hud-modal-header">
         <span class="warning-icon">⚠️</span>

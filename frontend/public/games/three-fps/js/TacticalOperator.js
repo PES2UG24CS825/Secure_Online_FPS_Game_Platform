@@ -32,32 +32,38 @@ class TacticalOperator {
   static modelStatus = "INITIALIZING";
   static isFallbackActive = true;
   static instances = [];
+  static rigBounds = new WeakMap();
 
-  static currentWeaponCalibration = {
-    posX: 0.02,
-    posY: 0.05,
-    posZ: -0.06,
-    rotX: -Math.PI / 2 + 0.15,
-    rotY: 0,
-    rotZ: 0.1
+  static measureRigBounds(root) {
+    root.updateWorldMatrix(true, true);
+    // SkinnedMesh updates its inverse bind matrix in updateMatrixWorld.
+    root.updateMatrixWorld(true);
+    const bounds = new THREE.Box3();
+    const position = new THREE.Vector3();
+    root.traverse(mesh => {
+      if (!mesh.isSkinnedMesh) return;
+      const attribute = mesh.geometry.getAttribute("position");
+      const transform = mesh.applyBoneTransform || mesh.boneTransform;
+      if (!attribute || !transform) return;
+      mesh.skeleton.update();
+      for (let index = 0; index < attribute.count; index++) {
+        position.fromBufferAttribute(attribute, index);
+        transform.call(mesh, index, position);
+        bounds.expandByPoint(position.applyMatrix4(mesh.matrixWorld));
+      }
+    });
+    return bounds.isEmpty() ? bounds.setFromObject(root) : bounds;
+  }
+
+  static defaultWeaponCalibration = {
+    posX: 0.02, posY: 0.05, posZ: -0.06,
+    rotX: -1.42, rotY: 0, rotZ: 0.1
   };
+
+  static currentWeaponCalibration = { ...TacticalOperator.defaultWeaponCalibration };
 
   static applyWeaponCalibration(values) {
     Object.assign(TacticalOperator.currentWeaponCalibration, values);
-    TacticalOperator.instances.forEach(op => {
-      if (op && op.weaponGroup && (!op.weaponSocket || !op.weaponSocket.isBone)) {
-        op.weaponGroup.position.set(
-          TacticalOperator.currentWeaponCalibration.posX,
-          TacticalOperator.currentWeaponCalibration.posY,
-          TacticalOperator.currentWeaponCalibration.posZ
-        );
-        op.weaponGroup.rotation.set(
-          TacticalOperator.currentWeaponCalibration.rotX,
-          TacticalOperator.currentWeaponCalibration.rotY,
-          TacticalOperator.currentWeaponCalibration.rotZ
-        );
-      }
-    });
   }
 
   static updateDevOverlayStatus() {
@@ -65,8 +71,11 @@ class TacticalOperator {
     const statusText = document.getElementById('hud-model-status');
     const noticeBanner = document.getElementById('dev-model-notice-banner');
     if (statusText) {
-      statusText.textContent = "TACTICAL OPERATOR RIG";
-      statusText.style.color = "#00f0ff";
+      const { soldier } = TacticalOperator.models;
+      statusText.textContent = TacticalOperator.modelStatus === "INITIALIZING"
+        ? "Checking models…"
+        : `Vanguard: ${soldier ? "loaded" : "fallback"} · Valkyrie: procedural character`;
+      statusText.style.color = TacticalOperator.isFallbackActive ? "#fbbf24" : "#00f0ff";
     }
     if (noticeBanner) {
       noticeBanner.style.display = "none";
@@ -148,24 +157,11 @@ class TacticalOperator {
         }
       }
 
-      const [soldier, female] = await Promise.all([
-        tryLoadModel("models/Soldier.glb"),
-        tryLoadModel("models/FemaleOperator.glb")
-      ]);
-
+      const soldier = await tryLoadModel("models/Soldier.glb");
       TacticalOperator.models.soldier = soldier;
-      TacticalOperator.models.female = female;
-
-      if (soldier || female) {
-        TacticalOperator.modelStatus = "RIGGED_GLB";
-        TacticalOperator.isFallbackActive = false;
-        console.log("[TacticalOperator] Successfully loaded rigged adult tactical operator GLB models.");
-      } else {
-        TacticalOperator.modelStatus = "FALLBACK_PROCEDURAL";
-        TacticalOperator.isFallbackActive = true;
-        console.log("[TacticalOperator] Operating high-fidelity procedural anatomical tactical operator rigs.");
-      }
-
+      TacticalOperator.isFallbackActive = !soldier;
+      TacticalOperator.modelStatus = soldier ? "RIGGED_GLB" : "FALLBACK_PROCEDURAL";
+      if (!soldier) console.warn("[TacticalOperator] Vanguard GLB unavailable. Using the procedural fallback.");
       TacticalOperator.updateDevOverlayStatus();
     })();
 
@@ -400,10 +396,7 @@ class TacticalOperator {
   }
 
   buildCharacter() {
-    const isFemale = this.isFemale;
-    const sourceGltf = isFemale && TacticalOperator.models.female
-      ? TacticalOperator.models.female
-      : TacticalOperator.models.soldier;
+    const sourceGltf = this.isFemale ? null : TacticalOperator.models.soldier;
 
     if (sourceGltf && typeof THREE.SkeletonUtils !== 'undefined') {
       this.buildRiggedGLBModel(sourceGltf);
@@ -416,23 +409,6 @@ class TacticalOperator {
 
     // Attach Overhead Nameplate & Floating Health Bar
     this.buildOverheadHUD();
-  }
-
-  findBone(keywords) {
-    if (!this.modelRoot) return null;
-    let found = null;
-    this.modelRoot.traverse((bone) => {
-      if (bone.isBone && !found) {
-        const name = bone.name.toLowerCase();
-        for (const kw of keywords) {
-          if (name.includes(kw.toLowerCase())) {
-            found = bone;
-            break;
-          }
-        }
-      }
-    });
-    return found;
   }
 
   findBoneRegex(pattern) {
@@ -449,23 +425,19 @@ class TacticalOperator {
   buildRiggedGLBModel(sourceGltf) {
     this.modelRoot = THREE.SkeletonUtils.clone(sourceGltf.scene);
 
-    // Compute bounding box and normalize height to ~1.8m (1.74m female, 1.82m male)
-    const bbox = new THREE.Box3().setFromObject(this.modelRoot);
-    const size = new THREE.Vector3();
-    bbox.getSize(size);
-
-    // Detect if armature was exported in centimeters (scale 0.01)
-    const isCmScale = size.y > 40;
-    const rawHeight = isCmScale ? size.y * 0.01 : size.y;
+    // Measure the posed vertices once per asset. Bind-pose geometry bounds
+    // alone can be much smaller than the rendered skin, as with Xbot.
+    let bbox = TacticalOperator.rigBounds.get(sourceGltf);
+    if (!bbox) {
+      bbox = TacticalOperator.measureRigBounds(this.modelRoot);
+      TacticalOperator.rigBounds.set(sourceGltf, bbox);
+    }
+    const rawHeight = bbox.max.y - bbox.min.y;
     const targetHeight = this.isFemale ? 1.74 : 1.82;
-    const scale = (targetHeight / Math.max(0.1, rawHeight)) * (isCmScale ? 0.01 : 1.0);
-    this.modelRoot.scale.set(scale, scale, scale);
-
-    // Recompute bbox after scaling and place feet exactly at y = 0
-    bbox.setFromObject(this.modelRoot);
-    this.modelRoot.position.y = -bbox.min.y;
-
-    // Orient model so facing direction aligns with -Z (forward vector)
+    const scale = targetHeight / Math.max(0.001, rawHeight);
+    this.modelRoot.scale.multiplyScalar(scale);
+    this.modelGroundOffset = -bbox.min.y * scale;
+    this.modelRoot.position.y = this.modelGroundOffset;
     this.modelRoot.rotation.y = Math.PI;
 
     // Enable shadows and set textures to sRGB (preserving authored materials, no flat-color lerp)
@@ -523,115 +495,90 @@ class TacticalOperator {
   }
 
   attachGearToRiggedBones() {
-    // Defensive bone lookup matching mixamorig, standard names, and regex patterns
-    const headBone = this.findBoneRegex(/mixamorig.*head|head|neck/i) || this.findBone(['head', 'neck']);
-    const spine2Bone = this.findBoneRegex(/mixamorig.*spine[12]|spine[12]|chest|upper.*body/i) || this.findBone(['chest', 'spine2']);
-    const spine1Bone = this.findBoneRegex(/mixamorig.*spine$|spine$|spine0|abdomen/i) || this.findBone(['spine', 'abdomen']);
-    const rightHandBone = this.findBoneRegex(/mixamorig.*righthand|right.*hand|hand.*r|weapon.*socket/i) || this.findBone(['righthand', 'hand_r']);
-    const leftHandBone = this.findBoneRegex(/mixamorig.*lefthand|left.*hand|hand.*l/i) || this.findBone(['lefthand', 'hand_l']);
-    const leftArmBone = this.findBoneRegex(/mixamorig.*leftarm|left.*arm|arm.*l|shoulder.*l/i) || this.findBone(['leftarm', 'arm_l']);
-    const rightUpLegBone = this.findBoneRegex(/mixamorig.*rightupleg|right.*upleg|thigh.*r/i) || this.findBone(['rightupleg', 'thigh_r']);
-    const leftUpLegBone = this.findBoneRegex(/mixamorig.*leftupleg|left.*upleg|thigh.*l/i) || this.findBone(['leftupleg', 'thigh_l']);
-    const rightLegBone = this.findBoneRegex(/mixamorig.*rightleg|right.*leg|shin.*r|calf.*r/i) || this.findBone(['rightleg', 'shin_r']);
-    const leftLegBone = this.findBoneRegex(/mixamorig.*leftleg|left.*leg|shin.*l|calf.*l/i) || this.findBone(['leftleg', 'shin_l']);
+    this.headBone = this.findBoneRegex(/(?:^|[:_])(head)$/i) || this.findBoneRegex(/head/i);
+    this.spineBone = this.findBoneRegex(/(?:^|[:_])(spine2?|chest)$/i);
+    const arm = side => ['Arm', 'ForeArm', 'Hand'].map(joint =>
+      this.findBoneRegex(new RegExp(`^(?:mixamorig[:_]?)?${side}${joint}$`, 'i')));
+    this.mountCombatWeapon(this.modelRoot, arm('Right'), arm('Left'), -1);
+  }
 
-    this.headBone = headBone;
-    this.spineBone = spine2Bone;
+  mountCombatWeapon(frame, right, left, forward = 1) {
+    this.weaponForward = forward;
+    this.weaponSocket = new THREE.Group();
+    frame.add(this.weaponSocket);
+    this.weaponArms = [right, left].every(chain => chain.every(Boolean)) ? [right, left] : null;
+    this.weaponGroup = this.buildWeaponModel(this.currentWeaponKey);
+    this.weaponSocket.add(this.weaponGroup);
+    this.updateWeaponPose(0, 0);
+  }
 
-    // Team Armband on Left Upper Arm (Team identity without 45% whole-body flat color lerp)
-    if (leftArmBone) {
-      const armbandGeo = new THREE.CylinderGeometry(0.062, 0.058, 0.07, 12);
-      const armband = new THREE.Mesh(armbandGeo, this.materials.teamAccent);
-      armband.position.set(0, -0.08, 0);
-      leftArmBone.add(armband);
+  updateWeaponPose(delta, pitch) {
+    if (!this.weaponArms) return;
+    const [right, left] = this.weaponArms;
+    const frame = this.weaponSocket.parent;
+    frame.updateWorldMatrix(true, false);
+    const shoulder = chain => frame.worldToLocal(chain[0].getWorldPosition(new THREE.Vector3()));
+    const rightShoulder = shoulder(right);
+    const leftShoulder = shoulder(left);
+    const rightSide = Math.sign(rightShoulder.x - leftShoulder.x);
+    const unit = frame.getWorldScale(new THREE.Vector3()).x;
+    const [grip, support] = this.weaponGroup.userData.handSockets;
+    const calibration = TacticalOperator.currentWeaponCalibration;
+    const defaults = TacticalOperator.defaultWeaponCalibration;
+    this.weaponGroup.position.set(calibration.posX - defaults.posX, calibration.posY - defaults.posY, calibration.posZ - defaults.posZ);
+    this.weaponGroup.rotation.set(calibration.rotX - defaults.rotX, calibration.rotY - defaults.rotY, calibration.rotZ - defaults.rotZ);
+
+    this.weaponRecoilOffset *= Math.exp(-18 * delta);
+    this.weaponRecoilPitch *= Math.exp(-18 * delta);
+    this.weaponSocket.scale.setScalar(1 / unit);
+    this.weaponSocket.position.copy(rightShoulder).lerp(leftShoulder, 0.38);
+    this.weaponSocket.position.y -= 0.045 / unit;
+    const forward = this.weaponForward;
+    this.weaponSocket.position.z += forward * (0.205 - this.weaponRecoilOffset) / unit;
+    const aimPitch = THREE.MathUtils.clamp(pitch, -0.65, 0.65) + this.weaponRecoilPitch;
+    this.weaponSocket.rotation.set(aimPitch, forward > 0 ? Math.PI : 0, 0, 'YXZ');
+
+    this.weaponGroup.updateWorldMatrix(true, false);
+    for (const [chain, target, side, roll] of [[right, grip, rightSide, 0], [left, support, -rightSide, 0.9]]) {
+      const goal = this.weaponGroup.localToWorld(target.clone());
+      const pole = frame.localToWorld(new THREE.Vector3(side * 0.7 / unit, rightShoulder.y - 0.45 / unit, rightShoulder.z));
+      this.solveWeaponArm(chain, goal, pole);
+      // Align each palm with the handle or the underside of the handguard.
+      const hand = chain[2];
+      const handDirection = hand.isBone
+        ? hand.children.find(child => child.isBone && /middle/i.test(child.name))?.position
+        : new THREE.Vector3(0, -1, 0);
+      if (handDirection?.lengthSq()) {
+        const desired = new THREE.Vector3(0, -1, -roll).normalize()
+          .applyQuaternion(this.weaponSocket.getWorldQuaternion(new THREE.Quaternion()));
+        this.pointJoint(hand, handDirection, desired);
+      }
     }
+  }
 
-    // Head Equipment
-    const headGear = this.isFemale ? this.buildFemaleHeadGear() : this.buildMaleHeadGear();
-    if (headBone) {
-      headGear.position.set(0, 0.04, 0);
-      headBone.add(headGear);
-    } else {
-      headGear.position.set(0, 1.66, 0);
-      this.root.add(headGear);
-    }
+  pointJoint(joint, localAxis, worldDirection) {
+    const inverseParent = joint.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+    const desired = worldDirection.clone().normalize().applyQuaternion(inverseParent);
+    const current = localAxis.clone().normalize().applyQuaternion(joint.quaternion);
+    joint.quaternion.premultiply(new THREE.Quaternion().setFromUnitVectors(current, desired));
+  }
 
-    // Plate Carrier
-    const plateCarrier = this.buildPlateCarrierGear();
-    if (spine2Bone) {
-      plateCarrier.position.set(0, -0.05, 0.02);
-      spine2Bone.add(plateCarrier);
-    } else {
-      plateCarrier.position.set(0, 1.25, 0);
-      this.root.add(plateCarrier);
-    }
-
-    // Mag Pouches
-    const magPouches = this.buildTripleMagPouches();
-    if (spine1Bone) {
-      magPouches.position.set(0, 0.02, 0.14);
-      spine1Bone.add(magPouches);
-    } else {
-      magPouches.position.set(0, 1.12, 0.14);
-      this.root.add(magPouches);
-    }
-
-    // Drop-leg Holster
-    const holster = this.buildDropLegHolster();
-    if (rightUpLegBone) {
-      holster.position.set(0.12, -0.14, 0.02);
-      rightUpLegBone.add(holster);
-    } else {
-      holster.position.set(0.18, 0.65, 0);
-      this.root.add(holster);
-    }
-
-    // Dual Thigh Pouches
-    const thighPouches = this.buildDualThighPouches();
-    if (leftUpLegBone) {
-      thighPouches.position.set(-0.12, -0.14, 0.02);
-      leftUpLegBone.add(thighPouches);
-    } else {
-      thighPouches.position.set(-0.18, 0.65, 0);
-      this.root.add(thighPouches);
-    }
-
-    // Knee Protection Pads
-    const rKnee = this.buildKneePad();
-    if (rightLegBone) {
-      rKnee.position.set(0, 0.05, 0.07);
-      rightLegBone.add(rKnee);
-    } else {
-      rKnee.position.set(0.12, 0.45, 0.08);
-      this.root.add(rKnee);
-    }
-
-    const lKnee = this.buildKneePad();
-    if (leftLegBone) {
-      lKnee.position.set(0, 0.05, 0.07);
-      leftLegBone.add(lKnee);
-    } else {
-      lKnee.position.set(-0.12, 0.45, 0.08);
-      this.root.add(lKnee);
-    }
-
-    // Weapon Socket in Right Hand with Scale Compensation and Calibrated Transforms
-    const weaponGroup = this.buildWeaponModel(this.currentWeaponKey);
-    this.weaponGroup = weaponGroup;
-    const cal = TacticalOperator.currentWeaponCalibration;
-    if (rightHandBone) {
-      // Compensate for bone local scale so weapon stays proportional
-      const boneScale = rightHandBone.scale;
-      weaponGroup.scale.set(1.0 / (boneScale.x || 1), 1.0 / (boneScale.y || 1), 1.0 / (boneScale.z || 1));
-      weaponGroup.position.set(cal.posX, cal.posY, cal.posZ);
-      weaponGroup.rotation.set(cal.rotX, cal.rotY, cal.rotZ);
-      rightHandBone.add(weaponGroup);
-      this.weaponSocket = rightHandBone;
-    } else {
-      weaponGroup.position.set(0.22, 1.15, 0.22);
-      this.root.add(weaponGroup);
-      this.weaponSocket = this.root;
-    }
+  solveWeaponArm([upper, forearm, hand], goal, pole) {
+    const origin = upper.getWorldPosition(new THREE.Vector3());
+    const elbow = forearm.getWorldPosition(new THREE.Vector3());
+    const wrist = hand.getWorldPosition(new THREE.Vector3());
+    const upperLength = origin.distanceTo(elbow);
+    const lowerLength = elbow.distanceTo(wrist);
+    const axis = goal.clone().sub(origin);
+    const distance = THREE.MathUtils.clamp(axis.length(), Math.abs(upperLength - lowerLength) + 0.001, upperLength + lowerLength - 0.001);
+    axis.normalize();
+    const bend = pole.sub(origin);
+    bend.addScaledVector(axis, -bend.dot(axis)).normalize();
+    const along = (upperLength ** 2 - lowerLength ** 2 + distance ** 2) / (2 * distance);
+    const elbowDirection = axis.clone().multiplyScalar(along)
+      .addScaledVector(bend, Math.sqrt(Math.max(0, upperLength ** 2 - along ** 2)));
+    this.pointJoint(upper, forearm.position, elbowDirection);
+    this.pointJoint(forearm, hand.position, axis.multiplyScalar(distance).sub(elbowDirection));
   }
 
   /**
@@ -785,9 +732,9 @@ class TacticalOperator {
     rCuff.position.set(0, -0.018, 0);
     this.rElbowGroup.add(rCuff);
 
-    // Muscular human forearm with realistic skin
+    // Long uniform sleeve
     const rForearmGeo = new THREE.CylinderGeometry(0.045, 0.038, 0.19, 10);
-    const rForearm = new THREE.Mesh(rForearmGeo, this.materials.skin);
+    const rForearm = new THREE.Mesh(rForearmGeo, uniform);
     rForearm.position.set(0, -0.12, 0);
     rForearm.castShadow = true;
     this.rElbowGroup.add(rForearm);
@@ -824,9 +771,9 @@ class TacticalOperator {
     lCuff.position.set(0, -0.018, 0);
     this.lElbowGroup.add(lCuff);
 
-    // Muscular human forearm with realistic skin
+    // Long uniform sleeve
     const lForearmGeo = new THREE.CylinderGeometry(0.045, 0.038, 0.19, 10);
-    const lForearm = new THREE.Mesh(lForearmGeo, this.materials.skin);
+    const lForearm = new THREE.Mesh(lForearmGeo, uniform);
     lForearm.position.set(0, -0.12, 0);
     lForearm.castShadow = true;
     this.lElbowGroup.add(lForearm);
@@ -847,22 +794,6 @@ class TacticalOperator {
 
     const lGlove = this.buildTacticalGlove(true);
     this.lHandGroup.add(lGlove);
-
-    // Orient arms into realistic two-handed ready/firing stance
-    this.rShoulderGroup.rotation.set(-0.65, -0.15, 0.12);
-    this.rElbowGroup.rotation.set(-0.60, 0.0, -0.10);
-    this.rHandGroup.rotation.set(0.15, 0.25, 0);
-
-    this.lShoulderGroup.rotation.set(-0.85, 0.45, -0.25);
-    this.lElbowGroup.rotation.set(-0.95, 0.0, 0.20);
-    this.lHandGroup.rotation.set(0.20, -0.30, 0.35);
-
-    // Attach Weapon in Right Hand Socket
-    this.weaponSocket = this.rHandGroup;
-    this.weaponGroup = this.buildWeaponModel(this.currentWeaponKey);
-    this.weaponGroup.position.set(0.02, 0.05, -0.06);
-    this.weaponGroup.rotation.set(-Math.PI / 2 + 0.15, 0, 0.1);
-    this.weaponSocket.add(this.weaponGroup);
 
     // 5. Lower Body (Hips, Thighs, Knees, Shins, Boots)
     // Right Hip Joint
@@ -935,6 +866,9 @@ class TacticalOperator {
 
     this.modelRoot.add(this.pelvisGroup);
     this.root.add(this.modelRoot);
+    this.mountCombatWeapon(this.pelvisGroup,
+      [this.rShoulderGroup, this.rElbowGroup, this.rHandGroup],
+      [this.lShoulderGroup, this.lElbowGroup, this.lHandGroup]);
   }
 
   buildCombatBoot() {
@@ -1475,6 +1409,13 @@ class TacticalOperator {
 
     // Attach Muzzle Flash Effects to Weapon Tip
     const muzzleLight = new THREE.PointLight(0xffaa22, 0, 4.5);
+    const sockets = {
+      smg: [[0, -0.082, 0.08], [0, -0.068, -0.15]],
+      sniper: [[0, -0.092, 0.12], [0, -0.052, -0.22]],
+      pistol: [[0, -0.083, 0.042], [0.027, -0.085, 0.02]],
+      carbine: [[0, -0.086, 0.10], [0, -0.045, -0.14]]
+    };
+    group.userData.handSockets = (sockets[weaponKey] || sockets.carbine).map(point => new THREE.Vector3(...point));
     muzzleLight.position.copy(this.muzzlePoint);
     group.add(muzzleLight);
     this.muzzleLight = muzzleLight;
@@ -1516,15 +1457,12 @@ class TacticalOperator {
 
     if (this.weaponSocket) {
       this.weaponGroup = this.buildWeaponModel(weaponKey);
-      const cal = TacticalOperator.currentWeaponCalibration;
-      this.weaponGroup.position.set(cal.posX, cal.posY, cal.posZ);
-      this.weaponGroup.rotation.set(cal.rotX, cal.rotY, cal.rotZ);
       this.weaponSocket.add(this.weaponGroup);
     }
   }
 
   buildHitboxes() {
-    const headHitGeo = new THREE.BoxGeometry(0.42, 0.42, 0.42);
+    const headHitGeo = new THREE.BoxGeometry(0.38, 0.40, 0.38);
     // Transparent material allows Three.js Raycaster to intersect while remaining completely invisible to the player
     const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
 
@@ -1539,7 +1477,7 @@ class TacticalOperator {
     };
 
     if (this.headBone) {
-      this.headMesh.position.set(0, 0, 0);
+      this.headMesh.position.set(0, 0.06, 0);
       this.headBone.add(this.headMesh);
     } else if (this.headGroup) {
       this.headMesh.position.set(0, 0, 0);
@@ -1727,6 +1665,10 @@ class TacticalOperator {
     // If GLB skeletal mixer is active:
     if (this.mixer) {
       this.mixer.update(effectiveDelta);
+      // Skeletal hitboxes must be updated after bone transforms and before raycasting.
+      if (this.headMesh) this.headMesh.position.set(0, 0.06, 0);
+      if (this.bodyMesh) this.bodyMesh.position.set(0, -0.35, 0);
+      if (this.root) this.root.updateMatrixWorld(true);
       if (this.isDead) {
         if (this.modelRoot) {
           this.modelRoot.rotation.x = THREE.MathUtils.lerp(this.modelRoot.rotation.x, -Math.PI / 2, effectiveDelta * 8.0);
@@ -1760,6 +1702,8 @@ class TacticalOperator {
       this.updateProceduralRig(effectiveDelta, speed, isCrouching, pitch);
     }
 
+    this.updateWeaponPose(effectiveDelta, pitch || 0);
+
     // Billboards face camera
     if (camera) {
       if (this.healthBarGroup) this.healthBarGroup.quaternion.copy(camera.quaternion);
@@ -1769,15 +1713,6 @@ class TacticalOperator {
 
   updateProceduralRig(delta, speed, isCrouching, pitch) {
     if (!this.pelvisGroup) return;
-
-    // Recoil recovery
-    this.weaponRecoilOffset = THREE.MathUtils.lerp(this.weaponRecoilOffset, 0, delta * 18);
-    this.weaponRecoilPitch = THREE.MathUtils.lerp(this.weaponRecoilPitch, 0, delta * 18);
-
-    if (this.weaponGroup) {
-      this.weaponGroup.position.z = -0.06 - this.weaponRecoilOffset;
-      this.weaponGroup.rotation.x = -Math.PI / 2 + 0.15 - this.weaponRecoilPitch;
-    }
 
     // 1. Death Animation State
     if (this.isDead) {
@@ -1795,11 +1730,14 @@ class TacticalOperator {
     const targetPelvisY = isCrouching ? 0.62 : 0.94;
     this.pelvisGroup.position.y = THREE.MathUtils.lerp(this.pelvisGroup.position.y, targetPelvisY, delta * 10.0);
 
-    // Update Hitbox elevations when crouching vs standing
-    const targetHeadY = isCrouching ? 1.25 : 1.68;
-    const targetBodyY = isCrouching ? 0.60 : 0.82;
-    if (this.headMesh) this.headMesh.position.y = THREE.MathUtils.lerp(this.headMesh.position.y, targetHeadY, delta * 10.0);
-    if (this.bodyMesh) this.bodyMesh.position.y = THREE.MathUtils.lerp(this.bodyMesh.position.y, targetBodyY, delta * 10.0);
+    // Do not offset bone-attached hitboxes: attached local transforms are
+    // already expressed relative to the animated head/spine.
+    if (!this.headBone && !this.headGroup) {
+      if (this.headMesh) this.headMesh.position.y = THREE.MathUtils.lerp(this.headMesh.position.y, isCrouching ? 1.25 : 1.68, delta * 10.0);
+    }
+    if (!this.spineBone && !this.pelvisGroup) {
+      if (this.bodyMesh) this.bodyMesh.position.y = THREE.MathUtils.lerp(this.bodyMesh.position.y, isCrouching ? 0.60 : 0.82, delta * 10.0);
+    }
 
     // 3. Aim Pitch (Torso & Head track crosshair elevation)
     const clampedPitch = Math.max(-0.9, Math.min(0.9, pitch));
@@ -1847,10 +1785,6 @@ class TacticalOperator {
       if (this.spineGroup) {
         this.spineGroup.rotation.y = sinCycle * 0.06;
       }
-      // Subtle arm bobbing
-      if (this.rShoulderGroup) {
-        this.rShoulderGroup.rotation.x = -0.65 + cosCycle * 0.04;
-      }
     } else {
       // Idle: smooth return to neutral posture with subtle natural breathing
       this.idleCycle += delta * 1.8;
@@ -1895,6 +1829,7 @@ class TacticalOperator {
     this.health = 0;
     if (this.headMesh) this.headMesh.visible = false;
     if (this.bodyMesh) this.bodyMesh.visible = false;
+    if (this.weaponSocket) this.weaponSocket.visible = false;
     if (this.healthBarFill && this.healthBarFill.scale) {
       this.healthBarFill.scale.x = 0;
     }
@@ -1932,6 +1867,7 @@ class TacticalOperator {
       this.healthBarFill.position.x = 0;
     }
 
+    if (this.weaponSocket) this.weaponSocket.visible = true;
     if (this.nameTagSprite) this.nameTagSprite.visible = true;
     if (this.healthBarGroup) this.healthBarGroup.visible = true;
 

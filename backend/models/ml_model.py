@@ -240,3 +240,29 @@ def predict(features: dict) -> dict:
     if artifact_v2 is not None:
         return predict_v2(features)
     return predict_v1(features)
+
+APPROVED_MODEL_ARTIFACTS = {
+    "v2.0-rf": ("model_v2.joblib", predict_v2),
+    "v1.5-rf": ("random_forest.pkl + isolation_forest.pkl + scaler.pkl", predict_v1),
+}
+
+
+def predict_selected(features, version):
+    if version is None:
+        return predict(features)
+    if version not in APPROVED_MODEL_ARTIFACTS:
+        raise ValueError("Unapproved model version")
+    result = APPROVED_MODEL_ARTIFACTS[version][1](features)
+    if result.get("risk_score") is None:
+        raise ValueError("Selected model could not produce a score")
+    return result
+
+
+def probe_model(version):
+    import math
+
+    result = predict_selected(dict.fromkeys([*FEATURES, *FEATURE_NAMES_V2], 0.0), version)
+    score = result.get("risk_score")
+    if score is None or not math.isfinite(score):
+        raise ValueError("The model did not produce a finite score")
+    return result

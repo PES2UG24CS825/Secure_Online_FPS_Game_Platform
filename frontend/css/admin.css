@@ -69,22 +69,22 @@
     td {
       padding: 12px;
       border-bottom: 1px solid #DDD6FE;
-      color: #1E1B4B !important;
+      color: #1E1B4B;
     }
 
     table td, .admin-table-wrap td, .login-audit-table td, table.threat-table td, tbody td {
-      color: #1E1B4B !important;
+      color: #1E1B4B;
     }
     table td code, .admin-table-wrap td code {
-      background: #EDE9FE !important;
-      color: #5B21B6 !important;
+      background: #EDE9FE;
+      color: #5B21B6;
       font-weight: 700;
     }
     table td strong, .admin-table-wrap td strong {
-      color: #1E1B4B !important;
+      color: #1E1B4B;
     }
     table td small, .admin-table-wrap td small {
-      color: #475569 !important;
+      color: #475569;
     }
 
     tbody tr:hover {
@@ -161,6 +161,7 @@
 
     .admin-sidebar { position:fixed; inset:0 auto 0 0; display:flex; flex-direction:column; width:240px; height:100vh; box-sizing:border-box; padding:24px 18px; overflow-y:auto; z-index:100; background:rgba(233,231,245,.66); backdrop-filter:blur(9px); border-right:1px solid rgba(195,191,224,.8); }
     .admin-sidebar .brand { margin-bottom:34px; }
+    .admin-sidebar .brand-lockup { display:none; }
     .admin-sidebar nav { display:grid; gap:6px; }
     .admin-sidebar-mascots { display:flex; align-items:flex-end; justify-content:center; flex:1 1 auto; min-height:170px; margin-top:auto; overflow:hidden; pointer-events:none; }
     .admin-sidebar-mascots img { display:block; width:min(100%, 190px); max-height:30vh; object-fit:contain; object-position:center bottom; filter:drop-shadow(0 8px 18px rgba(37,22,63,.22)); }
@@ -321,15 +322,15 @@
     .admin-page .risk-badge { border:1px solid transparent; font-weight:650; letter-spacing:.01em; padding: 4px 8px; border-radius: 999px; }
     .admin-page .badge.good,
     .badge-success, .badge.badge-success,
-    .admin-page .risk-badge.low { background:#DCFCE7 !important; color:#15803D !important; border-color:#BBF7D0 !important; font-weight:700 !important; }
+    .admin-page .risk-badge.low { background:#DCFCE7; color:#15803D; border-color:#BBF7D0; font-weight:700; }
     .admin-page .badge.warn,
     .badge-warning, .badge.badge-warning,
-    .admin-page .risk-badge.medium { background:#FEF3C7 !important; color:#B45309 !important; border-color:#FDE68A !important; font-weight:700 !important; }
+    .admin-page .risk-badge.medium { background:#FEF3C7; color:#B45309; border-color:#FDE68A; font-weight:700; }
     .admin-page .badge.bad,
     .badge-danger, .badge.badge-danger,
-    .admin-page .risk-badge.high { background:#FEE2E2 !important; color:#B91C1C !important; border-color:#FECACA !important; font-weight:700 !important; }
-    .badge-cyan, .badge.badge-cyan { background:#EDE9FE !important; color:#6D28D9 !important; border-color:#DDD6FE !important; font-weight:700 !important; }
-    .badge-deleted, .badge.badge-deleted { background:#F1F5F9 !important; color:#475569 !important; border-color:#E2E8F0 !important; font-weight:700 !important; }
+    .admin-page .risk-badge.high { background:#FEE2E2; color:#B91C1C; border-color:#FECACA; font-weight:700; }
+    .badge-cyan, .badge.badge-cyan { background:#EDE9FE; color:#6D28D9; border-color:#DDD6FE; font-weight:700; }
+    .badge-deleted, .badge.badge-deleted { background:#F1F5F9; color:#475569; border-color:#E2E8F0; font-weight:700; }
     .admin-page .permanent-ban-badge { background:#F8E7E7; color:#9B3434; border:1px solid #EED0D0; font-size:10px; font-weight:700; }
     .admin-page th { letter-spacing:.035em; }
     .admin-page .hacker-account-card { border-left-width:3px; border-radius:12px; }
@@ -561,31 +562,31 @@
 
 /* Admin Review Action Buttons */
 .admin-page .gameplay-review-actions .play-btn.success-btn {
-  background: #059669 !important;
-  border: 1px solid #047857 !important;
-  color: #ffffff !important;
+  background: #059669;
+  border: 1px solid #047857;
+  color: #ffffff;
   font-weight: 700;
 }
 .admin-page .gameplay-review-actions .play-btn.success-btn:hover {
-  background: #10b981 !important;
+  background: #10b981;
 }
 .admin-page .gameplay-review-actions .play-btn.warning-btn {
-  background: #d97706 !important;
-  border: 1px solid #b45309 !important;
-  color: #ffffff !important;
+  background: #d97706;
+  border: 1px solid #b45309;
+  color: #ffffff;
   font-weight: 700;
 }
 .admin-page .gameplay-review-actions .play-btn.warning-btn:hover {
-  background: #f59e0b !important;
+  background: #f59e0b;
 }
 .admin-page .gameplay-review-actions .play-btn.danger-btn {
-  background: #dc2626 !important;
-  border: 1px solid #b91c1c !important;
-  color: #ffffff !important;
+  background: #dc2626;
+  border: 1px solid #b91c1c;
+  color: #ffffff;
   font-weight: 700;
 }
 .admin-page .gameplay-review-actions .play-btn.danger-btn:hover {
-  background: #ef4444 !important;
+  background: #ef4444;
 }
 
 /* ==========================================================================
@@ -594,11 +595,11 @@
 
 /* 1. Header & Topbar Fixes */
 .admin-page .ghost-btn {
-  width: auto !important;
+  width: auto;
   min-width: 90px;
   height: 38px;
   min-height: 38px;
-  padding: 0 14px !important;
+  padding: 0 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -665,17 +666,17 @@
   margin-bottom: 20px;
 }
 .health-card {
-  background: #FFFFFF !important;
-  border: 1px solid #E2E8F0 !important;
-  border-radius: 14px !important;
-  padding: 18px 20px !important;
-  color: #1E1B4B !important;
-  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.08) !important;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 18px 20px;
+  color: #1E1B4B;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.08);
   transition: transform .18s ease, box-shadow .18s ease;
 }
 .health-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.16) !important;
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.16);
 }
 .health-header {
   display: flex;
@@ -684,7 +685,7 @@
   margin-bottom: 10px;
 }
 .health-header strong {
-  color: #1E1B4B !important;
+  color: #1E1B4B;
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -695,12 +696,12 @@
   gap: 6px;
 }
 .health-body div {
-  color: #334155 !important;
+  color: #334155;
   font-size: 13px;
   font-weight: 600;
 }
 .health-body .muted {
-  color: #64748B !important;
+  color: #64748B;
   font-size: 11px;
   font-weight: 500;
 }
@@ -718,9 +719,9 @@
 .live-status-pill.connected,
 .live-status-pill.online,
 .live-status-pill.operational {
-  background: rgba(16, 185, 129, 0.14) !important;
-  color: #059669 !important;
-  border: 1px solid rgba(16, 185, 129, 0.45) !important;
+  background: rgba(16, 185, 129, 0.14);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.45);
 }
 .live-pulse-dot {
   display: inline-block;
@@ -739,19 +740,19 @@
 
 /* 3. Modern ML Anti-Cheat Review Card */
 .anticheat-meta-card {
-  background: #FFFFFF !important;
-  border: 1px solid #E2E8F0 !important;
-  border-radius: 14px !important;
-  padding: 20px !important;
-  color: #1E1B4B !important;
-  box-shadow: 0 4px 18px rgba(124, 58, 237, 0.08) !important;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 20px;
+  color: #1E1B4B;
+  box-shadow: 0 4px 18px rgba(124, 58, 237, 0.08);
   margin-bottom: 20px;
 }
 .anticheat-meta-card strong {
-  color: #FFFFFF !important;
+  color: #FFFFFF;
 }
 .anticheat-meta-card .muted {
-  color:#475569 !important;
+  color:#475569;
   font-weight: 500;
 }
 .feature-bar-list {
@@ -769,19 +770,19 @@
 .feat-name {
   width: 190px;
   font-family: monospace;
-  color:#334155 !important;
+  color:#334155;
   font-weight: 600;
 }
 .feat-track {
   flex: 1;
   height: 9px;
-  background: rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   overflow: hidden;
 }
 .feat-fill {
   height: 100%;
-  background: linear-gradient(90deg, #A78BFA, #06B6D4) !important;
+  background: linear-gradient(90deg, #A78BFA, #06B6D4);
   border-radius: 999px;
   box-shadow: 0 0 8px rgba(6, 182, 212, 0.5);
 }
@@ -789,7 +790,7 @@
   width: 44px;
   text-align: right;
   font-weight: 700;
-  color: #A78BFA !important;
+  color: #A78BFA;
 }
 
 /* 4. Professional Customer Support Ticket Card */
@@ -877,50 +878,50 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  background: #FAF5FF !important;
-  border: 1.5px solid #DDD6FE !important;
-  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.1) !important;
-  padding: 12px 18px !important;
-  border-radius: 12px !important;
-  margin-bottom: 16px !important;
-  color: #4C1D95 !important;
+  background: #FAF5FF;
+  border: 1.5px solid #DDD6FE;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.1);
+  padding: 12px 18px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  color: #4C1D95;
 }
 .bulk-toolbar[hidden] {
-  display: none !important;
+  display: none;
 }
 .bulk-toolbar span {
   font-size: 13px;
   font-weight: 600;
-  color: #4C1D95 !important;
+  color: #4C1D95;
 }
 .bulk-toolbar strong {
-  color: #6D28D9 !important;
+  color: #6D28D9;
   font-size: 15px;
 }
 .bulk-toolbar .action-btn {
-  border: none !important;
-  padding: 8px 16px !important;
-  border-radius: 8px !important;
-  font-weight: 700 !important;
-  font-size: 12px !important;
-  cursor: pointer !important;
-  transition: transform .15s ease, filter .15s ease !important;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform .15s ease, filter .15s ease;
 }
 .bulk-toolbar .action-btn:hover {
   transform: translateY(-1px);
   filter: brightness(1.1);
 }
 .bulk-toolbar #bulkSuspendBtn {
-  background: #D97706 !important;
-  color: #FFFFFF !important;
+  background: #D97706;
+  color: #FFFFFF;
 }
 .bulk-toolbar #bulkBanBtn {
-  background: #DC2626 !important;
-  color: #FFFFFF !important;
+  background: #DC2626;
+  color: #FFFFFF;
 }
 .bulk-toolbar #bulkUnsuspendBtn {
-  background: #059669 !important;
-  color: #FFFFFF !important;
+  background: #059669;
+  color: #FFFFFF;
 }
 
 /* 6. Admin Tier Privilege Banners */
@@ -934,23 +935,23 @@
   font-size: 13px;
 }
 .admin-tier-banner.super-tier {
-  background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%) !important;
-  border: 1.5px solid #F59E0B !important;
-  color: #92400E !important;
-  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.15) !important;
+  background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%);
+  border: 1.5px solid #F59E0B;
+  color: #92400E;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.15);
 }
 .admin-tier-banner.super-tier strong {
-  color: #B45309 !important;
+  color: #B45309;
   font-size: 14px;
 }
 .admin-tier-banner.normal-tier {
-  background: linear-gradient(135deg, #FAF5FF 0%, #EDE9FE 100%) !important;
-  border: 1.5px solid #C4B5FD !important;
-  color: #5B21B6 !important;
-  box-shadow: 0 4px 14px rgba(109, 40, 217, 0.1) !important;
+  background: linear-gradient(135deg, #FAF5FF 0%, #EDE9FE 100%);
+  border: 1.5px solid #C4B5FD;
+  color: #5B21B6;
+  box-shadow: 0 4px 14px rgba(109, 40, 217, 0.1);
 }
 .admin-tier-banner.normal-tier strong {
-  color: #6D28D9 !important;
+  color: #6D28D9;
   font-size: 14px;
 }
 
@@ -966,20 +967,20 @@
   border-collapse: collapse;
 }
 .login-audit-table th {
-  background: #F8FAFC !important;
-  color: #475569 !important;
+  background: #F8FAFC;
+  color: #475569;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 12px 16px;
-  border-bottom: 2px solid #E2E8F0 !important;
+  border-bottom: 2px solid #E2E8F0;
 }
 .login-audit-table td {
   padding: 14px 16px;
   font-size: 12px;
-  border-bottom: 1px solid #F1F5F9 !important;
-  color: #1E293B !important;
+  border-bottom: 1px solid #F1F5F9;
+  color: #1E293B;
   vertical-align: middle;
 }
 .login-audit-table tr:hover td {
@@ -1026,14 +1027,14 @@
 
 /* 8. Player Matches & Career Inspector Modal */
 .player-matches-dialog {
-  max-width: 880px !important;
-  width: 95% !important;
-  background: #FFFFFF !important;
-  color: #1E1B4B !important;
-  border: 1px solid #DDD6FE !important;
-  border-radius: 18px !important;
-  padding: 24px 30px !important;
-  box-shadow: 0 25px 60px rgba(109, 40, 217, 0.25) !important;
+  max-width: 880px;
+  width: 95%;
+  background: #FFFFFF;
+  color: #1E1B4B;
+  border: 1px solid #DDD6FE;
+  border-radius: 18px;
+  padding: 24px 30px;
+  box-shadow: 0 25px 60px rgba(109, 40, 217, 0.25);
 }
 .player-matches-dialog::backdrop {
   background: rgba(15, 23, 42, 0.7);
@@ -1264,32 +1265,51 @@
    SIDEBAR MASCOT SUPPRESSION & OVERLAP REMOVAL
    ========================================================================= */
 .admin-sidebar-mascots {
-  display: none !important;
+  display: none;
+}
+
+.admin-sidebar .sidebar-brand-text {
+  display: grid;
+  gap: 2px;
+  color: #1E1B4B;
+  line-height: 1;
+}
+.admin-sidebar .sidebar-brand-text strong {
+  color: #1E1B4B;
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+.admin-sidebar .sidebar-brand-text small {
+  color: #7C3AED;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
 }
 
 /* =========================================================================
    THREAT MONITORING COMPACT AUTO-FIT TABLES
    ========================================================================= */
 .threat-table-wrap {
-  width: 100% !important;
-  max-width: 100% !important;
-  overflow-x: hidden !important;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 table.threat-table {
-  width: 100% !important;
-  min-width: 0 !important;
-  table-layout: fixed !important;
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
 }
 table.threat-table th,
 table.threat-table td {
-  padding: 10px 12px !important;
-  font-size: 12px !important;
-  vertical-align: middle !important;
+  padding: 10px 12px;
+  font-size: 12px;
+  vertical-align: middle;
 }
 table.threat-table td:first-child {
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* =========================================================================
@@ -1431,11 +1451,11 @@ table.threat-table td:first-child {
    UNIVERSAL HIGH-CONTRAST DATA & TABLE TEXT (PREVENTS FAINT/WHITE TEXT)
    ========================================================================= */
 table th, .admin-table-wrap th {
-  color: #334155 !important;
-  font-weight: 700 !important;
-  font-size: 11px !important;
-  letter-spacing: 0.05em !important;
-  text-transform: uppercase !important;
+  color: #334155;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 table td, table td *,
@@ -1449,78 +1469,83 @@ tbody td, tbody td * {
 table td code, .admin-table-wrap td code,
 #threatSuspiciousLoginsTableBody td code,
 #auditLogTableBody td code {
-  background: #EDE9FE !important;
-  color: #5B21B6 !important;
-  font-weight: 700 !important;
-  font-family: ui-monospace, monospace !important;
-  padding: 3px 7px !important;
-  border-radius: 5px !important;
-  border: 1px solid #DDD6FE !important;
+  background: #EDE9FE;
+  color: #5B21B6;
+  font-weight: 700;
+  font-family: ui-monospace, monospace;
+  padding: 3px 7px;
+  border-radius: 5px;
+  border: 1px solid #DDD6FE;
 }
 
 table td strong, .admin-table-wrap td strong,
 #threatSuspiciousLoginsTableBody td strong,
 #auditLogTableBody td strong {
-  color: #0F172A !important;
-  font-weight: 700 !important;
+  color: #0F172A;
+  font-weight: 700;
 }
 
 table td small, .admin-table-wrap td small {
-  color: #334155 !important;
-  font-weight: 500 !important;
+  color: #334155;
+  font-weight: 500;
 }
 
 table td small.muted, .admin-table-wrap td small.muted,
 table td .text-muted, table td .muted {
-  color: #64748B !important;
-  font-weight: 500 !important;
+  color: #64748B;
+  font-weight: 500;
 }
 
 /* Badges across all admin tables */
 .badge-danger, .badge.badge-danger {
-  background: #FEE2E2 !important;
-  color: #991B1B !important;
-  border: 1px solid #FCA5A5 !important;
-  font-weight: 700 !important;
-  padding: 3px 8px !important;
-  border-radius: 999px !important;
+  background: #FEE2E2;
+  color: #991B1B;
+  border: 1px solid #FCA5A5;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
 }
 
 .badge-cyan, .badge.badge-cyan {
-  background: #EDE9FE !important;
-  color: #5B21B6 !important;
-  border: 1px solid #C4B5FD !important;
-  font-weight: 700 !important;
-  padding: 3px 8px !important;
-  border-radius: 999px !important;
+  background: #EDE9FE;
+  color: #5B21B6;
+  border: 1px solid #C4B5FD;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
 }
 
 .badge-deleted, .badge.badge-deleted {
-  background: #F1F5F9 !important;
-  color: #334155 !important;
-  border: 1px solid #CBD5E1 !important;
-  font-weight: 700 !important;
-  padding: 3px 8px !important;
-  border-radius: 999px !important;
+  background: #F1F5F9;
+  color: #334155;
+  border: 1px solid #CBD5E1;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
 }
 
 .badge-success, .badge.badge-success {
-  background: #DCFCE7 !important;
-  color: #14532D !important;
-  border: 1px solid #86EFAC !important;
-  font-weight: 700 !important;
-  padding: 3px 8px !important;
-  border-radius: 999px !important;
+  background: #DCFCE7;
+  color: #14532D;
+  border: 1px solid #86EFAC;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
 }
 
 .badge-warning, .badge.badge-warning {
-  background: #FEF3C7 !important;
-  color: #78350F !important;
-  border: 1px solid #FCD34D !important;
-  font-weight: 700 !important;
-  padding: 3px 8px !important;
-  border-radius: 999px !important;
+  background: #FEF3C7;
+  color: #78350F;
+  border: 1px solid #FCD34D;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
 }
 
 
 
+
+[data-admin-view="rewards"] details { margin-block: 1rem; }
+[data-admin-view="rewards"] summary { cursor: pointer; font-weight: 700; padding-block: .5rem; }
+[data-admin-view="rewards"] form:not([hidden]) { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; padding-block: .75rem; }
+[data-admin-view="rewards"] form label { display: grid; gap: .25rem; }

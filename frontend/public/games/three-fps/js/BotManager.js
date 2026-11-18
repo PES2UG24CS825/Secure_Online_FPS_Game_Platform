@@ -125,6 +125,9 @@ class Bot {
     this.burstShotsRemaining = 0;
     this.burstShotTimer = 0;
     this.burstCooldownTimer = 0;
+    this.isActive = true;
+    this.stuckTimer = 0;
+    this.lastPosition = this.position.clone();
 
     // Magazine & Reload
     this.magCapacity = 30;
@@ -306,6 +309,12 @@ class Bot {
   update(delta, playerPos, playerController, camera, gameModeManager, onPlayerHurt) {
     this.updateTracers(delta);
 
+    if (!this.isActive) {
+      this.currentSpeed = 0;
+      this.operator.updateAnimation(delta, 0, true, camera, false, 0);
+      return;
+    }
+
     if (this.botManager.isStopped || (gameModeManager && gameModeManager.isMatchCompleted)) {
       this.currentSpeed = 0;
       this.operator.updateAnimation(delta, 0, true, camera, false, 0);
@@ -475,7 +484,21 @@ class Bot {
     if (dist < 10.0) forwardWeight = -0.35;
     else if (dist > 22.0) forwardWeight = 0.45;
 
-    const moveDir = strafeVec.clone().addScaledVector(toTarget, forwardWeight).normalize();
+    const separation = new THREE.Vector3();
+    if (this.botManager && this.botManager.bots) {
+      for (const other of this.botManager.bots) {
+        if (other !== this && other.isActive && !other.isDead) {
+          const sep = this.position.clone().sub(other.position);
+          sep.y = 0;
+          const sepDist = sep.length();
+          if (sepDist > 0.01 && sepDist < 3.2) {
+            separation.add(sep.normalize().multiplyScalar((3.2 - sepDist) * 0.75));
+          }
+        }
+      }
+    }
+
+    const moveDir = strafeVec.clone().addScaledVector(toTarget, forwardWeight).add(separation).normalize();
     const moveStep = moveDir.multiplyScalar(speed * delta);
 
     const nextX = this.position.x + moveStep.x;
@@ -1021,10 +1044,29 @@ class BotManager {
     const valid = ['easy', 'normal', 'hard'];
     if (valid.includes(diff)) {
       this.difficulty = diff;
-      this.bots.forEach(bot => {
+      const activeCount = diff === 'easy' ? 2 : (diff === 'normal' ? 3 : 4);
+      this.bots.forEach((bot, index) => {
+        bot.isActive = index < activeCount;
+        if (bot.operator?.root) bot.operator.root.visible = bot.isActive;
+        bot.isDead = false;
+        bot.spawnProtectionTimer = 2.5;
+        if (!bot.isActive) {
+          bot.currentSpeed = 0;
+          bot.state = 'PATROL';
+          bot.currentAmmo = bot.magCapacity;
+          bot.isReloading = false;
+          return;
+        }
+        const preferredSpawn = TACTICAL_SPAWN_POINTS[(index * 4 + index) % TACTICAL_SPAWN_POINTS.length].clone();
+        if (preferredSpawn) {
+          preferredSpawn.y = 0;
+          bot.position.copy(preferredSpawn);
+          bot.spawnPos.copy(preferredSpawn);
+          bot.operator.root.position.copy(preferredSpawn);
+        }
         bot.applyPersona(this.getPersonaForBot(bot.id, bot.role));
       });
-      console.log(`[SecureFPS AI] Calibrated bot skill band to: ${diff.toUpperCase()}`);
+      console.log(`[SecureFPS AI] Calibrated ${diff.toUpperCase()} with ${activeCount} active bots`);
     }
   }
 
@@ -1074,7 +1116,7 @@ class BotManager {
     this.isEnabled = enabled;
     this.bots.forEach(bot => {
       if (bot.operator && bot.operator.root) {
-        bot.operator.root.visible = enabled;
+        bot.operator.root.visible = enabled && !!bot.isActive;
       }
     });
   }
@@ -1083,7 +1125,7 @@ class BotManager {
     if (!this.isEnabled || this.isStopped) return [];
     const hitboxes = [];
     this.bots.forEach(bot => {
-      if (!bot.isDead && bot.operator) {
+      if (bot.isActive && !bot.isDead && bot.operator) {
         if (bot.operator.headMesh) hitboxes.push(bot.operator.headMesh);
         if (bot.operator.bodyMesh) hitboxes.push(bot.operator.bodyMesh);
       }

@@ -101,3 +101,15 @@ def classify_risk_score(score: Any) -> Dict[str, Any]:
         "action": "Urgent investigation",
         "severity": "critical"
     }
+
+def classify_configured_risk(score, config):
+    """Apply saved review bands while preserving the score and its evidence."""
+    keys = ("low_threshold", "medium_threshold", "high_threshold", "critical_threshold")
+    values = tuple(config.get(key) for key in keys)
+    if not all(type(value) in (int, float) for value in values) or not (0 < values[0] < values[1] < values[2] < values[3] <= 100):
+        return classify_risk_score(score)
+    clamped = clamp_risk_score(score)
+    if clamped is None:
+        return classify_risk_score(None)
+    band = RISK_SCORE_SCALE[sum(clamped >= value for value in values)]
+    return {"score": clamped, **{key: band[key] for key in ("category", "meaning", "action", "severity")}}

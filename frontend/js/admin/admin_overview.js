@@ -37,8 +37,8 @@ function renderOverviewStats(stats) {
   const eCount = document.getElementById('eventCount');
   const hCount = document.getElementById('highCount');
 
-  if (pCount) pCount.textContent = stats.total_players ?? '—';
-  if (mCount) mCount.textContent = stats.matches_analyzed ?? '—';
+  if (pCount) pCount.textContent = stats.total_players ?? 0;
+  if (mCount) mCount.textContent = stats.matches_analyzed ?? 0;
   if (eCount) eCount.textContent = (stats.total_players ? stats.total_players * 3 : '—');
   if (hCount) hCount.textContent = stats.high_severity_events ?? '0';
 
@@ -54,13 +54,14 @@ async function loadServerClusterHealth() {
   if (!container) return;
 
   try {
-    const resp = await fetch('/api/admin/server-health', { credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-    if (!resp.ok) return;
+    const resp = await fetch(`${window.API_BASE}/admin/server-health`, { credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    if (!resp.ok) throw new Error('Service check failed');
     const health = await resp.json();
 
-    const dbStatus = health.database?.status === 'connected' ? 'status-online' : 'status-offline';
+    const dbConnected = health.database?.status === 'connected';
     const mp = health.multiplayer_server || {};
-    const mpStatus = mp.status === 'online' ? 'status-online' : 'status-offline';
+    const mpOnline = mp.status === 'online';
+    const ml = health.ml || {};
 
     container.innerHTML = `
       <div class="health-grid">
@@ -70,8 +71,8 @@ async function loadServerClusterHealth() {
             <strong>Database Cluster</strong>
           </div>
           <div class="health-body">
-            <div style="display:flex; align-items:center; gap:6px;">Status: <span class="live-status-pill connected"><span class="live-pulse-dot"></span>CONNECTED</span></div>
-            <small class="muted">Users: ${health.database?.total_users ?? 0} | Sessions: ${health.database?.total_sessions ?? 0}</small>
+            <div style="display:flex; align-items:center; gap:6px;">Status: <span class="live-status-pill ${dbConnected ? 'connected' : 'offline'}">${dbConnected ? 'CONNECTED' : 'DISCONNECTED'}</span></div>
+            <small class="muted">Users: ${health.database?.total_users ?? '—'} | Sessions: ${health.database?.total_sessions ?? '—'}</small>
           </div>
         </div>
 
@@ -81,8 +82,8 @@ async function loadServerClusterHealth() {
             <strong>Multiplayer Engine (Node/Socket.IO)</strong>
           </div>
           <div class="health-body">
-            <div style="display:flex; align-items:center; gap:6px;">Status: <span class="live-status-pill online"><span class="live-pulse-dot"></span>ONLINE</span></div>
-            <small class="muted">Rooms: ${mp.rooms ?? 1} | Clients: ${mp.clients ?? 0} ${mp.latency_ms ? `| ${mp.latency_ms}ms` : ''}</small>
+            <div style="display:flex; align-items:center; gap:6px;">Status: <span class="live-status-pill ${mpOnline ? 'online' : 'offline'}">${mpOnline ? 'ONLINE' : 'OFFLINE'}</span></div>
+            <small class="muted">Rooms: ${mp.rooms ?? '—'} | Clients: ${mp.clients ?? '—'} ${mp.latency_ms ? `| ${mp.latency_ms}ms` : ''}</small>
           </div>
         </div>
 
@@ -92,8 +93,8 @@ async function loadServerClusterHealth() {
             <strong>ML Anti-Cheat Inference</strong>
           </div>
           <div class="health-body">
-            <div style="display:flex; align-items:center; gap:6px;">Status: <span class="live-status-pill operational"><span class="live-pulse-dot"></span>OPERATIONAL</span></div>
-            <small class="muted">Engine: Python scikit-learn random forest · v2.0</small>
+            <div style="display:flex; align-items:center; gap:6px;">Status: <span class="live-status-pill ${ml.status === 'operational' ? 'operational' : 'offline'}">${escapeHtml((ml.status || 'unavailable').toUpperCase())}</span></div>
+            <small class="muted">${escapeHtml(ml.model_version || 'Model version unavailable')}</small>
           </div>
         </div>
       </div>
@@ -109,6 +110,7 @@ async function loadServerClusterHealth() {
     if (demoPanel) demoPanel.hidden = !demoEnabled;
     if (demoBanner) demoBanner.hidden = !demoEnabled;
   } catch (err) {
+    container.textContent = 'Service health unavailable. The dashboard will retry automatically.';
     console.error('[AdminOverview] Health check failed:', err);
   }
 }

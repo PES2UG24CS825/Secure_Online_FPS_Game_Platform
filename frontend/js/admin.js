@@ -1,3 +1,4 @@
+import { loadRewardOperations } from './admin/admin_rewards.js';
 /**
  * SecureFPS Admin Dashboard Coordinator
  * Coordinates section modules, tab navigation, responsive polling, and manual refresh.
@@ -68,6 +69,10 @@ function updatePageTitle(section) {
   if (!title) return;
 
   switch (section) {
+    case 'rewards':
+      title.textContent = 'Rewards operations';
+      if (sub) sub.textContent = 'Catalog, balances, and match credits';
+      break;
     case 'overview':
       title.textContent = 'Admin overview';
       if (sub) sub.textContent = 'Live platform activity, cluster health and security alerts.';
@@ -171,6 +176,9 @@ function setupHeaderControls() {
 
 async function refreshCurrentSection(force = false) {
   switch (activeSection) {
+    case 'rewards':
+      await loadRewardOperations();
+      break;
     case 'overview':
       await loadAdminOverview(force);
       break;

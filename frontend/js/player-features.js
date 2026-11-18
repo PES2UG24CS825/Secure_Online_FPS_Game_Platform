@@ -87,64 +87,169 @@ async function loadSupportTickets() {
   }
 }
 
+let rewardsData;
+let rewardRequestPending = false;
+let rewardPage = 0;
+let rewardLoadVersion = 0;
+const rewardStore = document.getElementById("rewardStore");
+const rewardStatus = document.getElementById("rewardStatus");
+const rewardView = document.getElementById("rewardView");
+const rewardFilter = document.getElementById("rewardFilter");
+const dailyRewardButton = document.getElementById("claimDailyReward");
+const rewardPrevious = document.getElementById("rewardPrevious");
+const rewardNext = document.getElementById("rewardNext");
+
 async function loadRewards() {
-  const store = document.getElementById("rewardStore");
-  if (!store) return;
+  if (!rewardStore) return;
+  const version = ++rewardLoadVersion;
+  rewardStatus.textContent = "Loading rewards…";
   try {
-    const daily = await api("/player/rewards/claim-daily", { method: "POST" });
     const data = await api("/player/rewards");
-    document.getElementById("rewardCoins").textContent = Number(data.coins || 0).toLocaleString();
-    document.getElementById("rewardXp").textContent = `${Number(data.xp || 0).toLocaleString()} XP`;
-    document.getElementById("rewardLevel").textContent = `Level ${data.level || 1} · ${Number(data.xp || 0) % 250}/250 XP to next level`;
-    document.getElementById("rewardStreak").textContent = `${Number(data.daily_streak || 0)} day${Number(data.daily_streak) === 1 ? "" : "s"}`;
-    const dailyMessage = document.getElementById("dailyRewardMessage");
-    if (dailyMessage) dailyMessage.textContent = daily.claimed ? "Daily bonus claimed: +25 coins · +25 XP" : "Daily bonus: 25 coins + 25 XP";
-
-    const owned = new Set(data.owned_items || []);
-    const equippedBadge = document.getElementById("equippedRewardBadge");
-    const equippedItem = (data.store || []).find((item) => item.id === data.equipped_item);
-    if (equippedBadge) {
-      equippedBadge.hidden = !equippedItem;
-      equippedBadge.textContent = equippedItem ? `${equippedItem.icon} ${equippedItem.name}` : "";
+    if (version !== rewardLoadVersion) return;
+    rewardsData = data;
+    const { coins, xp, level, daily_streak: streak } = rewardsData;
+    document.getElementById("rewardCoins").textContent = Number(coins).toLocaleString();
+    document.getElementById("rewardXp").textContent = Number(xp).toLocaleString() + " XP";
+    document.getElementById("rewardLevel").textContent = "Level " + level;
+    document.getElementById("rewardStreak").textContent = streak + (streak === 1 ? " day" : " days");
+    const claimed = rewardsData.last_daily_login === new Date().toISOString().slice(0, 10);
+    dailyRewardButton.disabled = claimed;
+    document.getElementById("dailyRewardMessage").textContent = claimed ? "Today's reward claimed" : "25 coins and 25 XP per UTC day";
+    const badge = document.getElementById("equippedRewardBadge");
+    const equippedBadge = data.store.find(item => item.id === data.equipped_item && item.category !== "avatar" && item.category !== "banner");
+    if (badge) {
+      badge.hidden = !equippedBadge;
+      badge.textContent = equippedBadge?.name || "";
     }
-    const sortedStore = (data.store || []).slice().sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
-    store.innerHTML = sortedStore.map((item) => {
-      const hasItem = owned.has(item.id);
-      const equipped = data.equipped_item === item.id;
-      const isMasterpiece = Boolean(item.masterpiece);
-      const cat = item.category || "perk";
-      const catLabel = isMasterpiece ? "★ MYTHIC MASTERPIECE ★" : (cat === "avatar" ? "OPERATOR AVATAR" : cat === "banner" ? "SCENE BANNER" : "COMBAT PERK");
-      const equipVerb = cat === "avatar" ? "Equip Skin" : cat === "banner" ? "Equip Banner" : "Equip Perk";
-      const label = equipped ? "Equipped ✓" : hasItem ? equipVerb : `Unlock · ${item.price} Coins`;
-      const action = hasItem ? "equip" : "buy";
-      
-      let previewHtml = "";
-      if (cat === "avatar" && item.preview) {
-        previewHtml = `<div class="reward-preview-box avatar-preview-box"><img src="${featureEscape(item.preview)}" alt="${featureEscape(item.name)}" class="reward-preview-img avatar-img"><span class="reward-type-tag">${catLabel}</span></div>`;
-      } else if (cat === "banner" && item.preview) {
-        previewHtml = `<div class="reward-preview-box banner-preview-box" style="background-image: url('${featureEscape(item.preview)}')"><span class="reward-type-tag">${catLabel}</span></div>`;
-      } else {
-        previewHtml = `<div class="reward-preview-box perk-preview-box"><span class="reward-icon-huge">${featureEscape(item.icon)}</span><span class="reward-type-tag">${catLabel}</span></div>`;
-      }
-
-      return `<article class="reward-item ${isMasterpiece ? 'masterpiece-card' : ''} ${equipped ? 'equipped-card' : ''} ${hasItem ? 'unlocked-card' : ''}" data-category="${cat}">
-        ${previewHtml}
-        <div class="reward-item-body">
-          <h3>${featureEscape(item.name)}</h3>
-          <p>${featureEscape(item.description)}</p>
-          <div class="reward-item-footer">
-            <span class="reward-price ${hasItem ? 'price-unlocked' : ''}">${hasItem ? "Unlocked" : `🪙 ${item.price} Coins`}</span>
-            <button class="play-btn ${equipped ? 'equipped-btn' : ''}" type="button" data-reward-action="${action}" data-item-id="${featureEscape(item.id)}" ${equipped ? "disabled" : ""}>${label}</button>
-          </div>
-        </div>
-      </article>`;
-    }).join("") || '<div class="empty">No store items are available.</div>';
-    applyStoreFilter();
-
-    const history = document.getElementById("rewardHistory");
-    if (history) history.innerHTML = (data.transactions || []).map((item) => `<div class="list-row"><div><strong>${featureEscape(item.description)}</strong><small>${featureEscape(item.created_at ? new Date(item.created_at).toLocaleString() : "")}</small></div><span class="badge good">${item.coins > 0 ? `+${item.coins} coins` : item.coins < 0 ? `${item.coins} coins` : `+${item.xp} XP`}</span></div>`).join("") || '<div class="empty">Daily and match rewards will appear here.</div>';
+    renderRewards();
+    renderMatchProcessing(rewardsData.match_processing || []);
+    rewardStatus.textContent = "";
   } catch (error) {
-    store.textContent = error.message || "Rewards could not be loaded.";
+    if (version === rewardLoadVersion) rewardStatus.textContent = error.message || "Rewards could not be loaded.";
+  }
+}
+
+function renderMatchProcessing(rows) {
+  const panel = document.getElementById("matchProcessingStatus");
+  if (!panel) return;
+  const completed = rows.filter(row => row.status === "completed");
+  const average = matches => matches.reduce((sum, row) => sum + row.kills, 0) / matches.length;
+  const scored = completed.filter(row => typeof row.kills === "number");
+  const trend = scored.length >= 4
+    ? `<p>Average kills: ${average(scored.slice(0, 2)).toFixed(1)} in your latest two matches and ${average(scored.slice(2, 4)).toFixed(1)} in the preceding two.</p>`
+    : "";
+  panel.innerHTML = trend + (rows.map(row => {
+    const result = row.status === "completed" ? "Result saved" : row.status === "processing" ? "Processing" : "In progress";
+    const analysis = row.analysis_status === "success" ? "Analysis complete" :
+      row.analysis_status ? "Analysis: " + row.analysis_status : "Analysis status unavailable";
+    const credit = { credited: "Rewards credited", pending: "Reward credit pending", failed: "Reward credit failed" }[row.reward_status] || "Reward status unavailable";
+    return `<div class="list-row"><div><strong>${featureEscape(row.game || "Match")}</strong>
+      <small>${featureEscape(row.ended_at ? new Date(row.ended_at).toLocaleString() : result)}</small></div>
+      <span>${featureEscape([result, analysis, credit].join(" · "))}</span></div>`;
+  }).join("") || '<p class="empty">No recent matches.</p>');
+}
+
+function renderRewards() {
+  if (!rewardsData) return;
+  const owned = new Set(rewardsData.owned_items || []);
+  const view = rewardView.value;
+  const filter = rewardFilter.value;
+  const history = document.getElementById("rewardHistory");
+  const pages = document.getElementById("rewardPages");
+  pages.hidden = true;
+  history.hidden = view !== "history";
+  rewardStore.hidden = view === "history";
+  document.getElementById("rewardFilterLabel").hidden = view === "history";
+  if (view === "history") {
+    history.innerHTML = rewardsData.transactions.map(row =>
+      `<div class="list-row"><div><strong>${featureEscape(row.description)}</strong><small>${featureEscape(row.created_at ? new Date(row.created_at).toLocaleString() : "")}</small></div><span>${Number(row.coins)} coins · ${Number(row.xp)} XP</span></div>`
+    ).join("") || '<p class="empty">No reward transactions yet.</p>';
+    return;
+  }
+  const items = rewardsData.store.filter(item => {
+    const hasItem = owned.has(item.id);
+    if (view === "inventory" && !hasItem) return false;
+    if (filter === "collection") return view === "inventory" || Boolean(item.pair);
+    if (filter === "owned") return hasItem;
+    if (filter === "affordable") return item.available && !hasItem && item.price <= rewardsData.coins;
+    return filter === "all" || item.category === filter;
+  }).sort((a, b) => a.price - b.price || a.name.localeCompare(b.name));
+  const pageSize = 8;
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  rewardPage = Math.min(rewardPage, totalPages - 1);
+  pages.hidden = totalPages === 1;
+  document.getElementById("rewardPageCount").textContent = `Page ${rewardPage + 1} of ${totalPages}`;
+  rewardPrevious.disabled = rewardPage === 0;
+  rewardNext.disabled = rewardPage >= totalPages - 1;
+  rewardStore.innerHTML = items.slice(rewardPage * pageSize, (rewardPage + 1) * pageSize).map(item => {
+    const hasItem = owned.has(item.id);
+    const equipped = item.category === "avatar" || item.category === "banner"
+      ? rewardsData.equipped_slots?.[item.category] === item.id : rewardsData.equipped_item === item.id;
+    const canPreview = item.preview && item.artwork_ready;
+    const affordable = item.price <= rewardsData.coins;
+    const action = equipped ? "Equipped" : hasItem ? "Equip" : !item.available ?
+      (item.artwork_ready ? "Unavailable" : "Artwork pending") : affordable ? "Buy" : "Insufficient coins";
+    return `<article class="reward-item${equipped ? " equipped-card" : ""}" data-reward-category="${featureEscape(item.category || "badge")}">
+      ${canPreview ? `<img class="reward-catalog-art" src="${featureEscape(item.preview)}" alt="" loading="lazy">` : ""}
+      <div class="reward-item-body"><h3>${featureEscape(item.name)}</h3>
+        <small>${featureEscape(item.category === "banner" ? "Background" : item.category || "Badge")} · ${Number(item.price)} coins${hasItem ? " · Owned" : ""}</small>
+        <div class="reward-item-footer">
+          ${canPreview ? `<button type="button" data-reward-action="preview" data-item-id="${featureEscape(item.id)}">Preview</button>` : ""}
+          <button type="button" class="play-btn" data-reward-action="${hasItem ? "equip" : "buy"}" data-item-id="${featureEscape(item.id)}" ${equipped || (!hasItem && (!item.available || !affordable)) || !item.artwork_ready ? "disabled" : ""}>${action}</button>
+        </div>
+      </div></article>`;
+  }).join("") || '<p class="empty">No items match this view.</p>';
+}
+
+for (const control of [rewardView, rewardFilter]) {
+  control?.addEventListener("change", () => {
+    rewardPage = 0;
+    renderRewards();
+  });
+}
+rewardPrevious?.addEventListener("click", () => {
+  rewardPage = Math.max(0, rewardPage - 1);
+  renderRewards();
+});
+rewardNext?.addEventListener("click", () => {
+  rewardPage += 1;
+  renderRewards();
+});
+document.getElementById("reloadRewards")?.addEventListener("click", loadRewards);
+dailyRewardButton?.addEventListener("click", async () => {
+  dailyRewardButton.disabled = true;
+  try {
+    const result = await api("/player/rewards/claim-daily", { method: "POST" });
+    await loadRewards();
+    rewardStatus.textContent = result.claimed ? "Daily reward credited." : result.message;
+  } catch (error) {
+    rewardStatus.textContent = error.message;
+    dailyRewardButton.disabled = false;
+  }
+});
+
+async function confirmRewardPurchase(item) {
+  const dialog = document.getElementById("rewardPurchaseDialog");
+  document.getElementById("rewardPurchaseDetails").textContent =
+    `Buy ${item.name} for ${item.price} coins? Balance after purchase: ${rewardsData.coins - item.price} coins.`;
+  const listeners = new AbortController();
+  try {
+    return await new Promise(resolve => {
+      dialog.addEventListener("submit", event => {
+        event.preventDefault();
+        const confirmed = event.submitter?.value === "buy";
+        dialog.close();
+        resolve(confirmed);
+      }, { signal: listeners.signal });
+      dialog.addEventListener("cancel", event => {
+        event.preventDefault();
+        dialog.close();
+        resolve(false);
+      }, { signal: listeners.signal });
+      dialog.showModal();
+    });
+  } finally {
+    listeners.abort();
   }
 }
 
@@ -217,106 +322,56 @@ document.getElementById("supportTicketForm")?.addEventListener("submit", async (
 document.getElementById("refreshSupportTickets")?.addEventListener("click", loadSupportTickets);
 document.getElementById("refreshLeaderboard")?.addEventListener("click", loadLeaderboard);
 const detectionModal = document.getElementById("detectionInfoModal");
-const closeDetectionModal = () => { if (detectionModal) detectionModal.hidden = true; };
+const closeDetectionModal = () => { if (detectionModal?.open) detectionModal.close(); };
 document.querySelectorAll("[data-detection-info]").forEach((button) => button.addEventListener("click", () => {
-  if (detectionModal) detectionModal.hidden = false;
+  if (detectionModal && !detectionModal.open) detectionModal.showModal();
 }));
 document.getElementById("detectionInfoClose")?.addEventListener("click", closeDetectionModal);
 document.getElementById("detectionInfoDone")?.addEventListener("click", closeDetectionModal);
 detectionModal?.addEventListener("click", (event) => { if (event.target === detectionModal) closeDetectionModal(); });
-document.getElementById("rewardStore")?.addEventListener("click", async (event) => {
+rewardStore?.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-reward-action]");
-  if (!button) return;
+  if (!button || rewardRequestPending) return;
+  const item = rewardsData?.store.find(row => row.id === button.dataset.itemId);
+  if (!item) return;
+  const action = button.dataset.rewardAction;
+  if (action === "preview") {
+    const pair = rewardsData.store.filter(row => row.artwork_ready && (row.id === item.id || (item.pair && row.pair === item.pair)));
+    const avatar = pair.find(row => row.category === "avatar");
+    const background = pair.find(row => row.category === "banner");
+    const panel = document.getElementById("rewardPreview");
+    const portrait = document.getElementById("rewardPreviewAvatar");
+    portrait.hidden = !avatar;
+    if (avatar) portrait.src = avatar.preview;
+    panel.style.backgroundImage = background ? 'linear-gradient(#10182755, #101827bb), url(' + JSON.stringify(background.preview) + ')' : "";
+    document.getElementById("rewardPreviewName").textContent = item.name;
+    panel.hidden = false;
+    return;
+  }
+  rewardRequestPending = true;
   button.disabled = true;
   try {
-    const res = await api(`/player/rewards/${button.dataset.rewardAction === "buy" ? "purchase" : "equip"}`, {
+    if (action === "buy" && !(await confirmRewardPurchase(item))) return;
+    const result = await api("/player/rewards/" + (action === "buy" ? "purchase" : "equip"), {
       method: "POST",
-      body: JSON.stringify({ item_id: button.dataset.itemId })
+      body: JSON.stringify({ item_id: item.id, ...(action === "buy" && { price: item.price }) })
     });
-    if (res.avatar && typeof currentAppearance !== 'undefined') {
-      currentAppearance.avatar = res.avatar;
-      currentAppearance.avatar_image = null;
-      if (typeof renderPlayerAppearance === 'function') renderPlayerAppearance();
+    if (result.avatar && typeof currentAppearance !== "undefined") {
+      currentAppearance.avatar = result.avatar;
+      currentAppearance.avatar_image = result.artwork || null;
     }
-    if (res.banner && typeof currentAppearance !== 'undefined') {
-      currentAppearance.banner = res.banner;
-      currentAppearance.banner_image = null;
-      if (typeof renderPlayerAppearance === 'function') renderPlayerAppearance();
+    if (result.banner && typeof currentAppearance !== "undefined") {
+      currentAppearance.banner = result.banner;
+      currentAppearance.banner_image = result.artwork || null;
     }
+    if ((result.avatar || result.banner) && typeof renderPlayerAppearance === "function") renderPlayerAppearance();
     await loadRewards();
-    if (window.showAppAlert) {
-      window.showAppAlert(res.message || "Equipment updated!", { title: "Tactical Armory", tone: "success" });
-    }
+    rewardStatus.textContent = result.message;
   } catch (error) {
+    rewardStatus.textContent = error.message || "The reward action failed.";
+  } finally {
     button.disabled = false;
-    if (window.showAppAlert) {
-      window.showAppAlert(error.message, { title: "Tactical Armory", tone: "warning" });
-    }
-  }
-});
-
-let currentStoreFilter = "all";
-function applyStoreFilter() {
-  document.querySelectorAll("#rewardStore .reward-item").forEach((card) => {
-    const cardCat = card.dataset.category;
-    const shouldShow = currentStoreFilter === "all" || cardCat === currentStoreFilter;
-    card.classList.toggle("filter-hidden", !shouldShow);
-    card.style.setProperty("display", shouldShow ? "flex" : "none", "important");
-  });
-}
-
-document.getElementById("rewardFilterTabs")?.addEventListener("click", (event) => {
-  const pill = event.target.closest("button[data-filter]");
-  if (!pill) return;
-  document.querySelectorAll("#rewardFilterTabs .reward-filter-pill").forEach((p) => p.classList.remove("active"));
-  pill.classList.add("active");
-  currentStoreFilter = pill.dataset.filter;
-  applyStoreFilter();
-});
-
-// Combat Milestones & Daily Mission Bounties Handler (Requirement 7)
-document.addEventListener("click", async (e) => {
-  const bountyBtn = e.target.closest(".claim-bounty-btn");
-  if (!bountyBtn) return;
-  const bountyType = bountyBtn.dataset.bounty;
-  bountyBtn.disabled = true;
-  bountyBtn.textContent = "Claiming…";
-  
-  const bountyRewards = {
-    sharpshooter: { coins: 50, xp: 100, name: "Sharpshooter Protocol" },
-    guardian: { coins: 40, xp: 80, name: "Guardian Verification" }
-  };
-  const reward = bountyRewards[bountyType] || { coins: 30, xp: 50, name: "Tactical Bounty" };
-
-  try {
-    const claimRes = await api("/player/rewards/claim-daily", { method: "POST" });
-    const coinEl = document.getElementById("rewardCoins");
-    const xpEl = document.getElementById("rewardXp");
-    if (coinEl) {
-      const cur = parseInt(coinEl.textContent.replace(/,/g, "") || "0", 10);
-      coinEl.textContent = (cur + reward.coins).toLocaleString();
-    }
-    if (xpEl) {
-      const curXp = parseInt(xpEl.textContent.replace(/[^0-9]/g, "") || "0", 10);
-      xpEl.textContent = `${(curXp + reward.xp).toLocaleString()} XP`;
-    }
-    bountyBtn.textContent = "Claimed ✓";
-    bountyBtn.classList.add("equipped-btn");
-    const msgEl = document.getElementById("bountyClaimMsg");
-    if (msgEl) {
-      msgEl.style.display = "block";
-      msgEl.style.background = "#F0FDF4";
-      msgEl.style.color = "#166534";
-      msgEl.style.border = "1px solid #BBF7D0";
-      msgEl.textContent = `🎯 ${reward.name} claimed! +${reward.coins} Coins and +${reward.xp} XP added to your balance.`;
-    }
-    if (window.showAppToast) {
-      window.showAppToast(`🎯 ${reward.name} claimed! +${reward.coins} Coins & +${reward.xp} XP`, "success");
-    }
-  } catch (err) {
-    bountyBtn.disabled = false;
-    bountyBtn.textContent = "Claim Bounty ✓";
-    if (window.showAppToast) window.showAppToast(err.message || "Could not claim bounty.", "error");
+    rewardRequestPending = false;
   }
 });
 

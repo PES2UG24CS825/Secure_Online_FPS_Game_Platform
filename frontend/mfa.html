@@ -24,16 +24,17 @@
         </label>
         <button class="primary-btn" type="submit">Verify & enter dashboard <span>→</span></button>
       </form>
+      <details>
+        <summary>Use a recovery code</summary>
+        <form id="recoveryForm" class="form">
+          <label>Recovery code
+            <input name="code" autocomplete="off" spellcheck="false" maxlength="35" required>
+          </label>
+          <button class="primary-btn" type="submit">Verify recovery code</button>
+        </form>
+      </details>
       <div id="message" class="message" aria-live="polite"></div>
       <a class="text-link" href="login.html">Back to login</a>
-      <div style="margin-top:16px; border-top:1px solid #E2E8F0; padding-top:12px; font-size:12px;">
-        <button type="button" id="toggleSyncBtn" style="background:none; border:none; cursor:pointer; color:#7C3AED; font-weight:600; font-size:12px;">📱 Re-sync Authenticator App / Scan QR</button>
-        <div id="syncBox" style="display:none; margin-top:10px; background:#F5F3FF; border:1px solid #DDD6FE; border-radius:10px; padding:12px; text-align:center;">
-          <p style="margin:0 0 8px; color:#4C1D95; font-size:11px;">Scan this QR code in Google Authenticator or enter the manual key:</p>
-          <img id="mfaQrImg" src="" alt="MFA QR Code" style="width:130px; height:130px; margin:0 auto 8px; display:block; border-radius:6px; background:#fff; padding:6px; border:1px solid #C4B5FD;">
-          <p style="margin:0; font-size:11px; color:#6B7280;">Manual Secret Key: <strong id="mfaSecretText" style="color:#1E1B4B; letter-spacing:1px; word-break:break-all;">JBSWY3DPEHPK3PXP</strong></p>
-        </div>
-      </div>
     </section>
   </main>
   <script src="js/config.js"></script>

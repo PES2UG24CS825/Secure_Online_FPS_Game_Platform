@@ -2726,3 +2726,71 @@ html, body {
   opacity: 0 !important;
   pointer-events: none !important;
 }
+
+/* Lavender menu surfaces keep gameplay HUD contrast independent of the console. */
+:is(#loading-overlay,#pause-overlay,#scoreboard-overlay,.game-modal-overlay,.hud-modal-overlay) {
+  --primary: #6429c8;
+  --primary-dark: #5120a4;
+  --text-main: #211b3d;
+  --text-muted: #514769;
+  --border: #ded5f1;
+  color: var(--text-main);
+}
+#loading-overlay { background: radial-gradient(ellipse at top,#faf7ff,#eae1fc); padding: .75rem; }
+#loading-overlay.hidden { visibility: hidden; pointer-events: none; }
+:is(#pause-overlay,#scoreboard-overlay,.game-modal-overlay,.hud-modal-overlay) {
+  background: rgb(36 23 62 / 24%) !important; backdrop-filter: blur(3px) !important;
+}
+:is(.loader-container,.pause-card,.scoreboard-container,.game-modal-card,.hud-modal-card) {
+  background: #fff !important; border: 1px solid #ded5f1 !important; color: #211b3d !important;
+  box-shadow: 0 16px 42px rgb(43 27 86 / 16%) !important; border-radius: 16px;
+  max-height: calc(100dvh - 1.5rem); overflow: auto; overscroll-behavior: contain;
+}
+:is(.loader-title,.pause-title,.mc-title,.hud-modal-header h3,.diff-title,.view-header h3,.view-header h2) {
+  color: #211b3d !important; text-shadow: none !important;
+}
+#main-menu-hub :is(.menu-tabs,.mode-info-card,.difficulty-card,.mp-card,.mp-profile-bar,.settings-form,.lobby-header-bar,.lobby-player-slot),
+.game-modal-card .mc-stat-box {
+  background: #f8f5ff !important; border-color: #ded5f1 !important; color: #211b3d !important;
+}
+#main-menu-hub :is(.menu-tab,.feature-card,.info-row strong,.mp-card h4,.setting-info strong,.lobby-code-display strong),
+.game-modal-card :is(.stat-val,.stat-lbl), .scoreboard-container :is(th,td,h2) {
+  color: #211b3d !important; text-shadow: none !important;
+}
+#main-menu-hub :is(p,label,.diff-specs,.setting-info span) { color: #514769; }
+#main-menu-hub :is(input,select) { color: #211b3d; background: white; accent-color: #6429c8; border-color: #b8a6d7; }
+#main-menu-hub :is(.menu-tab.active,.start-btn), :is(.pause-card,.game-modal-card) .hud-btn.primary {
+  background: #6429c8 !important; color: white !important; border-color: #6429c8 !important;
+}
+#main-menu-hub .menu-tab:where(:hover,:focus-visible):not(.active) { background: #eee5ff; }
+#main-menu-hub .diff-tag.easy { color: #145738; }
+#main-menu-hub .diff-tag.normal { color: #5120a4; }
+#main-menu-hub .diff-tag.hard { color: #971b30; }
+:is(.pause-card,.game-modal-card,.hud-modal-card) .hud-btn:not(.primary):not(.danger),
+#main-menu-hub .hud-btn:not(.primary) { color: #5120a4; background: #f4efff; border-color: #c6b3e8; }
+:is(#loading-overlay,.pause-card,.game-modal-card,.hud-modal-card) :is(button,a,input,select):focus-visible {
+  outline: 3px solid #7135db; outline-offset: 3px;
+}
+.game-start-failure { color: #971b30; background: #fff0f2; padding: .9rem; border-radius: .65rem; }
+.game-start-failure a, .game-start-failure button { color: #5120a4; margin: .6rem; }
+#loading-overlay .progress-track { background: #e4d9f7; }
+.scoreboard-table { min-width: 32rem; }
+@media (max-width: 620px) {
+  .loader-container, .pause-card, .game-modal-card, .hud-modal-card { padding: 1rem; }
+  #main-menu-hub :is(.menu-tabs,.difficulty-grid,.mp-action-grid) { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  #main-menu-hub .setting-row { flex-wrap: wrap; gap: .5rem; }
+  .game-modal-card .mc-stats-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .game-modal-card .mc-actions-row { flex-wrap: wrap; }
+  #loading-overlay .loader-title { font-size: clamp(1.5rem, 7vw, 2.25rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .game-modal-overlay, .hud-modal-overlay { animation: none !important; }
+}
+
+#loading-overlay :is(.brand-badge,.diff-badge-rec) {
+  background: #efe5ff; color: #5120a4; border-color: #ded5f1;
+}
+#main-menu-hub .diff-specs li::before { color: #6429c8; }
+#main-menu-hub :is(.difficulty-card.selected,.start-btn,.menu-tab.active) { box-shadow: none; }
+
+#btn-match-menu { background: #f4efff !important; border-color: #c6b3e8 !important; color: #5120a4 !important; }
