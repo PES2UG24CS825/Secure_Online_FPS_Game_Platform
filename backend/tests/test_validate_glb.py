@@ -133,15 +133,16 @@ class TestGLBValidator(unittest.TestCase):
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
-    def test_actual_repo_models_detected_as_corrupted(self):
+    def test_shipped_operator_models_are_valid_and_rigged(self):
         for path in [
             "frontend/public/games/three-fps/models/Soldier.glb",
             "frontend/public/games/three-fps/models/FemaleOperator.glb"
         ]:
-            if os.path.exists(path):
+            with self.subTest(path=path):
                 res = validate_glb(path)
-                self.assertFalse(res["valid"])
-                self.assertIsNotNone(res["error"])
+                self.assertTrue(res["valid"], res["error"])
+                self.assertTrue(res["bones"])
+                self.assertTrue(res["animations"])
 
 
 if __name__ == "__main__":

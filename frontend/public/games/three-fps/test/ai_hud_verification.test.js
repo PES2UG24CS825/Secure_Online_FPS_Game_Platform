@@ -152,3 +152,38 @@ describe('Task 3 - HUD, UI & Menus', () => {
       'Free roam mode must disable hostile bots');
   });
 });
+
+it('keeps the authoritative spawn position and preserves the offline default', () => {
+  const vm = require('node:vm');
+  const managerSource = fs.readFileSync(path.join(BASE_DIR, 'js/GameModeManager.js'), 'utf8');
+  class Vector3 {
+    constructor(x, y, z) {
+      Object.assign(this, { x, y, z });
+    }
+  }
+  const Manager = vm.runInNewContext(managerSource + '\nGameModeManager;', {
+    THREE: { Vector3 },
+    window: {}
+  });
+  const manager = Object.assign(Object.create(Manager.prototype), {
+    matchActive: true,
+    updateHUD() {},
+    updateSpawnProtectionHUD() {}
+  });
+  const respawns = [];
+  const controller = {
+    respawn(position) { respawns.push(position); },
+    resetKeys() {},
+    requestLock() {}
+  };
+
+  const serverSpawn = new Vector3(14, 0, -12);
+  manager.respawnPlayer(controller, serverSpawn);
+  manager.respawnPlayer(controller);
+  manager.isMatchCompleted = true;
+  manager.respawnPlayer(controller, serverSpawn);
+
+  assert.strictEqual(respawns[0], serverSpawn);
+  assert.deepStrictEqual(respawns[1], new Vector3(0, 1.8, 28));
+  assert.strictEqual(respawns.length, 2);
+});

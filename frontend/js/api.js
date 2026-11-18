@@ -3,101 +3,97 @@ window.API_BASE = API_BASE;
 window.text = window.text || ((value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character])));
 window.dateText = window.dateText || ((value) => value ? new Date(value).toLocaleString() : "Unknown");
 
-window.showAppAlert = function (message, options = {}) {
+let appDialogSequence = 0;
+
+function showAppDialog(message, options = {}) {
+  const trigger = document.activeElement;
   const dialog = document.createElement("dialog");
+  const id = `app-dialog-${++appDialogSequence}`;
   dialog.className = "app-alert-dialog";
   dialog.dataset.tone = options.tone || "info";
-
-  const content = document.createElement("div");
-  content.className = "app-alert-content";
-  const heading = document.createElement("div");
-  heading.className = "app-alert-heading";
-  const icon = document.createElement("span");
-  icon.className = "app-alert-icon";
-  icon.setAttribute("aria-hidden", "true");
-  icon.textContent = options.tone === "error" ? "!" : options.tone === "warning" ? "!" : "i";
+  dialog.setAttribute("aria-labelledby", id);
+  dialog.setAttribute("aria-describedby", `${id}-message`);
+  const form = document.createElement("form");
+  form.className = "app-alert-content";
   const title = document.createElement("h2");
   title.className = "app-alert-title";
-  title.textContent = options.title || (options.tone === "error" ? "Action needed" : "Notice");
-  heading.append(icon, title);
-
+  title.id = id;
+  title.textContent = options.title || "Notice";
   const body = document.createElement("p");
   body.className = "app-alert-message";
+  body.id = `${id}-message`;
   body.textContent = String(message ?? "");
+  form.append(title, body);
+
+  let field;
+  if (options.input || options.requireName) {
+    const label = document.createElement("label");
+    label.className = "app-dialog-field";
+    label.textContent = options.requireName ? `Type ${options.requireName} to confirm` : options.input.label;
+    field = document.createElement("input");
+    field.type = options.input?.type || "text";
+    field.autocomplete = field.type === "password" ? "current-password" : "off";
+    field.required = true;
+    label.append(field);
+    form.append(label);
+  }
+
   const actions = document.createElement("div");
   actions.className = "app-alert-actions";
-  const button = document.createElement("button");
-  button.type = "button";
-  button.textContent = "Got it";
-  button.addEventListener("click", () => dialog.close());
-  actions.append(button);
-  content.append(heading, body, actions);
-  dialog.append(content);
-  dialog.addEventListener("close", () => dialog.remove(), { once: true });
-  dialog.addEventListener("click", (event) => {
-    if (event.target === dialog) dialog.close();
-  });
-  document.body.append(dialog);
-  dialog.showModal();
-  button.focus();
-};
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "ghost-btn";
+  cancel.textContent = "Cancel";
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "primary-btn";
+  submit.textContent = options.confirmText || (options.cancelable ? "Confirm" : "Got it");
+  if (options.cancelable) actions.append(cancel);
+  actions.append(submit);
+  form.append(actions);
+  dialog.append(form);
 
-window.showAppConfirm = function (message, options = {}) {
-  return new Promise((resolve) => {
-    const dialog = document.createElement("dialog");
-    dialog.className = "app-alert-dialog";
-    dialog.dataset.tone = options.tone || "warning";
-    const content = document.createElement("div");
-    content.className = "app-alert-content";
-    const title = document.createElement("h2");
-    title.className = "app-alert-title";
-    title.textContent = options.title || "Confirm action";
-    const body = document.createElement("p");
-    body.className = "app-alert-message";
-    body.textContent = String(message ?? "");
-    const verification = options.requireName ? document.createElement("input") : null;
-    if (verification) {
-      verification.type = "text";
-      verification.className = "confirm-name-input";
-      verification.placeholder = `Type ${options.requireName} to confirm`;
-      verification.setAttribute("aria-label", `Type ${options.requireName} to confirm deletion`);
+  return new Promise(resolve => {
+    function finish(result) {
+      if (!dialog.open) return;
+      if (field) field.value = "";
+      dialog.close();
+      dialog.remove();
+      if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+      resolve(result);
     }
-    const actions = document.createElement("div");
-    actions.className = "app-alert-actions";
-    const cancel = document.createElement("button");
-    cancel.type = "button";
-    cancel.className = "ghost-btn";
-    cancel.textContent = "Cancel";
-    const confirm = document.createElement("button");
-    confirm.type = "button";
-    confirm.className = "primary-btn";
-    confirm.textContent = options.confirmText || "Confirm";
-    if (verification) {
-      confirm.disabled = true;
-      verification.addEventListener("input", () => {
-        confirm.disabled = verification.value.trim() !== options.requireName;
+    if (options.requireName) {
+      submit.disabled = true;
+      field.addEventListener("input", () => {
+        submit.disabled = field.value.trim() !== options.requireName;
       });
     }
-    const finish = (value) => {
-      dialog.close();
-      resolve(value);
-    };
-    cancel.addEventListener("click", () => finish(false));
-    confirm.addEventListener("click", () => finish(true));
-    actions.append(cancel, confirm);
-    content.append(title, body);
-    if (verification) content.append(verification);
-    content.append(actions);
-    dialog.append(content);
-    dialog.addEventListener("close", () => {
-      dialog.remove();
-      resolve(false);
-    }, { once: true });
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      if (!submit.disabled) finish(options.input ? field.value : true);
+    });
+    cancel.addEventListener("click", () => finish(null));
+    dialog.addEventListener("cancel", event => {
+      event.preventDefault();
+      finish(null);
+    });
+    dialog.addEventListener("click", event => {
+      if (event.target === dialog) finish(null);
+    });
     document.body.append(dialog);
     dialog.showModal();
-    confirm.focus();
+    (field || (options.cancelable ? cancel : submit)).focus();
   });
-};
+}
+
+window.showAppAlert = (message, options = {}) => showAppDialog(message, options);
+window.showAppConfirm = (message, options = {}) =>
+  showAppDialog(message, { title: "Confirm action", tone: "warning", ...options, cancelable: true });
+window.showAppPrompt = (message, options = {}) =>
+  showAppDialog(message, {
+    title: "Provide details", ...options, cancelable: true,
+    input: { label: options.label || "Response", type: options.type || "text" },
+  });
 
 let appToastRegion = null;
 

@@ -173,7 +173,7 @@ function openAppealReviewModal(appealId, playerName) {
       await loadBanAppeals();
     } catch (err) {
       console.error('[AdminSecurity] Appeal action failed:', err);
-      alert(`Decision failed: ${err.message}`);
+      window.showAppAlert(`Decision failed: ${err.message}`, { tone: "error" });
     }
   };
 
@@ -273,7 +273,8 @@ export async function loadAntiCheatDecisions() {
 }
 
 async function submitAnticheatReview(sessionId, verdict) {
-  const note = prompt(`Enter review note for recording this verdict as ${verdict}:`) || 'Reviewed by admin';
+  const note = await window.showAppPrompt(`Record this verdict as ${verdict}.`, { label: 'Review note' });
+  if (note === null || !note.trim()) return;
   try {
     const resp = await fetch(`/api/admin/anticheat/review/${sessionId}`, {
       method: 'POST',
@@ -284,7 +285,7 @@ async function submitAnticheatReview(sessionId, verdict) {
     if (!resp.ok) throw new Error(data.message || 'Review failed');
     await loadAntiCheatDecisions();
   } catch (err) {
-    alert(`Review failed: ${err.message}`);
+    window.showAppAlert(`Review failed: ${err.message}`, { tone: "error" });
   }
 }
 

@@ -32,6 +32,9 @@ const WeaponConfig = require('./shared/weapon_config');
 const ArenaCollision = require('./shared/arena_collision');
 
 const PORT = parseInt(process.env.PORT || '4001', 10);
+const configuredMatchDuration = Number(process.env.SECUREFPS_MATCH_DURATION_SECONDS);
+const MATCH_DURATION_SECONDS = Number.isInteger(configuredMatchDuration) &&
+  configuredMatchDuration >= 2 && configuredMatchDuration <= 3600 ? configuredMatchDuration : 600;
 const HOST = process.env.HOST || '0.0.0.0';
 const GAME_SERVER_SECRET = process.env.GAME_SERVER_SECRET || 'securefps-multiplayer-secret-key-2026';
 const ALLOW_ANONYMOUS = process.env.ALLOW_ANONYMOUS === 'true' || process.env.NODE_ENV !== 'production';
@@ -251,6 +254,25 @@ function sanitizeRoomPlayers(room) {
 // AUTHENTICATION MIDDLEWARE
 // =========================================================================
 
+async function checkMatchmakingAdmission(socket, errorEvent) {
+  // The low-level socket harness imports the server and exercises room state without Flask.
+  if (require.main !== module) return true;
+  try {
+    const response = await fetch(new URL('/api/internal/matchmaking-policy', FLASK_INTERNAL_URL), {
+      headers: { Authorization: 'Bearer ' + GAME_SERVER_SECRET },
+      signal: AbortSignal.timeout(1500)
+    });
+    if (!response.ok) throw new Error('Policy unavailable');
+    const policy = await response.json();
+    if (policy.allow_new_admissions === true) return socket.connected;
+    if (policy.allow_new_admissions !== false) throw new Error('Invalid policy');
+    socket.emit(errorEvent, { message: 'New room admissions are paused during platform lockdown.' });
+  } catch {
+    socket.emit(errorEvent, { message: 'Matchmaking policy is unavailable. Try again shortly.' });
+  }
+  return false;
+}
+
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
   if (token) {
@@ -314,6 +336,8 @@ app.get('/status', (req, res) => {
     status: 'online',
     port: PORT,
     rooms: rooms.size,
+    clients: io.of('/').sockets.size,
+    uptime: Math.floor(process.uptime()),
     timestamp: Date.now()
   });
 });
@@ -480,6 +504,7 @@ function serverTick() {
     io.to(roomCode).volatile.emit('world:snapshot', {
       serverTime: Math.round(now),
       wallTime: currentWallTime,
+      remainingMs: Math.max(0, room.matchDuration * 1000 - (currentWallTime - room.matchStartTime)),
       players: snapshotPlayers
     });
   });
@@ -506,7 +531,8 @@ function endMatch(room, reason = 'match_completed', winner = null) {
       kills: p.kills,
       deaths: p.deaths,
       assists: p.assists || 0,
-      score: (p.kills * 100) + ((p.assists || 0) * 50),
+      headshots: p.headshots || 0,
+      score: (p.kills * 100) + ((p.assists || 0) * 50) + ((p.headshots || 0) * 50),
       shotsFired: p.totalShots || 0,
       shotsHit: p.totalHits || 0,
       accuracy: (p.totalShots > 0) ? Math.round((p.totalHits / p.totalShots) * 100) : 0,
@@ -740,9 +766,10 @@ io.on('connection', (socket) => {
   }
 
   // --- LOBBY: CREATE ---
-  socket.on('lobby:create', (rawData) => {
+  socket.on('lobby:create', async (rawData) => {
     try {
       if (!rateLimiter.check('general')) return;
+      if (!await checkMatchmakingAdmission(socket, 'lobby:error')) return;
       const parseResult = LobbyCreateSchema.safeParse(rawData || {});
       if (!parseResult.success) {
         socket.emit('lobby:error', { message: 'Invalid room creation parameters.' });
@@ -775,7 +802,7 @@ io.on('connection', (socket) => {
         hostId: socket.id,
         state: 'lobby',
         maxPlayers: 8,
-        matchDuration: 600,
+        matchDuration: MATCH_DURATION_SECONDS,
         scoreLimit: 25,
         matchStartTime: 0,
         players: new Map(),
@@ -804,6 +831,7 @@ io.on('connection', (socket) => {
         assists: 0,
         totalShots: 0,
         totalHits: 0,
+        headshots: 0,
         rubberbandCount: 0,
         isFirstPacket: true,
         lastMoveTime: performance.now(),
@@ -835,9 +863,10 @@ io.on('connection', (socket) => {
   });
 
   // --- LOBBY: JOIN ---
-  socket.on('lobby:join', (rawData) => {
+  socket.on('lobby:join', async (rawData) => {
     try {
       if (!rateLimiter.check('general')) return;
+      if (!await checkMatchmakingAdmission(socket, 'lobby:error')) return;
       const parseResult = LobbyJoinSchema.safeParse(rawData || {});
       if (!parseResult.success) {
         socket.emit('lobby:error', { message: 'Invalid room join parameters.' });
@@ -885,6 +914,7 @@ io.on('connection', (socket) => {
         assists: 0,
         totalShots: 0,
         totalHits: 0,
+        headshots: 0,
         rubberbandCount: 0,
         isFirstPacket: true,
         lastMoveTime: performance.now(),
@@ -917,8 +947,9 @@ io.on('connection', (socket) => {
   });
 
   // --- RECONNECT: SESSION RESUME ---
-  socket.on('session:resume', (rawData) => {
+  socket.on('session:resume', async (rawData) => {
     try {
+      if (!await checkMatchmakingAdmission(socket, 'session:resume_failed')) return;
       const parseResult = SessionResumeSchema.safeParse(rawData || {});
       if (!parseResult.success) {
         socket.emit('session:resume_failed', { message: 'Invalid resume token.' });
@@ -1034,6 +1065,11 @@ io.on('connection', (socket) => {
         p.kills = 0;
         p.deaths = 0;
         p.assists = 0;
+        p.totalShots = 0;
+        p.totalHits = 0;
+        p.headshots = 0;
+        p.damageDealtMap = {};
+        p.lastShotTime = 0;
         p.isFirstPacket = true;
         p.inputQueue = [];
         p.history = [];
@@ -1042,6 +1078,7 @@ io.on('connection', (socket) => {
 
       io.to(currentRoom.code).emit('game:start', {
         roomCode: currentRoom.code,
+        startedAt: currentRoom.matchStartTime,
         matchDuration: currentRoom.matchDuration,
         scoreLimit: currentRoom.scoreLimit,
         players: sanitizeRoomPlayers(currentRoom)
@@ -1239,6 +1276,10 @@ io.on('connection', (socket) => {
         victim.health = Math.max(0, victim.health - dealtDamage);
         victim.damageDealtMap = victim.damageDealtMap || {};
         victim.damageDealtMap[socket.id] = (victim.damageDealtMap[socket.id] || 0) + dealtDamage;
+
+        if (closestHit.isHeadshot) {
+          playerState.headshots = (playerState.headshots || 0) + 1;
+        }
 
         // Confirm hitmarker to shooter
         socket.emit('player:hit_confirmed', {

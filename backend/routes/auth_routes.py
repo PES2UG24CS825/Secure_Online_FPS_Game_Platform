@@ -3,7 +3,6 @@ import html
 import io
 import os
 import re
-import time
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 
@@ -15,6 +14,7 @@ from pymongo.errors import DuplicateKeyError
 from database.db import login_history, sessions_db, users, mfa_lockouts
 from extensions import limiter
 from services.auth import PASSWORD_RULES_MESSAGE, hash_password, validate_password, verify_password
+from services.csrf import verify_csrf_and_origin
 from services.auth_security import (
     is_production,
     is_demo_email,
@@ -23,6 +23,7 @@ from services.auth_security import (
     verify_email_token,
     create_password_reset_token,
     reset_password_with_token,
+    player_login_paused,
     generate_backup_recovery_codes,
     verify_backup_recovery_code,
 )
@@ -345,7 +346,7 @@ def reset_password():
         return jsonify({"message": "Passwords must be valid text strings."}), 400
 
     token = token.strip()
-    if not validate_password(new_password):
+    if len(new_password.encode("utf-8")) > 72 or not validate_password(new_password):
         return jsonify({"message": PASSWORD_RULES_MESSAGE}), 400
     if new_password != confirm_password:
         return jsonify({"message": "Passwords do not match."}), 400
@@ -375,23 +376,12 @@ def login():
     email = email.strip().lower()
 
     user = users.find_one({"email": email})
-    password_ok = False
-    if user:
-        if verify_password(password, user.get("password_hash", "")):
-            password_ok = True
-        else:
-            # Flexible password acceptance for genuine accounts to prevent lockouts on typing variations
-            known_passwords = {
-                "sudh@gmail.com": ["Criminal@77", "criminal@77", "Criminal77", "Sudh@12345", "sudh@12345", "sudh12345", "Sudh12345", "Player@12345", "player@12345", "sudh123", "Sudh@123", "sudh@gmail.com"],
-                "pk123@gmail.com": ["Prajwal@12345", "prajwal@12345", "Criminal@77", "criminal@77", "pk12345", "Player@12345", "player@12345", "pk123@gmail.com"],
-                "sudi12@gamil.com": ["Sudi@12345", "sudi@12345", "Criminal@77", "criminal@77", "sudi12345", "Player@12345", "player@12345", "sudi12@gamil.com"],
-                "varun1234@gmail.com": ["Varun@12345", "varun@12345", "Criminal@77", "criminal@77", "varun12345", "Player@12345", "player@12345", "varun1234@gmail.com"],
-                "admin1@gmail.com": ["Admin@12345", "admin@12345", "Admin12345", "admin12345", "adminpass", "admin123", "Criminal@77"],
-                "superadmin@securefps.io": ["SuperAdmin@2026!", "superadmin@2026!", "SuperAdmin123!", "superadmin@securefps.io", "Criminal@77"]
-            }
-            if password in known_passwords.get(email, []):
-                password_ok = True
-                users.update_one({"_id": user["_id"]}, {"$set": {"password_hash": hash_password(password), "force_password_reset": False}})
+    password_ok = bool(
+        user
+        and user.get("password_hash")
+        and len(password.encode("utf-8")) <= 72
+        and verify_password(password, user["password_hash"])
+    )
 
     if not user or not password_ok:
         login_history.insert_one({
@@ -421,6 +411,11 @@ def login():
             "created_at": utcnow(),
         })
         return jsonify({"message": blocked_message}), 403
+
+    if user.get("force_password_reset"):
+        return jsonify({"message": "Reset your password using Forgot password before signing in."}), 403
+    if player_login_paused(user):
+        return jsonify({"message": "Player sign-in is temporarily unavailable."}), 503
 
     active_record_id = user.get("active_auth_session_id")
     session_takeover = bool(data.get("takeover") or data.get("replace") or request.remote_addr in ("127.0.0.1", "localhost", "::1", "Unknown") or not is_production())
@@ -489,24 +484,6 @@ def login():
     })
 
 
-@auth_bp.get("/mfa-qr")
-def get_pending_mfa_qr():
-    pending_id = session.get("mfa_pending_user")
-    user = users.find_one({"_id": ObjectId(pending_id)}) if pending_id else None
-    email = user.get("email") if user else "player@securefps.io"
-    secret = (user.get("mfa_secret") if user else None) or "JBSWY3DPEHPK3PXP"
-    issuer = "SecureFPS Gaming Security"
-    uri = pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name=issuer)
-    qr = qrcode.make(uri)
-    buf = io.BytesIO()
-    qr.save(buf, format="PNG")
-    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-    return jsonify({
-        "qr_data_url": f"data:image/png;base64,{b64}",
-        "secret": secret
-    })
-
-
 @auth_bp.post("/verify-mfa")
 @limiter.limit("10 per minute")
 def verify_mfa():
@@ -534,39 +511,8 @@ def verify_mfa():
     is_local = client_ip in {"127.0.0.1", "::1", "localhost", "Unknown"} or not is_production()
     now = utcnow()
 
-    # 1. Verify code first with wide clock drift tolerance and real-world year offsets
     mfa_secret = user.get("mfa_secret")
-    is_valid = False
-    now_ts = time.time()
-
-    test_secrets = [s for s in [mfa_secret, "JBSWY3DPEHPK3PXP"] if s]
-    for s in test_secrets:
-        totp = pyotp.TOTP(s)
-        try:
-            if totp.verify(code, valid_window=30):
-                is_valid = True
-                break
-        except Exception:
-            pass
-        # Check year offsets in case user device clock is set to real-world 2024/2025 time
-        for years_back in [1, 2, 3]:
-            try:
-                t_off = datetime.fromtimestamp(now_ts - (years_back * 365.25 * 86400), tz=timezone.utc)
-                if totp.verify(code, for_time=t_off, valid_window=30):
-                    is_valid = True
-                    break
-            except Exception:
-                pass
-        if is_valid:
-            break
-
-    # Master dev/team bypass codes for genuine team accounts and emergency verification
-    if not is_valid and code in {"123456", "000000", "999999", "111111", "654321", "841569", "017970", "626071"}:
-        is_valid = True
-
-    # In local development or testing mode, accept any 6-digit numeric code so genuine users never get locked out
-    if not is_valid and (is_local or not is_production()) and len(code) == 6 and code.isdigit():
-        is_valid = True
+    is_valid = bool(mfa_secret and pyotp.TOTP(mfa_secret).verify(code, valid_window=1))
 
     # If code is verified, clear any temporary lockout and proceed immediately!
     if is_valid:
@@ -576,7 +522,7 @@ def verify_mfa():
     # In local development or testing, do not lockout developers or testers
     if is_local or not is_production():
         return jsonify({
-            "message": "Invalid MFA code. Ensure your device clock is synced, re-scan the QR code, or enter emergency code 123456."
+            "message": "Invalid authenticator code. Check your device clock or use a recovery code."
         }), 401
 
     # 2. If code is invalid on production remote IP, check and enforce temporary lockout
@@ -675,6 +621,12 @@ def verify_recovery_code():
 
 
 def complete_login_session(user, auth_method="password+mfa"):
+    if user.get("force_password_reset"):
+        session.clear()
+        return jsonify({"message": "Reset your password using Forgot password before signing in."}), 403
+    if player_login_paused(user):
+        session.clear()
+        return jsonify({"message": "Player sign-in is temporarily unavailable."}), 503
     logged_in_at = utcnow()
     ip_address = request.remote_addr or "Unknown"
 
@@ -789,6 +741,80 @@ def me():
             "account_status": user.get("account_status", "active")
         }
     }), 200
+
+
+def reauthenticate_account(password):
+    csrf_error = verify_csrf_and_origin()
+    if csrf_error:
+        return None, (jsonify({"message": csrf_error}), 403)
+
+    user_id = session.get("user_id")
+    if not user_id or not ObjectId.is_valid(user_id):
+        return None, (jsonify({"message": "Sign in again to continue."}), 401)
+    user = users.find_one({"_id": ObjectId(user_id)})
+    if not user or blocked_account_message(user) or user.get("role") == "demo_admin":
+        return None, (jsonify({"message": "Account action unavailable."}), 403)
+    if (
+        not isinstance(password, str)
+        or len(password.encode("utf-8")) > 72
+        or not user.get("password_hash")
+        or not verify_password(password, user["password_hash"])
+    ):
+        return None, (jsonify({"message": "Current password is incorrect."}), 403)
+    return user, None
+
+
+@auth_bp.post("/change-password")
+@limiter.limit("5 per minute")
+def change_password():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"message": "A JSON object is required."}), 400
+    user, error = reauthenticate_account(data.get("current_password"))
+    if error:
+        return error
+    password = data.get("new_password")
+    if not isinstance(password, str) or not validate_password(password):
+        return jsonify({"message": PASSWORD_RULES_MESSAGE}), 400
+    if len(password.encode("utf-8")) > 72:
+        return jsonify({"message": "Password must be at most 72 bytes."}), 400
+    if password != data.get("confirm_password"):
+        return jsonify({"message": "Passwords do not match."}), 400
+    if password == data.get("current_password"):
+        return jsonify({"message": "Choose a different password."}), 400
+
+    result = users.update_one(
+        {"_id": user["_id"], "password_hash": user["password_hash"]},
+        {"$set": {"password_hash": hash_password(password), "force_password_reset": False}},
+    )
+    if not result.modified_count:
+        return jsonify({"message": "Your password changed. Please try again."}), 409
+
+    other_sessions = {"user_id": user["_id"], "is_active": True}
+    record_id = session.get("auth_session_record_id")
+    if record_id and ObjectId.is_valid(record_id):
+        other_sessions["_id"] = {"$ne": ObjectId(record_id)}
+    sessions_db.update_many(
+        other_sessions, {"$set": {"is_active": False, "revoked_at": utcnow()}}
+    )
+    return jsonify({"message": "Password changed."})
+
+
+@auth_bp.post("/recovery-codes/generate")
+@limiter.limit("3 per minute")
+def rotate_recovery_codes():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"message": "A JSON object is required."}), 400
+    user, error = reauthenticate_account(data.get("password"))
+    if error:
+        return error
+    codes = generate_backup_recovery_codes(user["_id"], password_hash=user["password_hash"])
+    if codes is None:
+        return jsonify({"message": "Your password changed. Please try again."}), 409
+    response = jsonify({"recovery_codes": codes})
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @auth_bp.post("/logout")

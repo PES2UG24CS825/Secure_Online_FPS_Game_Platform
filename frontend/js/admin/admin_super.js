@@ -50,7 +50,7 @@ function setupSuperEventListeners() {
         if (!resp.ok) throw new Error(data.message || 'Failed to create administrator');
 
         createModal.close();
-        alert(`Success: Normal Administrator '${name}' created!\nMFA Secret Seed: ${data.admin?.mfa_seed || 'JBSWY3DPEHPK3PXP'}`);
+        window.showAppAlert(`Success: Normal Administrator '${name}' created!\nMFA Secret Seed: ${data.admin?.mfa_seed || 'Unavailable'}`);
         loadSuperAdmins();
       } catch (err) {
         if (fb) {
@@ -80,10 +80,10 @@ function setupSuperEventListeners() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.message || 'Failed to save permissions');
-      alert('✓ Normal Admin permissions updated successfully.');
+      window.showAppAlert('✓ Normal Admin permissions updated successfully.');
       loadRolesPermissions();
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      window.showAppAlert(`Error: ${err.message}`, { tone: "error" });
     }
   });
 
@@ -111,10 +111,10 @@ function setupSuperEventListeners() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.message || 'Failed to save risk config');
-      alert('✓ Risk engine configuration successfully updated.');
+      window.showAppAlert('✓ Risk engine configuration successfully updated.');
       loadRiskConfig();
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      window.showAppAlert(`Error: ${err.message}`, { tone: "error" });
     }
   });
 
@@ -147,7 +147,7 @@ function setupSuperEventListeners() {
         verdictEl.style.color = data.simulated_risk_score >= 65 ? '#DC2626' : (data.simulated_risk_score >= 35 ? '#D97706' : '#059669');
       }
     } catch (err) {
-      alert(`Simulation error: ${err.message}`);
+      window.showAppAlert(`Simulation error: ${err.message}`, { tone: "error" });
     }
   });
 
@@ -189,7 +189,7 @@ function setupSuperEventListeners() {
         if (!resp.ok) throw new Error(data.message || 'Lockdown failed');
 
         lockdownModal.close();
-        alert('🚨 EMERGENCY PLATFORM LOCKDOWN ENGAGED.');
+        window.showAppAlert('🚨 EMERGENCY PLATFORM LOCKDOWN ENGAGED.');
         loadSecurityCommand();
       } catch (err) {
         if (fb) {
@@ -202,7 +202,7 @@ function setupSuperEventListeners() {
 
   if (disengageBtn) {
     disengageBtn.addEventListener('click', async () => {
-      const pw = prompt('Enter Super Admin password to disengage emergency lockdown:');
+      const pw = await window.showAppPrompt('Confirm your identity to disengage emergency lockdown.', { type: 'password', label: 'Super Admin password' });
       if (!pw) return;
       try {
         const resp = await fetch('/api/admin/super/lockdown', {
@@ -212,10 +212,10 @@ function setupSuperEventListeners() {
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.message || 'Failed to disengage lockdown');
-        alert('✓ Emergency lockdown disengaged. Normal operations restored.');
+        window.showAppAlert('✓ Emergency lockdown disengaged. Normal operations restored.');
         loadSecurityCommand();
       } catch (err) {
-        alert(`Error: ${err.message}`);
+        window.showAppAlert(`Error: ${err.message}`, { tone: "error" });
       }
     });
   }
@@ -225,7 +225,7 @@ function setupSuperEventListeners() {
 
   // 8. Create Backup Snapshot
   document.getElementById('createBackupSnapshotBtn')?.addEventListener('click', async () => {
-    if (!confirm('Trigger immediate on-demand cluster snapshot and verify integrity?')) return;
+    if (!await window.showAppConfirm('Trigger immediate on-demand cluster snapshot and verify integrity?')) return;
     try {
       const resp = await fetch('/api/admin/super/backups/create', {
         method: 'POST',
@@ -233,10 +233,10 @@ function setupSuperEventListeners() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.message || 'Backup failed');
-      alert(`✓ ${data.message}`);
+      window.showAppAlert(`✓ ${data.message}`);
       loadSystemBackups();
     } catch (err) {
-      alert(`Backup error: ${err.message}`);
+      window.showAppAlert(`Backup error: ${err.message}`, { tone: "error" });
     }
   });
 
@@ -264,10 +264,10 @@ function setupSuperEventListeners() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.message || 'Failed to save platform config');
-      alert('✓ Platform security policies and settings saved.');
+      window.showAppAlert('✓ Platform security policies and settings saved.');
       loadPlatformConfig();
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      window.showAppAlert(`Error: ${err.message}`, { tone: "error" });
     }
   });
 
@@ -342,36 +342,36 @@ export async function loadSuperAdmins() {
 
 async function handleAdminAction(act, id, name, currentStatus) {
   if (act === 'reset-mfa') {
-    if (!confirm(`Reset MFA configuration for administrator ${name}? They will re-enroll on next login.`)) return;
+    if (!await window.showAppConfirm(`Reset MFA configuration for administrator ${name}? They will re-enroll on next login.`)) return;
     const resp = await fetch(`/api/admin/super/admins/${id}/reset-mfa`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': 'securefps-csrf' }
     });
     const d = await resp.json();
-    alert(d.message || (resp.ok ? 'MFA Reset' : 'Failed'));
+    window.showAppAlert(d.message || (resp.ok ? 'MFA Reset' : 'Failed'));
     loadSuperAdmins();
   } else if (act === 'revoke-sessions') {
-    if (!confirm(`Revoke all active sessions for administrator ${name}?`)) return;
+    if (!await window.showAppConfirm(`Revoke all active sessions for administrator ${name}?`)) return;
     const resp = await fetch(`/api/admin/super/admins/${id}/revoke-sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': 'securefps-csrf' }
     });
     const d = await resp.json();
-    alert(d.message || (resp.ok ? 'Sessions Revoked' : 'Failed'));
+    window.showAppAlert(d.message || (resp.ok ? 'Sessions Revoked' : 'Failed'));
     loadSuperAdmins();
   } else if (act === 'toggle-status') {
     const nextStatus = currentStatus === 'active' ? 'suspended' : 'active';
-    if (!confirm(`Set administrator ${name} status to '${nextStatus}'?`)) return;
+    if (!await window.showAppConfirm(`Set administrator ${name} status to '${nextStatus}'?`)) return;
     const resp = await fetch(`/api/admin/super/admins/${id}/status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': 'securefps-csrf' },
       body: JSON.stringify({ status: nextStatus })
     });
     const d = await resp.json();
-    alert(d.message || (resp.ok ? 'Status Updated' : 'Failed'));
+    window.showAppAlert(d.message || (resp.ok ? 'Status Updated' : 'Failed'));
     loadSuperAdmins();
   } else if (act === 'delete') {
-    const pw = prompt(`Type your Super Admin password to confirm PERMANENT DELETION of admin '${name}':`);
+    const pw = await window.showAppPrompt(`Permanently delete administrator ${name}?`, { type: 'password', label: 'Super Admin password', confirmText: 'Delete administrator' });
     if (!pw) return;
     const resp = await fetch(`/api/admin/super/admins/${id}`, {
       method: 'DELETE',
@@ -379,7 +379,7 @@ async function handleAdminAction(act, id, name, currentStatus) {
       body: JSON.stringify({ reauth_password: pw })
     });
     const d = await resp.json();
-    alert(d.message || (resp.ok ? 'Admin Deleted' : 'Failed'));
+    window.showAppAlert(d.message || (resp.ok ? 'Admin Deleted' : 'Failed'));
     loadSuperAdmins();
   }
 }
@@ -430,26 +430,27 @@ export async function loadMlModelsCatalog() {
 
     const nameEl = document.getElementById('superMlModelName');
     const badgeEl = document.getElementById('superMlActiveVersionBadge');
-    if (nameEl) nameEl.textContent = active.name || 'Random Forest Anti-Cheat';
-    if (badgeEl) badgeEl.textContent = `${active.version || 'v2.0-rf'} Active`;
+    if (nameEl) nameEl.textContent = active.name || 'No validated model';
+    if (badgeEl) badgeEl.textContent = active.version ? `${active.version} Active` : 'Unavailable';
 
     const accEl = document.getElementById('mlMetricAccuracy');
     const precEl = document.getElementById('mlMetricPrecision');
     const recEl = document.getElementById('mlMetricRecall');
     const f1El = document.getElementById('mlMetricF1');
 
-    if (accEl) accEl.textContent = `${((active.accuracy || 0.984) * 100).toFixed(1)}%`;
-    if (precEl) precEl.textContent = `${((active.precision || 0.979) * 100).toFixed(1)}%`;
-    if (recEl) recEl.textContent = `${((active.recall || 0.981) * 100).toFixed(1)}%`;
-    if (f1El) f1El.textContent = `${(active.f1_score || 0.980).toFixed(3)}`;
+    const percent = value => Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : "Unavailable";
+    if (accEl) accEl.textContent = `${percent(active.accuracy)}`;
+    if (precEl) precEl.textContent = `${percent(active.precision)}`;
+    if (recEl) recEl.textContent = `${percent(active.recall)}`;
+    if (f1El) f1El.textContent = Number.isFinite(active.f1_score) ? active.f1_score.toFixed(3) : "Unavailable";
 
     tbody.innerHTML = models.map(m => `
       <tr>
         <td><strong>${escapeHtml(m.version)}</strong><br><small class="muted">${escapeHtml(m.name)}</small></td>
         <td><span class="badge badge-cyan">${escapeHtml(m.algorithm)}</span></td>
-        <td><strong style="color:#059669;">${((m.accuracy || 0) * 100).toFixed(1)}%</strong></td>
-        <td>${((m.precision || 0) * 100).toFixed(1)}% / ${((m.recall || 0) * 100).toFixed(1)}%</td>
-        <td>${((m.false_positive_rate || 0) * 100).toFixed(2)}%</td>
+        <td><strong style="color:#059669;">${percent(m.accuracy)}</strong></td>
+        <td>${percent(m.precision)} / ${percent(m.recall)}</td>
+        <td>${percent(m.false_positive_rate)}</td>
         <td><span class="badge ${m.is_active ? 'badge-success' : 'badge-warning'}">${m.is_active ? 'Active' : 'Archived'}</span></td>
         <td>
           ${!m.is_active ? `
@@ -462,14 +463,14 @@ export async function loadMlModelsCatalog() {
     tbody.querySelectorAll('.rollback-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const ver = btn.dataset.version;
-        if (!confirm(`Are you sure you want to rollback active ML inference to model '${ver}'?`)) return;
+        if (!await window.showAppConfirm(`Are you sure you want to rollback active ML inference to model '${ver}'?`)) return;
         const resp = await fetch('/api/admin/super/ml-models/rollback', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': 'securefps-csrf' },
           body: JSON.stringify({ version: ver, reason: `Manual rollback by Super Admin to ${ver}` })
         });
         const d = await resp.json();
-        alert(d.message || 'Rollback complete.');
+        window.showAppAlert(d.message || 'Rollback complete.');
         loadMlModelsCatalog();
       });
     });
@@ -567,15 +568,15 @@ export async function loadSystemControlMetrics() {
     const mlInf = document.getElementById('metricMlInference');
 
     if (uptime && data.runtime) {
-      const sec = data.runtime.uptime_seconds || 3600;
+      const sec = data.runtime.uptime_seconds;
       const hours = Math.floor(sec / 3600);
       const mins = Math.floor((sec % 3600) / 60);
       uptime.textContent = `${hours}h ${mins}m`;
     }
     if (dbStat && data.database) dbStat.textContent = data.database.status;
-    if (dbLat && data.database) dbLat.textContent = `${data.database.latency_ms}ms · ${data.database.documents} docs`;
-    if (apiLat && data.api_gateway) apiLat.textContent = `${data.api_gateway.latency_p95_ms} ms`;
-    if (mlInf && data.ml_inference) mlInf.textContent = `${data.ml_inference.average_inference_ms} ms`;
+    if (dbLat && data.database) dbLat.textContent = data.database.latency_ms == null ? "Unavailable" : `${data.database.latency_ms} ms · ${data.database.documents ?? "—"} docs`;
+    if (apiLat && data.api_gateway) apiLat.textContent = data.api_gateway.latency_p95_ms == null ? "Unavailable" : `${data.api_gateway.latency_p95_ms} ms`;
+    if (mlInf && data.ml_inference) mlInf.textContent = data.ml_inference.probe_inference_ms == null ? "Unavailable" : `${data.ml_inference.probe_inference_ms} ms (probe)`;
   } catch (err) {
     console.error('[AdminSuper] System metrics load failed:', err);
   }
@@ -602,11 +603,11 @@ export async function loadSystemBackups() {
     tbody.innerHTML = backups.map(b => `
       <tr>
         <td><code>${escapeHtml(b.backup_id)}</code></td>
-        <td><span class="badge badge-cyan">${escapeHtml(b.scope || 'full')}</span></td>
+        <td><span class="badge badge-cyan">${escapeHtml(b.scope || 'Unavailable')}</span></td>
         <td><strong>${b.size_mb} MB</strong></td>
         <td>${b.documents_count} records</td>
         <td><code style="font-size:10px;">${escapeHtml(b.checksum ? b.checksum.substring(0, 24) : '—')}…</code></td>
-        <td><span class="badge badge-success">✓ Verified</span></td>
+        <td><span class="badge ${b.status === "verified" ? "badge-success" : "badge-warning"}">${b.status === "verified" ? "Verified" : "Unavailable"}</span></td>
         <td><small class="muted">${formatTimeAgo(b.created_at)}</small></td>
       </tr>
     `).join('');
@@ -759,7 +760,7 @@ export async function loadReportsAnalytics() {
     if (actEl) actEl.textContent = dist.active ?? 0;
     if (sancEl) sancEl.textContent = (dist.suspended || 0) + (dist.banned || 0);
     if (matchesEl) matchesEl.textContent = det.analyzed_sessions ?? det.total_matches ?? 0;
-    if (precEl) precEl.textContent = `${fp.model_precision_estimate || 98.4}%`;
+    if (precEl) precEl.textContent = fp.model_precision_estimate == null ? "Unavailable" : `${fp.model_precision_estimate}%`;
 
     // Distribution values & bars
     const dActVal = document.getElementById('distActiveVal');
@@ -983,7 +984,7 @@ export function initApprovalsSection() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Submission failed');
 
-      alert(`✅ ${data.message}`);
+      window.showAppAlert(`✅ ${data.message}`);
       document.getElementById('requestApprovalModal').hidden = true;
       if (window.loadApprovalsQueue) loadApprovalsQueue();
     } catch (err) {
@@ -1025,7 +1026,7 @@ export function initApprovalsSection() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Action failed');
 
-      alert(`✅ ${data.message}`);
+      window.showAppAlert(`✅ ${data.message}`);
       document.getElementById('processApprovalModal').hidden = true;
       loadApprovalsQueue();
     } catch (err) {

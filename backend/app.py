@@ -2,7 +2,6 @@ import os
 import mimetypes
 import re
 import secrets
-import threading
 import time
 import logging
 from pathlib import Path
@@ -222,8 +221,6 @@ def frontend_file(filename):
 
 
 # In-memory short-TTL session validation cache & throttled activity writer
-_auth_cache = {}
-_auth_cache_lock = threading.Lock()
 _last_activity_writes = {}
 
 
@@ -253,28 +250,8 @@ def validate_auth_session():
     now = time.monotonic()
     cache_key = (str(user_id), str(record_id))
 
-    # Fast path: in-memory cache check (TTL: 25 seconds)
-    with _auth_cache_lock:
-        cached = _auth_cache.get(cache_key)
-        if cached and (now - cached["time"] < 25.0):
-            if not cached["valid"]:
-                session.clear()
-                return jsonify({"message": cached["message"]}), cached["status_code"]
-            # Throttled last_activity write (at most once every 45s)
-            last_write = _last_activity_writes.get(cache_key, 0)
-            if now - last_write >= 45.0:
-                _last_activity_writes[cache_key] = now
-                try:
-                    from bson import ObjectId
-                    sessions_db.update_one(
-                        {"_id": ObjectId(record_id), "is_active": True},
-                        {"$set": {"last_activity": datetime.now(timezone.utc)}},
-                    )
-                except Exception:
-                    pass
-            return None
-
     from bson import ObjectId
+    is_appeal_route = False
     try:
         account = users.find_one(
             {"_id": ObjectId(user_id)},
@@ -287,17 +264,13 @@ def validate_auth_session():
             "/api/player/appeal",
             "/api/player/notifications",
         }
-        is_appeal_route = request.path in appeal_allowed_endpoints
+        is_appeal_route = bool(account and record_id and account.get("account_status") in {"banned", "suspended"} and request.path in appeal_allowed_endpoints)
 
         if account and account.get("account_status") == "suspended" and not is_appeal_route:
-            with _auth_cache_lock:
-                _auth_cache[cache_key] = {"valid": False, "message": "This account has been suspended.", "status_code": 403, "time": now}
             session.clear()
             return jsonify({"message": "This account has been suspended."}), 403
 
         if account and (account.get("revoked") is True or account.get("account_status") == "banned") and not is_appeal_route:
-            with _auth_cache_lock:
-                _auth_cache[cache_key] = {"valid": False, "message": "This account is permanently banned.", "status_code": 403, "time": now}
             session.clear()
             return jsonify({"message": "This account is permanently banned."}), 403
 
@@ -312,13 +285,9 @@ def validate_auth_session():
         active = False
 
     if not active and not is_appeal_route:
-        with _auth_cache_lock:
-            _auth_cache[cache_key] = {"valid": False, "message": "Your sign-in session has ended. Please sign in again.", "status_code": 401, "time": now}
         session.clear()
         return jsonify({"message": "Your sign-in session has ended. Please sign in again."}), 401
 
-    with _auth_cache_lock:
-        _auth_cache[cache_key] = {"valid": True, "time": now}
 
     # Throttled write to DB
     last_write = _last_activity_writes.get(cache_key, 0)

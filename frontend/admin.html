@@ -12,7 +12,7 @@
 </head>
 <body class="dashboard-page admin-page">
   <aside class="admin-sidebar">
-    <div class="brand"><img class="brand-lockup" src="public/securefps-logo-crop.png?v=1" alt="SecureFPS Gaming Security"></div>
+    <div class="brand"><div class="sidebar-brand-text" aria-label="SecureFPS Gaming Security"><strong>SECUREFPS</strong><small>GAMING SECURITY</small></div></div>
     <nav id="adminNavigation" aria-label="Admin sections" role="tablist">
       <!-- Normal Admin Tier 1 (Exactly 6 primary operational sections) -->
       <button class="admin-nav-btn active" type="button" data-admin-section="overview" role="tab" aria-selected="true"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg></span>Overview</button>
@@ -23,6 +23,7 @@
       <button class="admin-nav-btn" type="button" data-admin-section="support" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="m4.5 7 7.5 5.5L19.5 7"/></svg></span>Customer Support</button>
 
       <!-- Super Admin Command Center Category (Exclusive to Super Admin Tier 2) -->
+      <button class="admin-nav-btn" type="button" data-admin-section="rewards" role="tab" aria-selected="false">Rewards operations</button>
       <div id="superAdminNavCategory" class="admin-nav-category" hidden>
         <div class="admin-nav-divider">
           <span>👑 COMMAND CENTER</span>
@@ -58,6 +59,44 @@
     </header>
 
     <!-- SECTION 1: OVERVIEW -->
+    <section class="admin-section" data-admin-view="rewards" role="tabpanel" aria-label="Rewards operations">
+      <div class="admin-section-heading"><h2>Rewards operations</h2><p>Review the cosmetic catalog, transactions, and credits that need attention.</p></div>
+      <p id="adminRewardsStatus" role="status"></p>
+      <form id="adminRewardSearch">
+        <label>Transaction description <input name="q" type="search" maxlength="120"></label>
+        <button class="ghost-btn" type="submit">Search</button>
+      </form>
+      <details open><summary>Transactions</summary><div class="admin-table-wrap"><table>
+        <thead><tr><th>Player ID</th><th>Transaction</th><th>Coins</th><th>XP</th><th>Time</th></tr></thead>
+        <tbody id="adminRewardTransactions"></tbody>
+      </table></div></details>
+      <details><summary>Pending and failed credits</summary><div id="adminRewardCredits"></div></details>
+      <details><summary>Catalog</summary>
+        <div class="admin-table-wrap"><table><thead><tr><th>Item</th><th>Slot</th><th>Price</th><th>Status</th><th></th></tr></thead><tbody id="adminRewardCatalog"></tbody></table></div>
+        <form id="adminRewardItemForm" hidden>
+          <h3>Create or edit item</h3>
+          <label>Item ID <input name="item_id" pattern="[a-z0-9_-]+" maxlength="64" required></label>
+          <label>Name <input name="name" maxlength="80" required></label>
+          <label>Coin price <input name="price" type="number" min="1" max="100000" required></label>
+          <label>Slot for new items <select name="category"><option value="avatar">Avatar</option><option value="banner">Background</option></select></label>
+          <label>Artwork filename for new items <input name="filename" placeholder="operator.png"></label>
+          <label><input name="enabled" type="checkbox" checked> Enabled</label>
+          <label>Reason <input name="reason" minlength="10" maxlength="300" required></label>
+          <button class="ghost-btn" type="submit">Save item</button>
+          <button class="ghost-btn" type="reset">Clear</button>
+        </form>
+      </details>
+      <details id="adminRewardAdjustments" hidden><summary>Adjust coins</summary>
+        <form id="adminRewardAdjustmentForm">
+          <label>Player ID <input name="player_id" pattern="[a-fA-F0-9]{24}" required></label>
+          <label>Coin change <input name="coins" type="number" min="-100000" max="100000" required></label>
+          <label>Reason <input name="reason" minlength="10" maxlength="300" required></label>
+          <label>Admin password <input name="password" type="password" autocomplete="current-password" required></label>
+          <button class="ghost-btn" type="submit">Apply adjustment</button>
+        </form>
+      </details>
+    </section>
+
     <section class="admin-section active" id="admin-overview" data-admin-view="overview" role="tabpanel">
       <!-- Cluster Health Monitor -->
       <section class="panel admin-table-panel">
@@ -436,7 +475,7 @@
         </article>
         <article class="stat-card">
           <span>Model Precision</span>
-          <strong id="analyticsPrecisionEstimate" style="color: #059669;">98.4%</strong>
+          <strong id="analyticsPrecisionEstimate" style="color: #059669;">Unavailable</strong>
           <small>Low false-positive rate</small>
         </article>
       </div>
@@ -488,7 +527,7 @@
               </div>
             </div>
             <div style="margin-top: 16px; font-size: 12px; color: #6D28D9; font-weight: 600; background: #FAF5FF; padding: 10px 14px; border-radius: 8px; border: 1px solid #DDD6FE;">
-              🛡️ Model Precision: <span id="analyticsModelPrecisionLabel">98.4% accurate enforcement rate</span>
+              🛡️ Model Precision: <span id="analyticsModelPrecisionLabel">Unavailable</span>
             </div>
           </div>
         </section>
@@ -662,22 +701,22 @@
         <div class="stats-grid" style="margin-top: 10px;">
           <article class="stat-card">
             <span>Accuracy</span>
-            <strong id="mlMetricAccuracy" style="color: #059669;">98.4%</strong>
+            <strong id="mlMetricAccuracy" style="color: #059669;">Unavailable</strong>
             <small>Validation dataset</small>
           </article>
           <article class="stat-card">
             <span>Precision</span>
-            <strong id="mlMetricPrecision" style="color: #059669;">97.9%</strong>
+            <strong id="mlMetricPrecision" style="color: #059669;">Unavailable</strong>
             <small>Cheater positive rate</small>
           </article>
           <article class="stat-card">
             <span>Recall</span>
-            <strong id="mlMetricRecall" style="color: #2563EB;">98.1%</strong>
+            <strong id="mlMetricRecall" style="color: #2563EB;">Unavailable</strong>
             <small>Detection coverage</small>
           </article>
           <article class="stat-card">
             <span>F1-Score</span>
-            <strong id="mlMetricF1" style="color: #7C3AED;">0.980</strong>
+            <strong id="mlMetricF1" style="color: #7C3AED;">Unavailable</strong>
             <small>Harmonic mean</small>
           </article>
         </div>
@@ -709,7 +748,7 @@
             <span class="admin-tier-badge level-2">EXECUTIVE ROOT</span>
             <h2 class="command-center-title">Risk Engine Configuration</h2>
           </div>
-          <p class="command-center-subtitle">Calibrate category boundaries, feature weights, and test detection rules with the Interactive Simulator.</p>
+          <p class="command-center-subtitle">Set the thresholds that classify live match scores and test sample inputs in the simulator.</p>
         </div>
         <button id="saveRiskConfigBtn" class="play-btn" type="button">Save Risk Configuration</button>
       </div>
@@ -744,7 +783,7 @@
             <div><p class="eyebrow">PRE-FLIGHT SIMULATOR</p><h2>Interactive Rule Tester</h2></div>
             <button id="runSimulationBtn" class="ghost-btn" type="button">Simulate Rule</button>
           </div>
-          <p style="font-size: 12px; color: #475569; margin: 0 0 12px;">Test input values against the configured scoring formula without altering live data:</p>
+          <p style="font-size: 12px; color: #475569; margin: 0 0 12px;">Feature weights apply only to this simulator. Live match scores come from the active model.</p>
           <div class="simulator-box">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
               <div>
@@ -936,9 +975,9 @@
     </section>
 
     <!-- SUPER ADMIN MODAL: PROVISION NORMAL ADMIN -->
-    <dialog id="createAdminModal" class="admin-action-modal">
+    <dialog id="createAdminModal" class="admin-action-modal" aria-labelledby="createAdminTitle">
       <form method="dialog" class="admin-modal-card" novalidate id="createAdminForm">
-        <h3>Provision Normal Administrator (Level 1)</h3>
+        <h3 id="createAdminTitle">Create a normal administrator</h3>
         <p class="muted">Creates an operational administrator account with mandatory MFA enrollment.</p>
         <div class="modal-form-group">
           <label for="newAdminName">Full Name <span class="required-star">*</span></label>
@@ -950,7 +989,7 @@
         </div>
         <div class="modal-form-group">
           <label for="newAdminPassword">Initial Password <span class="required-star">*</span> (min 8 chars)</label>
-          <input type="password" id="newAdminPassword" class="admin-modal-input" placeholder="Strong password" required>
+          <input type="password" id="newAdminPassword" autocomplete="new-password" class="admin-modal-input" placeholder="Strong password" required>
         </div>
         <div id="createAdminFeedback" class="modal-err-msg" style="margin-top: 8px;" hidden></div>
         <div class="modal-actions" style="margin-top: 18px;">
@@ -961,17 +1000,17 @@
     </dialog>
 
     <!-- SUPER ADMIN MODAL: RE-AUTHENTICATION & LOCKDOWN -->
-    <dialog id="superLockdownModal" class="admin-action-modal">
+    <dialog id="superLockdownModal" class="admin-action-modal" aria-labelledby="superLockdownTitle">
       <form method="dialog" class="admin-modal-card" novalidate id="lockdownConfirmForm">
-        <h3 style="color: #DC2626;">🚨 Confirm Emergency Platform Lockdown</h3>
-        <p class="muted">Lockdown terminates non-essential multiplayer sessions and prevents new player logins. Requires re-authentication.</p>
+        <h3 id="superLockdownTitle">Confirm emergency lockdown</h3>
+        <p class="muted">Lockdown blocks new player sign-ins, game sessions, room creation, joining, and reconnect admission. Players already connected to a match can continue. Administrator reauthentication is required.</p>
         <div class="modal-form-group">
           <label for="lockdownReasonInput">Reason for Emergency Action <span class="required-star">*</span> (min 10 chars)</label>
           <textarea id="lockdownReasonInput" class="admin-modal-textarea" rows="2" placeholder="e.g. Critical zero-day vulnerability detected under active investigation." required></textarea>
         </div>
         <div class="modal-form-group">
           <label for="lockdownPasswordInput">Super Admin Password <span class="required-star">*</span></label>
-          <input type="password" id="lockdownPasswordInput" class="admin-modal-input" placeholder="Verify your password" required>
+          <input type="password" id="lockdownPasswordInput" autocomplete="current-password" class="admin-modal-input" placeholder="Verify your password" required>
         </div>
         <div id="lockdownFeedback" class="modal-err-msg" style="margin-top: 8px;" hidden></div>
         <div class="modal-actions" style="margin-top: 18px;">
@@ -982,7 +1021,7 @@
     </dialog>
 
     <!-- PLAYER PROFILE & MATCH HISTORY MODAL -->
-    <dialog id="playerMatchesModal" class="admin-action-modal player-matches-dialog">
+    <dialog id="playerMatchesModal" class="admin-action-modal player-matches-dialog" aria-labelledby="modalPlayerName">
       <div class="player-modal-header">
         <div style="display:flex; align-items:center; gap:12px;">
           <div class="avatar" id="modalPlayerAvatar" style="background:#7C3AED; color:#fff; width:44px; height:44px; font-size:18px; border-radius:50%; display:grid; place-items:center; font-weight:700;">P</div>

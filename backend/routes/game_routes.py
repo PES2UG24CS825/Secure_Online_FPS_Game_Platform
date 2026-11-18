@@ -25,18 +25,22 @@ from database.db import (
     users,
     sessions_db,
     reward_transactions,
+    player_notifications,
     support_tickets,
     honour_history,
 )
 from extensions import limiter
 
-from models.ml_model import predict, FEATURES
+from models.ml_model import predict, predict_selected, FEATURES
 from services.anti_cheat_intelligence import AntiCheatIntelligence
-from services.risk_scoring import clamp_risk_score, classify_risk_score, RISK_SCORE_SCALE
+from services.risk_scoring import clamp_risk_score, classify_risk_score, classify_configured_risk, RISK_SCORE_SCALE
 from services.player_baseline import get_player_baseline
 from services.telemetry_validation import validate_telemetry_event, check_rate_limit, clear_session_limits
 from services.features_v2 import extract_features_v2, FEATURE_NAMES_V2, FEATURE_UNITS_V2
+from services.reward_credits import record_match_credit
+from services.admin_permissions import has_operational_permission
 from services.csrf import verify_csrf_and_origin
+from services.auth_security import player_login_paused
 
 
 game_bp = Blueprint(
@@ -563,11 +567,14 @@ def is_admin():
     return bool(current_admin())
 
 
-def current_admin():
+def current_admin(*, allow_demo=False):
     user_id = get_current_user_object_id()
     if not user_id:
         return None
-    return users.find_one({"_id": user_id, "role": {"$in": ["admin", "moderator", "super_admin"]}})
+    roles = ["admin", "moderator", "normal_admin", "super_admin"]
+    if allow_demo:
+        roles.append("demo_admin")
+    return users.find_one({"_id": user_id, "role": {"$in": roles}})
 
 
 def utc_now():
@@ -600,6 +607,29 @@ def utc_now():
 #
 # =========================================================
 
+@game_bp.get("/game/socket-ticket")
+def get_socket_ticket():
+    user_id = get_current_user_object_id()
+    if not user_id:
+        return jsonify({"message": "Sign in to use multiplayer."}), 401
+    account = users.find_one({"_id": user_id})
+    if not account or account.get("role", "player") not in {"player", "demo_player"}:
+        return jsonify({"message": "Player access required."}), 403
+    if account.get("force_password_reset") or account.get("revoked") or account.get("account_status") in {"suspended", "banned", "deleted"}:
+        return jsonify({"message": "This account cannot enter multiplayer."}), 403
+    if player_login_paused(account):
+        return jsonify({"message": "Multiplayer admission is paused during lockdown."}), 503
+    secret = os.getenv("GAME_SERVER_SECRET", "securefps-multiplayer-secret-key-2026")
+    token = jwt.encode({
+        "userId": str(user_id),
+        "username": account.get("username") or account.get("name") or "Operator",
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=20),
+    }, secret, algorithm="HS256")
+    response = jsonify({"socket_token": token})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @game_bp.post("/game/start")
 def start_game():
 
@@ -615,6 +645,10 @@ def start_game():
         return jsonify({
             "message": "Account not found."
         }), 401
+    if account.get("force_password_reset"):
+        return jsonify({"message": "Reset your password before starting a game."}), 403
+    if player_login_paused(account):
+        return jsonify({"message": "New game sessions are temporarily unavailable."}), 503
     if account.get("account_status") == "suspended":
         return jsonify({"message": "This account has been suspended."}), 403
     if account.get("revoked") is True or account.get("account_status") == "banned":
@@ -689,6 +723,8 @@ def start_game():
     now = utc_now()
     req_body = request.get_json(silent=True) or {}
     game_name = req_body.get("game") or "FPS_Microgame"
+    game_mode = str(req_body.get("mode") or "").strip().lower()
+    game_difficulty = str(req_body.get("difficulty") or "").strip().lower()
 
     is_record_session = bool(req_body.get("record_session", False))
     player_group_id = req_body.get("player_group") or str(user_id)
@@ -704,6 +740,8 @@ def start_game():
         "label": session_label,
         "record_session": is_record_session,
         "game": game_name,
+        "mode": game_mode or ("bots" if game_name == "CyberStrike_3D" else ""),
+        "difficulty": game_difficulty,
         "started_at": now,
         "ended_at": None,
         "expires_at": now + timedelta(hours=2),
@@ -1177,9 +1215,7 @@ def receive_game_event():
                 {"session_id": session_id, "user_id": user_id},
                 {"$set": {"honour_awarded": honour_awarded}},
             )
-            users.update_one({"_id": user_id}, {"$inc": {"rewards.coins": 20, "rewards.xp": 50}})
-            reward_transactions.insert_one({
-                "user_id": user_id,
+            record_match_credit(user_id, session_id, {
                 "type": "match_completed",
                 "description": f"Completed an FPS Microgame match; +{honour_awarded} Honour",
                 "coins": 20,
@@ -1187,7 +1223,6 @@ def receive_game_event():
                 "honour": honour_awarded,
                 "honour_before": honour_before,
                 "honour_after": int(honour_after.get("honour_score", honour_before)),
-                "session_id": session_id,
                 "created_at": utc_now(),
             })
             analysis = analyze_game_session(
@@ -1315,7 +1350,9 @@ def analyze_game_session(
 
         try:
 
-            result = predict(features)
+            config = db["system_config"].find_one({"type": "global_config"}) or {}
+            selected_model = config.get("active_model_version")
+            result = predict_selected(features, selected_model) if selected_model else predict(features)
             model_errors = [
                 f"{name}: {value}"
                 for name, value in result.items()
@@ -1334,7 +1371,7 @@ def analyze_game_session(
             }).sort("created_at", 1))
             audit = AntiCheatIntelligence.audit_telemetry_stream(session_telemetry)
             player_baseline = get_player_baseline(users, game_events, user_id)
-            game_mode = game_session.get("game", "CyberStrike_3D")
+            game_mode = game_session.get("mode") or game_session.get("game", "CyberStrike_3D")
             human_eval = AntiCheatIntelligence.evaluate_human_skill_context(
                 raw_features, audit, game_mode=game_mode, player_baseline=player_baseline
             )
@@ -1377,7 +1414,13 @@ def analyze_game_session(
             human_eval = {"review_category": "Analysis incomplete", "explanation": str(exc), "is_skilled_human": False, "hard_cheat_evidence": []}
             calibrated_severity = None
 
-    severity = calibrated_severity if status == "success" else gameplay_alert_severity(result, status)
+    risk_config = ((db["system_config"].find_one({"type": "global_config"}) or {}).get("risk_engine") or {})
+    classification = classify_configured_risk(result.get("risk_score"), risk_config)
+    severity = (
+        classification["severity"] if status == "success" and risk_config
+        else calibrated_severity if status == "success"
+        else gameplay_alert_severity(result, status)
+    )
     alert_reason = None
     if severity and severity != "low":
         alert_reason = (
@@ -1564,7 +1607,7 @@ def analyze_game_session(
         # Mirror authoritative risk metrics to game_sessions for immediate admin sync
         try:
             sess_risk = result.get("risk_score")
-            sess_cat = classify_risk_score(sess_risk)["category"] if sess_risk is not None else "Normal"
+            sess_cat = classification["category"]
             sess_update = {
                 "risk_score": sess_risk,
                 "risk_category": sess_cat,
@@ -1947,11 +1990,7 @@ def end_game():
                     }
                 },
             )
-            if coins_to_award > 0 or xp_to_award > 0:
-                users.update_one({"_id": user_id}, {"$inc": {"rewards.coins": coins_to_award, "rewards.xp": xp_to_award}})
-
-            reward_transactions.insert_one({
-                "user_id": user_id,
+            record_match_credit(user_id, session_id, {
                 "type": "match_completed",
                 "description": f"Completed CyberStrike 3D match ({int(duration_seconds)}s); +{honour_awarded} Honour",
                 "coins": coins_to_award,
@@ -1959,7 +1998,6 @@ def end_game():
                 "honour": honour_awarded,
                 "honour_before": honour_before,
                 "honour_after": int(honour_score if honour_score is not None else honour_before),
-                "session_id": session_id,
                 "created_at": now,
             })
             analysis = analyze_game_session(user_id, session_id)
@@ -2708,7 +2746,7 @@ SUPPORT_REPLY_TEMPLATES = [
 
 @game_bp.get("/admin/support/tickets")
 def admin_support_tickets():
-    if not is_admin():
+    if not has_operational_permission(current_admin(allow_demo=True), "support:read"):
         return jsonify({"message": "Admin access required."}), 403
 
     status_filter = (request.args.get("status") or "").strip().lower()
@@ -2757,7 +2795,7 @@ def admin_support_tickets():
 
 @game_bp.get("/admin/support/tickets/<ticket_id>/attachment")
 def admin_support_attachment(ticket_id):
-    if not is_admin():
+    if not has_operational_permission(current_admin(allow_demo=True), "support:read"):
         return jsonify({"message": "Admin access required."}), 403
     try:
         ticket_oid = ObjectId(ticket_id)
@@ -2777,8 +2815,8 @@ def reply_to_support_ticket(ticket_id):
         return jsonify({"message": csrf_err}), 403
 
     admin = current_admin()
-    if not admin:
-        return jsonify({"message": "Admin access required."}), 403
+    if not has_operational_permission(admin, "support:reply", write=True):
+        return jsonify({"message": "Support updates are disabled for your administrator role."}), 403
     if admin.get("role") == "demo_admin":
         return jsonify({"message": "Demo admin accounts cannot send ticket replies."}), 403
 
@@ -2806,6 +2844,11 @@ def reply_to_support_ticket(ticket_id):
         return jsonify({"message": "Support ticket not found."}), 404
 
     ticket = support_tickets.find_one({"_id": ticket_oid}, {"user_id": 1}) or {}
+    player_notifications.insert_one({
+        "user_id": ticket["user_id"], "type": "support_reply", "title": "Support replied",
+        "message": "Open your support tickets to read the reply.", "read": False,
+        "created_at": now,
+    })
     publish_live_update(ticket.get("user_id"), None, "support_reply", force=True)
     return jsonify({"message": "Reply sent to player."})
 
@@ -2817,8 +2860,8 @@ def resolve_support_ticket(ticket_id):
         return jsonify({"message": csrf_err}), 403
 
     admin = current_admin()
-    if not admin:
-        return jsonify({"message": "Admin access required."}), 403
+    if not has_operational_permission(admin, "support:reply", write=True):
+        return jsonify({"message": "Support updates are disabled for your administrator role."}), 403
     if admin.get("role") == "demo_admin":
         return jsonify({"message": "Demo admin accounts cannot resolve tickets."}), 403
 
@@ -2851,8 +2894,8 @@ def update_support_ticket(ticket_id):
         return jsonify({"message": csrf_err}), 403
 
     admin = current_admin()
-    if not admin:
-        return jsonify({"message": "Admin access required."}), 403
+    if not has_operational_permission(admin, "support:reply", write=True):
+        return jsonify({"message": "Support updates are disabled for your administrator role."}), 403
     if admin.get("role") == "demo_admin":
         return jsonify({"message": "Demo admin accounts cannot modify tickets."}), 403
 
@@ -4377,6 +4420,15 @@ def admin_trigger_retrain():
     except Exception as exc:
         return jsonify({"message": f"Retraining execution error: {exc}"}), 500
 
+
+@game_bp.get("/internal/matchmaking-policy")
+def internal_matchmaking_policy():
+    secret = os.getenv("GAME_SERVER_SECRET", "securefps-multiplayer-secret-key-2026")
+    supplied = request.headers.get("Authorization", "")
+    if not hmac.compare_digest(supplied.encode("utf-8"), f"Bearer {secret}".encode("utf-8")):
+        return jsonify({"message": "Unauthorized."}), 401
+    cfg = db["system_config"].find_one({"type": "global_config"}, {"security_policies.emergency_lockdown": 1}) or {}
+    return jsonify({"allow_new_admissions": not bool((cfg.get("security_policies") or {}).get("emergency_lockdown"))})
 
 @game_bp.post("/internal/anti-cheat-report")
 def internal_anti_cheat_report():

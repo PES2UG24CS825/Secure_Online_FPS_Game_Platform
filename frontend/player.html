@@ -9,31 +9,15 @@
 
   <link rel="stylesheet" href="css/styles.css?v=20261114_0415">
   <link rel="stylesheet" href="css/player.css?v=20261114_0415">
-  <link rel="stylesheet" href="css/ui-polish.css?v=20261114_0415">
+  <link rel="stylesheet" href="css/ui-polish.css?v=20261118_matches">
 </head>
 
 <body class="dashboard-page player-page">
 
-  <!-- ============================================================
-       LAPTOP / DESKTOP ONLY NOTICE BANNER (<1024px) (Item 1)
-  ============================================================ -->
-  <div id="laptopNotice" class="laptop-only-banner" role="alert" aria-live="assertive">
-    <div class="laptop-notice-card">
-      <div class="laptop-icon" aria-hidden="true">💻</div>
-      <h2>Please use a laptop or desktop browser</h2>
-      <p>SecureFPS Gaming Security is engineered strictly for laptop and desktop screens with a minimum width of 1024px.</p>
-      <span class="laptop-hint">Minimum 1024px width required (Desktop / Laptop only)</span>
-    </div>
-  </div>
-
-  <!-- ============================================================
-       SIDEBAR (Fixed 250px with scrollable nav & sticky bottom)
-  ============================================================ -->
-
   <aside class="sidebar">
 
     <div class="brand">
-      <img class="brand-lockup" src="public/securefps-logo-crop.png?v=1" alt="SecureFPS Gaming Security">
+      <div class="sidebar-brand-text" aria-label="SecureFPS Gaming Security"><strong>SECUREFPS</strong><small>GAMING SECURITY</small></div>
       <button id="collapseSidebarBtn" class="sidebar-collapse-btn" type="button" aria-label="Toggle sidebar collapse" title="Collapse / Expand sidebar">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
       </button>
@@ -74,11 +58,6 @@
       <a href="#security" data-section="security">
         <span class="nav-icon" aria-hidden="true">🔒</span>
         <span class="nav-label">Account Security</span>
-      </a>
-
-      <a href="#settings" data-section="settings">
-        <span class="nav-icon" aria-hidden="true">⚙️</span>
-        <span class="nav-label">Settings</span>
       </a>
 
       <a href="#support" data-section="support">
@@ -143,35 +122,10 @@
             <button type="submit" class="play-btn">Submit Official Appeal</button>
           </div>
         </form>
-        <div id="appealStatusNotice" class="badge badge-success" style="margin-top:10px;" hidden></div>
+        <div id="banAppealStatusBox" hidden></div>
+        <div id="appealStatusNotice" role="status" class="badge badge-success" style="margin-top:10px;" hidden></div>
       </div>
     </div>
-
-    <!-- Persistent Laptop Topbar (Accessible across all tabs) -->
-    <header class="player-topbar" role="banner">
-      <div class="topbar-left">
-        <span id="topbarBreadcrumb" class="topbar-breadcrumb">Overview</span>
-      </div>
-      <div class="topbar-right">
-        <!-- Live SSE status pill -->
-        <span class="status-pill" id="playerLiveStatus" role="status">Connecting…</span>
-        
-        <!-- Notification Center Bell (Item 3) -->
-        <div class="notif-bell-wrap">
-          <button id="notificationBellBtn" class="notif-bell-btn" type="button" aria-label="Notifications" aria-expanded="false" aria-controls="notifDrawer">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-            <span id="notifBadge" class="notif-badge-pill" hidden>0</span>
-          </button>
-          <div id="notifDrawer" class="notif-drawer-dropdown" hidden>
-            <div class="notif-drawer-head">
-              <strong>Notifications</strong>
-              <button id="markNotifsReadBtn" class="ghost-btn" style="font-size:11px; padding:2px 8px;" type="button">Mark all read</button>
-            </div>
-            <div id="notifList"><div class="empty">No new notifications.</div></div>
-          </div>
-        </div>
-      </div>
-    </header>
 
     <!-- ==========================================================
          OVERVIEW
@@ -197,7 +151,6 @@
           <div class="risk-gauge" id="riskGauge"><div class="risk-gauge-value"><span id="riskScore">—</span><small>out of 100</small></div></div>
           <div class="risk-summary"><h2>Current risk level</h2><span class="risk-level-pill" id="riskLevel">WAITING</span><p id="riskTrendCaption">Latest completed match analysis</p><p id="riskTopFactor">Top factor: —</p><button type="button" class="overview-alert-link" data-detection-info>How this is calculated</button></div>
         </article>
-        <article class="overview-breakdown"><h2>Risk breakdown</h2><div class="risk-zones" aria-label="Risk factors"><div class="risk-zone"><span>Aim behavior</span><span class="risk-zone-track"><span class="risk-zone-fill" id="riskAimFill" style="width:0%"></span></span><strong id="riskAimValue">—</strong></div><div class="risk-zone"><span>Reaction time</span><span class="risk-zone-track"><span class="risk-zone-fill" id="riskReactionFill" style="width:0%"></span></span><strong id="riskReactionValue">—</strong></div><div class="risk-zone"><span>Movement</span><span class="risk-zone-track"><span class="risk-zone-fill" id="riskMovementFill" style="width:0%"></span></span><strong id="riskMovementValue">—</strong></div><div class="risk-zone"><span>Input patterns</span><span class="risk-zone-track"><span class="risk-zone-fill" id="riskInputFill" style="width:0%"></span></span><strong id="riskInputValue">—</strong></div><div class="risk-zone"><span>Account / IP</span><span class="risk-zone-track"><span class="risk-zone-fill" id="riskAccountFill" style="width:0%"></span></span><strong id="riskAccountValue">—</strong></div></div></article>
       </section>
 
       <section class="stats-grid overview-quick-stats">
@@ -348,20 +301,16 @@
 
     <section id="matches" class="player-view">
 
-      <div class="section-title">
-
-        <div>
-          <p class="eyebrow">MATCHES</p>
-
+      <header class="matches-header">
+        <div class="matches-heading">
           <h2>Completed matches</h2>
-
-          <p class="page-description">
-            Finished FPS Microgame sessions and their review status.
-          </p>
+          <p>Results and security reviews for finished sessions.</p>
         </div>
-        <div class="section-mascot" aria-hidden="true"><span>GG! Review your matches.</span><img id="matchesMascotSticker" src="public/avatars/chibi-female-2.png" alt=""></div>
-      </div>
-
+        <details class="matches-activity">
+          <summary>Processing &amp; performance</summary>
+          <div id="matchProcessingStatus" aria-live="polite">Loading recent match activity…</div>
+        </details>
+      </header>
 
       <div id="matchesList" class="match-grid">
         <div class="match-empty"><strong>No completed matches yet</strong><span>Finish a match to see your results and security review here.</span><a class="play-btn" href="#games" data-section="games">Play FPS Microgame</a></div>
@@ -498,7 +447,11 @@
             <div id="recoveryCodesGrid" class="recovery-codes-grid-theme"></div>
             <p style="font-size: 11px; margin-top: 8px; margin-bottom: 0;">Save these now. They will not be shown again.</p>
           </div>
-          <button id="generateRecoveryCodesBtn" type="button" class="play-btn">Generate 8 Recovery Codes</button>
+          <form id="generateRecoveryCodesForm">
+            <label for="recoveryCurrentPassword">Current password</label>
+            <input id="recoveryCurrentPassword" type="password" autocomplete="current-password" required>
+            <button id="generateRecoveryCodesBtn" type="submit" class="play-btn">Generate 8 Recovery Codes</button>
+          </form>
           <div id="recoveryCodesMsg" hidden></div>
         </article>
 
@@ -563,69 +516,35 @@
     </section>
 
     <section id="rewards" class="player-view">
-      <div class="section-title"><div><p class="eyebrow">PLAYER REWARDS</p><h2>Your rewards</h2><p class="page-description">Earn coins and XP for daily sign-ins and completed matches.</p></div><div class="section-mascot" aria-hidden="true"><span>Keep earning!</span><img id="rewardsMascotSticker" src="public/avatars/chibi-female-2.png" alt=""></div></div>
-      <div class="reward-summary" id="rewardSummary"><article class="reward-balance"><span>Coins</span><strong id="rewardCoins">—</strong></article><article class="reward-balance"><span>Experience</span><strong id="rewardXp">— XP</strong><small id="rewardLevel">Level 1</small></article><article class="reward-balance"><span>Daily streak</span><strong id="rewardStreak">— days</strong><small id="dailyRewardMessage">Daily bonus: 25 coins + 25 XP</small></article></div>
+      <div class="section-title"><div><h2>Rewards</h2><p class="page-description">Earn coins and XP from daily rewards and completed matches.</p></div></div>
+      <div class="reward-summary">
+        <article class="reward-balance"><span>Coins</span><strong id="rewardCoins">—</strong></article>
+        <article class="reward-balance"><span>Experience</span><strong id="rewardXp">—</strong><small id="rewardLevel"></small></article>
+        <article class="reward-balance"><span>Daily streak</span><strong id="rewardStreak">—</strong><small id="dailyRewardMessage">25 coins and 25 XP per UTC day</small><button class="play-btn" id="claimDailyReward" disabled>Claim daily reward</button></article>
+      </div>
       <section class="profile-card reward-store">
-        <div class="dashboard-panel-head">
-          <div>
-            <h2>Tactical Armory & Cosmetic Vault</h2>
-            <span class="dashboard-panel-caption">Unlock high-tier operator avatars and panoramic profile banners with earned match coins</span>
-          </div>
-          <div class="reward-filter-tabs" id="rewardFilterTabs">
-            <button type="button" class="reward-filter-pill active" data-filter="all">All Items</button>
-            <button type="button" class="reward-filter-pill" data-filter="avatar">👤 Operator Avatars</button>
-            <button type="button" class="reward-filter-pill" data-filter="banner">🖼️ Scene Banners</button>
-          </div>
+        <div class="rewards-toolbar">
+          <label>View <select id="rewardView"><option value="shop">Shop</option><option value="inventory">Inventory</option><option value="history">Transaction history</option></select></label>
+          <label id="rewardFilterLabel">Filter <select id="rewardFilter"><option value="collection">Operator collection</option><option value="all">All items</option><option value="avatar">Avatars</option><option value="banner">Backgrounds</option><option value="affordable">Affordable</option><option value="owned">Owned</option></select></label>
+          <button type="button" class="play-btn" id="reloadRewards">Refresh</button>
         </div>
-        <div class="reward-store-grid" id="rewardStore"><div class="empty">Loading rewards…</div></div>
+        <p id="rewardStatus" role="status">Loading rewards…</p>
+        <div id="rewardPreview" class="reward-pair" hidden>
+          <img id="rewardPreviewAvatar" alt="" hidden><div><strong id="rewardPreviewName">Profile preview</strong><br><small>Avatar and background preview</small></div>
+        </div>
+        <div class="reward-store-grid" id="rewardStore"></div>
+        <nav class="rewards-toolbar" id="rewardPages" aria-label="Shop pages" hidden>
+          <button type="button" id="rewardPrevious">Previous</button><span id="rewardPageCount" aria-live="polite"></span><button type="button" id="rewardNext">Next</button>
+        </nav>
+        <div id="rewardHistory" hidden></div>
       </section>
-      <!-- Combat Milestones & Daily Mission Bounties (Requirement 7) -->
-      <section class="profile-card reward-bounties-card">
-        <div class="dashboard-panel-head">
-          <div>
-            <h2>Combat Milestones &amp; Daily Mission Bounties</h2>
-            <span class="dashboard-panel-caption">Achieve operational tactical objectives in CyberStrike 3D to claim coin bounties and XP bonuses</span>
-          </div>
-          <div class="booster-status-pill" style="background:#EDE9FE; border:1px solid #DDD6FE; border-radius:999px; padding:6px 14px;">
-            <span style="color: #6D28D9; font-weight: 800; font-size:12px;">⚡ +25% XP Booster Active</span>
-          </div>
-        </div>
-        <div class="bounties-grid" id="rewardBountiesGrid">
-          <div class="bounty-card completed-bounty">
-            <div class="bounty-badge">DAILY MISSION</div>
-            <div class="bounty-title">🎯 Sharpshooter Protocol</div>
-            <p class="bounty-desc">Eliminate hostile tactical combat bots with &ge; 30% ballistic accuracy.</p>
-            <div class="bounty-meta">
-              <span class="bounty-reward">🪙 +50 Coins · ⭐ +100 XP</span>
-              <span class="bounty-status-tag">✅ Ready to Claim</span>
-            </div>
-            <button type="button" class="play-btn claim-bounty-btn" data-bounty="sharpshooter">Claim Bounty ✓</button>
-          </div>
-
-          <div class="bounty-card completed-bounty">
-            <div class="bounty-badge">FAIR PLAY STREAK</div>
-            <div class="bounty-title">🛡️ Guardian Verification</div>
-            <p class="bounty-desc">Complete 3 consecutive tactical combat sessions with 100% clean anti-cheat telemetry.</p>
-            <div class="bounty-meta">
-              <span class="bounty-reward">🪙 +40 Coins · 🛡️ +10 Honour</span>
-              <span class="bounty-status-tag">✅ Verified (3/3)</span>
-            </div>
-            <button type="button" class="play-btn claim-bounty-btn" data-bounty="guardian">Claim Bounty ✓</button>
-          </div>
-
-          <div class="bounty-card active-bounty">
-            <div class="bounty-badge">LIFETIME MILESTONE</div>
-            <div class="bounty-title">👑 Masterpiece Collector</div>
-            <p class="bounty-desc">Unlock a Mythic Masterpiece (Celestial Sovereign or Nebula Eternity) in the Tactical Armory.</p>
-            <div class="bounty-meta">
-              <span class="bounty-reward">🏆 Mythic Profile Flair</span>
-              <span class="bounty-status-tag" style="background: #EDE9FE; color: #6D28D9;">Vault Unlocked</span>
-            </div>
-            <a href="#rewardStore" class="play-btn ghost-bounty-btn" style="text-align: center; text-decoration: none;">Browse Masterpieces →</a>
-          </div>
-        </div>
-        <div id="bountyClaimMsg" style="display: none; margin-top: 12px; padding: 10px 14px; border-radius: 8px; font-weight: 600; font-size: 13px;"></div>
-      </section>
+      <dialog id="rewardPurchaseDialog" class="profile-card">
+        <form method="dialog">
+          <h3>Confirm purchase</h3>
+          <p id="rewardPurchaseDetails"></p>
+          <div class="rewards-toolbar"><button class="play-btn" value="cancel" autofocus>Cancel</button><button class="play-btn" value="buy">Buy item</button></div>
+        </form>
+      </dialog>
     </section>
 
     <section id="support" class="player-view">
@@ -663,15 +582,10 @@
 
         <section class="profile-card">
 
-          <div class="profile-banner" id="profileBanner" data-banner="frontline" aria-label="Profile banner preview"><img class="profile-banner-mascot" id="profileBannerMascot" src="public/avatars/chibi-female-2.png" alt="" aria-hidden="true"></div>
+          <div class="profile-banner" id="profileBanner" data-banner="sakura" aria-label="Sakura profile banner preview"></div>
 
           <div class="profile-identity">
-
-            <div
-              class="profile-avatar"
-              id="profileAvatar">
-              P
-            </div>
+            <div class="profile-avatar" id="profileAvatar" aria-label="Selected avatar"></div>
 
             <div>
               <h3 id="profileDisplayName">
@@ -687,14 +601,6 @@
 
           </div>
 
-          <div class="security-card-label">
-            ACCOUNT
-          </div>
-
-          <p class="page-description">
-            Player account and identity information.
-          </p>
-
         </section>
 
 
@@ -703,29 +609,19 @@
           <div class="appearance-group">
             <h3>Banner background</h3>
             <div class="appearance-options" id="bannerOptions" role="group" aria-label="Choose banner background">
-              <button class="appearance-option banner-option" type="button" data-banner="default-banner" aria-label="Default Proving Ground banner" title="Proving Ground (Default Starter)" aria-pressed="true"></button>
+              <button class="appearance-option banner-option" type="button" data-banner="sakura" aria-label="Cosmic Sakura banner" title="Cosmic Sakura" aria-pressed="true"></button>
             </div>
             <div class="reward-equipped-notice" style="margin: 8px 0 12px; font-size: 12px; color: #4C1D95; font-weight: 600; background: #FAF5FF; border: 1px solid #DDD6FE; border-radius: 8px; padding: 8px 12px;">
-              🌌 <strong>Cosmetic Vault:</strong> Unlock panoramic scene banners in the <a href="#rewards" style="color: #7C3AED; font-weight: 700; text-decoration: underline;">Tactical Armory</a> to equip them across your profile.
+              🌌 <strong>Sakura backgrounds:</strong> Cosmic, Frontline, Dawn, and Neon Sakura are included free.
             </div>
-            <label class="appearance-upload">Upload your banner
-              <input id="bannerUpload" type="file" accept="image/png,image/jpeg,image/webp">
-            </label>
-            <p class="appearance-hint">Choose a wide image. It is cropped to fit your profile banner.</p>
           </div>
 
           <div class="appearance-group">
             <h3>Avatar</h3>
             <div class="appearance-options" id="avatarOptions" role="group" aria-label="Choose avatar">
-              <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="default-operator" aria-label="Default Recruit Operative" title="Recruit Operative (Default Starter)" aria-pressed="true"><img src="public/avatars/default-operator.png" alt="Recruit Operative"></button>
+              <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="chibi-male-1" aria-label="Silver-haired chibi avatar" aria-pressed="false"><img src="public/avatars/chibi-male-1.png" alt="Silver-haired chibi avatar"></button>
+              <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="chibi-male-2" aria-label="Dark-haired chibi avatar" aria-pressed="true"><img src="public/avatars/chibi-male-2.png" alt="Dark-haired chibi avatar"></button>
             </div>
-            <div class="reward-equipped-notice" style="margin: 8px 0 12px; font-size: 12px; color: #4C1D95; font-weight: 600; background: #FAF5FF; border: 1px solid #DDD6FE; border-radius: 8px; padding: 8px 12px;">
-              👤 <strong>Operator Skins:</strong> Unlock custom combat avatars in the <a href="#rewards" style="color: #7C3AED; font-weight: 700; text-decoration: underline;">Tactical Armory</a> to equip them here.
-            </div>
-            <label class="appearance-upload">Upload profile photo
-              <input id="avatarUpload" type="file" accept="image/png,image/jpeg,image/webp">
-            </label>
-            <p class="appearance-hint">Square images work best. JPG, PNG, or WebP up to 10 MB.</p>
           </div>
 
           <div class="appearance-actions">
@@ -906,114 +802,6 @@
       </section>
     </section>
 
-    <!-- ============================================================
-         SETTINGS TAB (Requirement 5)
-    ============================================================ -->
-    <section id="settings" class="player-view" hidden>
-      <div class="section-title">
-        <div>
-          <p class="eyebrow">CONTROLS &amp; PREFERENCES</p>
-          <h2>Player Settings</h2>
-          <p class="page-description">Configure mouse sensitivity, key bindings, graphics quality, and HUD indicators.</p>
-        </div>
-        <div class="section-mascot" aria-hidden="true">
-          <span>Tune your setup!</span>
-          <img id="settingsMascotSticker" src="public/avatars/chibi-female-2.png" alt="">
-        </div>
-      </div>
-
-      <div class="settings-grid">
-        <!-- Input & Mouse Settings -->
-        <article class="profile-card settings-card">
-          <div class="dashboard-panel-head">
-            <div>
-              <h3>Mouse &amp; Audio</h3>
-              <span class="dashboard-panel-caption">Tune pointer sensitivity and volume (Desktop / Laptop only)</span>
-            </div>
-          </div>
-          <div class="setting-item">
-            <div class="setting-label-row">
-              <label for="mouseSensitivityInput">Mouse Sensitivity</label>
-              <span id="mouseSensDisplay" class="setting-val-badge">1.00</span>
-            </div>
-            <input type="range" id="mouseSensitivityInput" min="0.1" max="5.0" step="0.05" value="1.0" class="setting-range">
-            <small class="setting-hint">Adjusts crosshair aiming speed in CyberStrike 3D and FPS Microgame.</small>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-label-row">
-              <label for="volumeInput">Master Volume</label>
-              <span id="volumeDisplay" class="setting-val-badge">80%</span>
-            </div>
-            <input type="range" id="volumeInput" min="0" max="100" step="1" value="80" class="setting-range">
-            <small class="setting-hint">Audio volume for weapon fire, combat effects, and UI alerts.</small>
-          </div>
-        </article>
-
-        <!-- Graphics & Display Settings -->
-        <article class="profile-card settings-card">
-          <div class="dashboard-panel-head">
-            <div>
-              <h3>Display &amp; Graphics Preset</h3>
-              <span class="dashboard-panel-caption">Balance visual fidelity and framerate on your laptop display</span>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <label for="graphicsQualitySelect" style="font-size:13.5px; font-weight:700; color:#1E1B4B; display:block; margin-bottom:6px;">Graphics Quality Preset</label>
-            <select id="graphicsQualitySelect" class="form-input" style="width:100%; padding:8px 12px; border-radius:8px; border:1px solid #DDD6FE;">
-              <option value="High">High (Full Shadows &amp; Post-Processing)</option>
-              <option value="Medium">Medium (Balanced Framerate)</option>
-              <option value="Low">Low (Maximum Performance / Integrated GPU)</option>
-            </select>
-            <small class="setting-hint">Loaded dynamically when starting CyberStrike 3D.</small>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-toggle-row">
-              <div>
-                <strong>Show Performance HUD (FPS / Ping)</strong>
-                <p>Display live framerate and server ping in the game viewport.</p>
-              </div>
-              <input type="checkbox" id="showFpsToggle" checked class="setting-checkbox">
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <div class="fullscreen-tip-box">
-              <span class="tip-icon">💡</span>
-              <div>
-                <strong>Laptop Fullscreen Immersion</strong>
-                <p>Press <kbd>F11</kbd> in your browser for seamless Pointer Lock control and borderless view.</p>
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <!-- Key Bindings with Conflict Detection -->
-        <article class="profile-card settings-card full-width">
-          <div class="dashboard-panel-head">
-            <div>
-              <h3>Keyboard &amp; Mouse Bindings</h3>
-              <span class="dashboard-panel-caption">Click any binding and press a key to reassign. Automatic conflict detection prevents duplicate keys.</span>
-            </div>
-            <button id="resetKeybindingsBtn" class="ghost-btn" type="button">Reset to Defaults</button>
-          </div>
-
-          <div id="keybindingConflictAlert" class="alert-box error" hidden style="margin: 10px 0; padding:10px 14px; background:#FEE2E2; border:1px solid #FCA5A5; border-radius:8px; color:#B91C1C; font-size:12.5px;"></div>
-          <div id="settingsFeedback" class="alert-box success" hidden style="margin: 10px 0; padding:10px 14px; background:#DCFCE7; border:1px solid #86EFAC; border-radius:8px; color:#15803D; font-size:12.5px;"></div>
-
-          <div class="keybindings-grid" id="keybindingsGrid">
-            <!-- Bound dynamically -->
-          </div>
-
-          <div class="settings-actions">
-            <button id="saveSettingsBtn" type="button" class="play-btn">Save Preferences</button>
-          </div>
-        </article>
-      </div>
-    </section>
-
   </main>
 
   <!-- ============================================================
@@ -1068,10 +856,10 @@
   </div>
 
   <!-- Delete Account Password Confirmation Modal (Requirement 6) -->
-  <div id="deleteAccountModal" class="player-modal-backdrop" hidden style="display: none;">
+  <dialog id="deleteAccountModal" class="surface-dialog" aria-labelledby="deleteAccountTitle">
     <div class="player-modal-card">
       <div class="modal-head" style="background:#FEF2F2; border-bottom:1px solid #FCA5A5;">
-        <h2 style="color:#B91C1C;">⚠️ Delete Account &amp; Erase Data</h2>
+        <h2 id="deleteAccountTitle">Delete account and erase data</h2>
         <button id="closeDeleteModalBtn" class="close-modal-btn" type="button" aria-label="Close modal">&times;</button>
       </div>
       <div class="modal-body">
@@ -1080,26 +868,26 @@
           <label for="deleteAccountPassword" style="display:block; font-size:12.5px; font-weight:700; color:#1E1B4B; margin-bottom:6px;">Enter your password to confirm:</label>
           <input type="password" id="deleteAccountPassword" class="form-input" style="width:100%; padding:8px 12px; border:1px solid #DDD6FE; border-radius:8px;" placeholder="Your current account password" required autocomplete="current-password">
         </div>
-        <div id="deleteAccountError" class="alert-box error" hidden style="padding:8px 12px; background:#FEE2E2; border:1px solid #FCA5A5; border-radius:6px; color:#B91C1C; font-size:12px;"></div>
+        <div id="deleteAccountError" role="alert" class="alert-box error" hidden style="padding:8px 12px; background:#FEE2E2; border:1px solid #FCA5A5; border-radius:6px; color:#B91C1C; font-size:12px;"></div>
       </div>
       <div class="modal-foot">
         <button id="cancelDeleteAccountBtn" type="button" class="ghost-btn">Cancel</button>
         <button id="confirmDeleteAccountBtn" type="button" class="play-btn danger-btn">Permanently Erase My Account</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
-  <div id="detectionInfoModal" class="detection-modal-backdrop" hidden style="display: none;">
-    <section class="detection-modal" role="dialog" aria-modal="true" aria-labelledby="detectionInfoTitle">
+  <dialog id="detectionInfoModal" class="surface-dialog" aria-labelledby="detectionInfoTitle">
+    <section class="detection-modal">
       <div class="detection-modal-head"><div><p class="eyebrow">SECURITY EXPLAINED</p><h2 id="detectionInfoTitle">How SecureFPS detection works</h2></div><button type="button" class="detection-modal-close" id="detectionInfoClose" aria-label="Close explanation">×</button></div>
       <p>SecureFPS reviews gameplay telemetry after each completed match. It is a safety signal to help protect fair play, not an automatic ban decision.</p>
       <ul><li><strong>Gameplay patterns:</strong> aim behavior, reaction timing, movement, accuracy, and input consistency are evaluated.</li><li><strong>Risk score:</strong> the model combines those signals into a score from 0 to 100. Lower scores indicate lower risk.</li><li><strong>Review timing:</strong> the result appears after enough match events are recorded and the analysis completes.</li><li><strong>Privacy:</strong> account and sign-in signals are used only as supporting security context.</li></ul>
       <button type="button" class="play-btn" id="detectionInfoDone">Got it</button>
     </section>
-  </div>
+  </dialog>
 
   <!-- Match Detail Drill-Down Modal (Item 14) -->
-  <dialog id="matchDetailModal" class="match-detail-modal">
+  <dialog id="matchDetailModal" class="match-detail-modal" aria-labelledby="modalMatchTitle">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom: 1px solid var(--player-border, #334155); padding-bottom: 8px;">
       <h3 id="modalMatchTitle" style="margin:0; font-size: 1.15rem;">Match Detail Drill-Down</h3>
       <button id="closeMatchDetailBtn" type="button" class="ghost-btn" style="background:transparent; border:none; color:inherit; font-size:1.2rem; cursor:pointer;" aria-label="Close match detail">✕</button>
@@ -1183,13 +971,12 @@
 
         const sectionTitles = {
           overview: "Overview",
-          matches: "Matches & Performance History",
+          matches: "Match history",
           leaderboard: "Community Leaderboard",
           games: "Game Hub & FPS Arenas",
           rewards: "Rewards & Customization",
           fairplay: "Fair Play & Anti-Cheat Review",
           security: "Account Security & 2FA",
-          settings: "Game Settings & Controls",
           support: "Customer Support & FAQs",
           profile: "Player Profile & Privacy"
         };

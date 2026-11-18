@@ -174,12 +174,13 @@ export function promptAdminAction({
     modal = document.createElement('dialog');
     modal.id = 'adminActionModal';
     modal.className = 'admin-action-modal';
+    modal.setAttribute('aria-labelledby', 'adminActionTitle');
     document.body.appendChild(modal);
   }
 
   modal.innerHTML = `
     <form method="dialog" class="admin-modal-card" novalidate>
-      <h3>${escapeHtml(title)}</h3>
+      <h3 id="adminActionTitle">${escapeHtml(title)}</h3>
       <p class="muted">${escapeHtml(message)}</p>
       
       ${requireReason ? `
@@ -258,6 +259,7 @@ export function promptAdminAction({
       } catch (err) {}
     }
 
+    if (passwordInput) passwordInput.value = "";
     modal.close();
     try {
       await onConfirm({
@@ -268,9 +270,10 @@ export function promptAdminAction({
       });
     } catch (err) {
       console.error('[AdminDialog] Confirmation error:', err);
-      alert(`Action failed: ${err.message || 'Server error'}`);
+      window.showAppAlert(`Action failed: ${err.message || 'Server error'}`, { tone: "error" });
     }
   };
 
-  modal.showModal();
+  if (!modal.open) modal.showModal();
+  cancelBtn.focus();
 }

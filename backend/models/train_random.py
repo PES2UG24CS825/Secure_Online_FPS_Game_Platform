@@ -123,7 +123,7 @@ model.fit(
     y_train
 )
 
-print("\nModel Training Completed ✅")
+print("\nModel Training Completed")
 
 # ─────────────────────────────────────────────
 # 6. PREDICTION
@@ -163,7 +163,7 @@ for f, imp in sorted(zip(FEATURES, model.feature_importances_), key=lambda x: -x
 # ─────────────────────────────────────────────
 joblib.dump(model, MODEL_PATH)
 
-print(f"\nModel Saved → {MODEL_PATH}")
+print(f"\nModel Saved -> {MODEL_PATH}")
 
 # ─────────────────────────────────────────────
 # 11. SAMPLE PREDICTION

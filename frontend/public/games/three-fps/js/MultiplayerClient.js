@@ -162,7 +162,8 @@ class RemotePlayer {
     while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
     while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
     this.currentRotation += rotDiff * smoothFactor;
-    this.mesh.rotation.y = this.currentRotation;
+    // The operator faces +Z and network yaw comes from a camera facing -Z.
+    this.mesh.rotation.y = this.currentRotation + Math.PI;
 
     this.currentPitch += (targetPitch - this.currentPitch) * smoothFactor;
     this.isCrouching = targetCrouch;
@@ -262,24 +263,41 @@ class MultiplayerClient {
       savedUrl = null;
     }
     const primaryUrl = customUrl || savedUrl || `${protocol}//${host}:4001`;
+    const apiBase = window.SecureFPSGame?.telemetry?.apiBase || `${protocol}//${host}:5000/api`;
 
     console.log(`[SecureFPS Multiplayer] Connecting to authoritative server at ${primaryUrl}...`);
     this.isConnecting = true;
 
-    // Retrieve active handshake token if issued by Flask /api/game/start
-    const authToken = sessionStorage.getItem('securefps_game_token') || sessionStorage.getItem('token') || '';
-
-    this.connectingPromise = new Promise((resolve, reject) => {
+    const fetchTicket = async () => {
+      const response = await fetch(`${apiBase}/game/socket-ticket`, { credentials: 'include' });
+      const body = await response.json();
+      if (!response.ok || !body.socket_token) {
+        throw new Error(body.message || 'Multiplayer sign-in is unavailable.');
+      }
+      return body.socket_token;
+    };
+    this.connectingPromise = (async () => {
+      const serverHost = new URL(primaryUrl).hostname;
+      const bothLoopback = ['localhost', '127.0.0.1'].includes(host) && ['localhost', '127.0.0.1'].includes(serverHost);
+      if (serverHost !== host && !bothLoopback) {
+        throw new Error('Use the multiplayer service on the same host as the dashboard.');
+      }
+      return fetchTicket();
+    })().then(authToken => new Promise((resolve, reject) => {
+      let initialToken = authToken;
       const sock = io(primaryUrl, {
         reconnection: true,
         reconnectionAttempts: 8,
         reconnectionDelay: 1000,
         timeout: 6000,
         transports: ['websocket', 'polling'],
-        auth: {
-          token: authToken,
-          userId: sessionStorage.getItem('securefps_user_id') || undefined,
-          name: sessionStorage.getItem('securefps_player_name') || 'Operator'
+        auth: callback => {
+          if (initialToken) {
+            callback({ token: initialToken });
+            initialToken = null;
+          } else {
+            fetchTicket().then(token => callback({ token })).catch(() => callback({}));
+          }
         }
       });
 
@@ -314,17 +332,18 @@ class MultiplayerClient {
       };
 
       const onConnectError = (err) => {
-        this.isConnecting = false;
-        this.connectingPromise = null;
-        console.warn(`[SecureFPS Multiplayer] Connection failed: ${err.message}`);
-        window.dispatchEvent(new CustomEvent('fps:mp_error', {
-          detail: { message: `Multiplayer server offline (:4001). Error: ${err.message}` }
-        }));
+        sock.disconnect();
         reject(err);
       };
 
-      sock.once('connect', onConnect);
+      sock.on('connect', onConnect);
       sock.once('connect_error', onConnectError);
+    })).catch(err => {
+      window.dispatchEvent(new CustomEvent('fps:mp_error', { detail: { message: err.message } }));
+      throw err;
+    }).finally(() => {
+      this.isConnecting = false;
+      this.connectingPromise = null;
     });
 
     return this.connectingPromise;
@@ -464,6 +483,10 @@ class MultiplayerClient {
       if (snapshot.serverTime) {
         this.serverTimeOffset = snapshot.serverTime - nowClient;
       }
+      const gameMode = window.SecureFPSGame?.gameMode;
+      if (gameMode?.currentMode === 'multiplayer' && gameMode.matchActive && Number.isFinite(snapshot.remainingMs)) {
+        gameMode.timeRemaining = snapshot.remainingMs / 1000;
+      }
 
       if (Array.isArray(snapshot.players)) {
         snapshot.players.forEach(p => {
@@ -477,6 +500,8 @@ class MultiplayerClient {
             remote = this.remotePlayers.get(p.id);
           }
           if (remote) {
+            remote.kills = p.kills ?? 0;
+            remote.deaths = p.deaths ?? 0;
             remote.addSnapshot(snapshot.serverTime || nowClient, p.x, p.y, p.z, p.yaw, p.pitch, p.crouch, p.hp);
             if (p.weaponKey) {
               remote.setWeapon(p.weaponKey);
@@ -502,12 +527,8 @@ class MultiplayerClient {
     sock.on('player:respawned', (data) => {
       const myId = this.localPlayerId || sock.id;
       if (data.id === myId) {
-        if (window.SecureFPSGame?.controller) {
-          window.SecureFPSGame.controller.respawn(new THREE.Vector3(data.x, data.y, data.z));
-        }
-        if (window.SecureFPSGame?.gameMode) {
-          window.SecureFPSGame.gameMode.respawnPlayer(window.SecureFPSGame.controller);
-        }
+        const game = window.SecureFPSGame;
+        game?.gameMode?.respawnPlayer(game.controller, new THREE.Vector3(data.x, data.y, data.z));
       } else {
         const remote = this.remotePlayers.get(data.id);
         if (remote) {
@@ -563,7 +584,7 @@ class MultiplayerClient {
         }
         window.SecureFPSGame.gameMode.hasSpawnProtection = false;
         const attackerPos = data.attackerPos ? new THREE.Vector3(data.attackerPos.x, data.attackerPos.y, data.attackerPos.z) : null;
-        window.SecureFPSGame.gameMode.damagePlayer(data.damage, data.attackerName, window.SecureFPSGame.controller, attackerPos);
+        window.SecureFPSGame.gameMode.damagePlayer(data.damage, data.attackerName, window.SecureFPSGame.controller, attackerPos, data.currentHealth);
       }
     });
 
@@ -572,6 +593,9 @@ class MultiplayerClient {
       if (window.SecureFPSGame?.weapons) {
         window.SecureFPSGame.weapons.triggerHitmarkerHUD(data.headshot);
       }
+      window.dispatchEvent(new CustomEvent('fps:telemetry_hit', {
+        detail: { damage: data.damage, headshot: !!data.headshot, target: data.victimId }
+      }));
       if (window.SecureFPSGame?.hud && data.damage) {
         const sx = window.innerWidth / 2 + (Math.random() * 40 - 20);
         const sy = window.innerHeight / 2 - 30 + (Math.random() * 20 - 10);
@@ -633,7 +657,26 @@ class MultiplayerClient {
     sock.on('match:ended', (data) => {
       console.log(`[Match Lifecycle] Match ended (${data.reason}). Final scoreboard received:`, data.scoreboard);
       this.clearRemotePlayers();
-      window.dispatchEvent(new CustomEvent('fps:match_ended', { detail: data }));
+      const gameMode = window.SecureFPSGame?.gameMode;
+      if (gameMode?.currentMode !== 'multiplayer' || !gameMode.matchActive) return;
+      const local = data.scoreboard.find(row => row.id === (this.localPlayerId || sock.id));
+      const winner = data.scoreboard.find(row => row.isWinner);
+      if (!local) return;
+      gameMode.completeMatch(data.reason, {
+        winner: winner?.name ?? 'Draw',
+        isVictory: local.isWinner,
+        isDraw: !winner,
+        kills: local.kills,
+        deaths: local.deaths,
+        assists: local.assists,
+        shots: local.shotsFired,
+        hits: local.shotsHit,
+        accuracy: local.accuracy / 100,
+        kdr: local.deaths ? local.kills / local.deaths : local.kills,
+        score: local.score,
+        duration: data.durationSeconds,
+        mvp: data.scoreboard[0]
+      });
     });
   }
 

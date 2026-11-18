@@ -19,9 +19,11 @@ from database.db import (
 )
 from services.risk_scoring import clamp_risk_score, classify_risk_score
 from services.auth_security import log_admin_action, admin_audit_log
+from services.admin_permissions import OPERATIONAL_PERMISSIONS, has_operational_permission, normal_admin_permissions
 from services.csrf import verify_csrf_and_origin
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
+ADMIN_PROCESS_STARTED = time.monotonic()
 
 # In-memory cache for overview statistics (30-second TTL)
 _OVERVIEW_CACHE = {
@@ -241,6 +243,21 @@ def check_super_admin_guard(target_admin_id, current_admin_user, action_name):
     return True, None
 
 
+ADMIN_OPERATION_PERMISSIONS = {
+    "list_players": "players:read", "get_player_details": "players:read",
+    "suspend_player": "players:suspend", "unsuspend_player": "players:suspend",
+    "issue_player_warning": "players:warn", "record_investigation_note": "players:notes",
+    "adjust_player_honour": "players:account", "reset_player_mfa": "players:account",
+    "revoke_player_sessions": "players:account", "force_player_password_reset": "players:account",
+    "review_appeal": "appeals:review", "review_anticheat_decision": "alerts:review",
+    "get_threat_monitoring": "threats:read", "get_analytics_reports": "analytics:read",
+    "get_audit_log": "audit:read", "list_recent_logins": "audit:read",
+    "server_health": "health:read", "get_multiplayer_rooms": "health:read",
+    "request_approval": "approvals:request", "export_players_csv": "database:export",
+    "export_sessions_csv": "database:export", "export_audit_log_csv": "database:export",
+}
+
+
 @admin_bp.before_request
 def check_admin_access():
     if request.method == "OPTIONS":
@@ -254,6 +271,11 @@ def check_admin_access():
     admin = current_admin()
     if not admin:
         return jsonify({"message": "Admin authorization required."}), 403
+    if admin.get("role") == "demo_admin" and request.method not in {"GET", "HEAD"}:
+        return jsonify({"message": "Demo administrator access is read-only."}), 403
+    permission = ADMIN_OPERATION_PERMISSIONS.get((request.endpoint or "").split(".")[-1])
+    if permission and not has_operational_permission(admin, permission, write=request.method not in {"GET", "HEAD"}):
+        return jsonify({"message": "This operation is disabled for your administrator role.", "permission_denied": permission}), 403
 
 
 # =========================================================================
@@ -595,6 +617,11 @@ def get_player_details(player_id):
 
     # 4. Rewards history
     reward_logs = list(reward_transactions.find({"user_id": pid}).sort("created_at", -1).limit(20))
+    rewards = player.get("rewards") or {}
+    reward_logs.extend(rewards.get("purchase_history") or [])
+    reward_logs.extend(rewards.get("adjustments") or [])
+    reward_logs.sort(key=lambda row: format_iso(row.get("created_at")) or "", reverse=True)
+    reward_logs = reward_logs[:20]
 
     # 5. Login history & active sessions
     logins = list(login_history.find({"user_id": pid}).sort("created_at", -1).limit(20))
@@ -742,7 +769,7 @@ def _verify_target_not_admin(pid):
     target = users.find_one({"_id": pid})
     if not target:
         return None, jsonify({"message": "Player not found."}), 404
-    if target.get("role") in ["admin", "demo_admin", "super_admin"]:
+    if target.get("role") in ["admin", "normal_admin", "demo_admin", "super_admin"]:
         return None, jsonify({"message": "Cannot perform administrative enforcement actions on an administrator account."}), 403
     return target, None, 200
 
@@ -1505,6 +1532,7 @@ def revoke_player_sessions(player_id):
 
 
 @admin_bp.post("/players/<player_id>/force-password-reset")
+@require_admin_write
 def force_player_password_reset(player_id):
     """
     Flag player account to require a password reset on next sign-in.
@@ -1515,9 +1543,9 @@ def force_player_password_reset(player_id):
     except Exception:
         return jsonify({"message": "Invalid player ID format."}), 400
 
-    target = users.find_one({"_id": pid})
-    if not target:
-        return jsonify({"message": "Player not found."}), 404
+    target, error, status = _verify_target_not_admin(pid)
+    if error is not None:
+        return error, status
 
     users.update_one(
         {"_id": pid},
@@ -1706,7 +1734,7 @@ def bulk_player_action():
             continue
 
         target = users.find_one({"_id": pid})
-        if not target or target.get("role") in ["admin", "demo_admin", "super_admin"]:
+        if not target or target.get("role") in ["admin", "normal_admin", "demo_admin", "super_admin"]:
             continue
 
         if action == "suspend":
@@ -1956,43 +1984,10 @@ def server_health():
     active socket rooms, and worker status.
     """
     db_ok = False
+    database_counts = {"total_users": None, "total_sessions": None}
     try:
         db.command("ping")
-        db_ok = True
-    except Exception:
-        db_ok = False
-
-    # Check multiplayer server status (Node server on port 3000)
-    import urllib.request
-    multiplayer_status = {"status": "offline", "rooms": 0, "clients": 0, "latency_ms": None}
-    try:
-        t0 = time.time()
-        req = urllib.request.Request("http://127.0.0.1:3000/status", headers={"User-Agent": "SecureFPS-Admin/1.0"})
-        with urllib.request.urlopen(req, timeout=1.0) as resp:
-            t1 = time.time()
-            if resp.status == 200:
-                body = json.loads(resp.read().decode("utf-8"))
-                multiplayer_status = {
-                    "status": "online",
-                    "rooms": body.get("rooms", 0),
-                    "clients": body.get("clients", 0),
-                    "uptime_seconds": body.get("uptime", 0),
-                    "latency_ms": round((t1 - t0) * 1000, 1)
-                }
-    except Exception:
-        multiplayer_status = {
-            "status": "idle",
-            "rooms": 1,
-            "clients": 0,
-            "latency_ms": None,
-            "note": "Multiplayer server ready on demand or running locally"
-        }
-
-    return jsonify({
-        "status": "healthy" if db_ok else "degraded",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "database": {
-            "status": "connected" if db_ok else "disconnected",
+        database_counts = {
             "total_users": users.count_documents({
                 "role": "player",
                 "account_status": {"$ne": "deleted"},
@@ -2000,8 +1995,52 @@ def server_health():
                 "name": {"$not": {"$regex": r"^(Test Player|Test Soldier|Demo Player|Deleted Player)"}}
             }),
             "total_sessions": game_sessions.count_documents({})
+        }
+        db_ok = True
+    except Exception:
+        db_ok = False
+
+    game_server_url = os.getenv("GAME_SERVER_URL", "http://127.0.0.1:4001").rstrip("/")
+    import urllib.request
+    multiplayer_status = {"status": "offline", "rooms": None, "clients": None, "latency_ms": None}
+    try:
+        t0 = time.monotonic()
+        req = urllib.request.Request(f"{game_server_url}/status", headers={"User-Agent": "SecureFPS-Admin/1.0"})
+        with urllib.request.urlopen(req, timeout=1.0) as resp:
+            t1 = time.monotonic()
+            if resp.status == 200:
+                body = json.loads(resp.read().decode("utf-8"))
+                multiplayer_status = {
+                    "status": "online",
+                    "rooms": body.get("rooms"),
+                    "clients": body.get("clients"),
+                    "uptime_seconds": body.get("uptime"),
+                    "latency_ms": round((t1 - t0) * 1000, 1)
+                }
+    except Exception:
+        pass
+
+    from models.ml_model import probe_model
+
+    ml_status = {"status": "unavailable", "model_version": None}
+    try:
+        version = (system_config.find_one({"type": "global_config"}) or {}).get("active_model_version")
+        result = probe_model(version)
+        if result.get("risk_score") is not None:
+            ml_status = {"status": "operational", "model_version": result.get("model_version")}
+    except Exception:
+        ml_status["status"] = "failed"
+
+    return jsonify({
+        "status": "healthy" if db_ok and multiplayer_status["status"] == "online"
+        and ml_status["status"] == "operational" else "degraded",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "database": {
+            "status": "connected" if db_ok else "disconnected",
+            **database_counts,
         },
         "multiplayer_server": multiplayer_status,
+        "ml": ml_status,
         "demo_mode_enabled": os.environ.get("SECUREFPS_ENABLE_DEMO", "0").lower() in ("1", "true")
     })
 
@@ -2385,9 +2424,14 @@ def get_analytics_reports():
     flagged_sessions = game_events.count_documents({"analysis_type": "game_session", "risk_score": {"$gte": 70}})
 
     # False positive calculations based on resolved appeals
-    total_appeals = ban_appeals.count_documents({})
+    total_appeals = ban_appeals.count_documents({"status": {"$in": ["approved", "rejected"]}})
     approved_appeals = ban_appeals.count_documents({"status": "approved"})
-    fp_rate = round((approved_appeals / max(total_appeals, 1)) * 100, 1)
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    trend_dates = [today - timedelta(days=n) for n in range(6, -1, -1)]
+    trend_counts = [
+        security_events.count_documents({"created_at": {"$gte": day, "$lt": day + timedelta(days=1)}})
+        for day in trend_dates
+    ]
 
     return jsonify({
         "player_distribution": {
@@ -2406,10 +2450,10 @@ def get_analytics_reports():
         "false_positive_metrics": {
             "total_appeals_reviewed": total_appeals,
             "false_positives_overturned": approved_appeals,
-            "model_precision_estimate": max(0.0, round(100.0 - fp_rate, 1))
+            "model_precision_estimate": None
         },
-        "trend_days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-        "trend_events": [14, 22, 19, 8, 31, 26, 12]
+        "trend_days": [day.strftime("%a %d") for day in trend_dates],
+        "trend_events": trend_counts
     })
 
 
@@ -2710,7 +2754,8 @@ def delete_admin_account(admin_id):
 @require_super_admin
 def get_roles_permissions():
     """Super Admin: Centralized role and permission definitions."""
-    roles = list(admin_permissions.find({}, {"_id": 0}))
+    roles = list(admin_permissions.find({"role": {"$ne": "NORMAL_ADMIN"}}, {"_id": 0}))
+    roles.append({"role": "NORMAL_ADMIN", "permissions": normal_admin_permissions()})
     return jsonify({"roles": roles})
 
 
@@ -2720,17 +2765,17 @@ def update_role_permissions(role_key):
     """Super Admin: Update granular permissions for Normal Admin."""
     admin = current_admin()
     role_key = role_key.upper()
-    if role_key == "SUPER_ADMIN":
+    if role_key != "NORMAL_ADMIN":
         return jsonify({"message": "Super Administrator permissions are immutable root permissions."}), 403
 
     data = request.get_json(silent=True) or {}
     permissions = data.get("permissions")
-    if not isinstance(permissions, dict):
+    if not isinstance(permissions, dict) or any(key not in OPERATIONAL_PERMISSIONS or type(value) is not bool for key, value in permissions.items()):
         return jsonify({"message": "Permissions must be a key-value dictionary."}), 400
 
     admin_permissions.update_one(
         {"role": role_key},
-        {"$set": {"permissions": permissions, "updated_at": datetime.now(timezone.utc)}}
+        {"$set": {"permissions": {**normal_admin_permissions(), **permissions}, "updated_at": datetime.now(timezone.utc)}}, upsert=True
     )
 
     log_admin_action(
@@ -2751,10 +2796,28 @@ def update_role_permissions(role_key):
 def get_ml_models_catalog():
     """Super Admin: Deployed model inspection, performance metrics, and version catalog."""
     models = list(model_versions.find({}, {"_id": 0}).sort("deployed_at", -1))
-    active_model = next((m for m in models if m.get("is_active")), models[0] if models else {})
+
 
     cfg = system_config.find_one({"type": "global_config"}) or {}
     risk_cfg = cfg.get("risk_engine", {})
+    from models.ml_model import artifact_v2, probe_model
+
+    version = cfg.get("active_model_version") or ("v2.0-rf" if artifact_v2 is not None else "v1.5-rf")
+    try:
+        probe_model(version)
+    except Exception:
+        version = None
+    for model in models:
+        model["is_active"] = model.get("version") == version
+        for metric in ("accuracy", "precision", "recall", "f1_score", "false_positive_rate", "false_negative_rate"):
+            model.pop(metric, None)
+    active_model = next((model for model in models if model["is_active"]), {})
+    version = cfg.get("active_model_version") or "v2.0-rf"
+    for model in models:
+        model["is_active"] = model.get("version") == version
+        for metric in ("accuracy", "precision", "recall", "f1_score", "false_positive_rate", "false_negative_rate"):
+            model.pop(metric, None)
+    active_model = next((model for model in models if model["is_active"]), {})
 
     return jsonify({
         "active_model": active_model,
@@ -2788,9 +2851,15 @@ def rollback_ml_model():
     if not target:
         return jsonify({"message": f"Model version '{target_version}' not found in catalog."}), 404
 
-    # Deactivate all and activate target
-    model_versions.update_many({}, {"$set": {"is_active": False}})
-    model_versions.update_one({"version": target_version}, {"$set": {"is_active": True}})
+    from models.ml_model import probe_model
+
+    try:
+        probe_model(target_version)
+    except Exception:
+        return jsonify({"message": "The selected local artifact failed its compatibility probe."}), 409
+    system_config.update_one(
+        {"type": "global_config"}, {"$set": {"active_model_version": target_version}}, upsert=True
+    )
 
     log_admin_action(
         admin["_id"],
@@ -2861,7 +2930,7 @@ def update_risk_engine_config():
     high = risk_data.get("high_threshold", 85)
     crit = risk_data.get("critical_threshold", 95)
 
-    if not (0 < low < med < high < crit <= 100):
+    if not all(type(value) in (int, float) for value in (low, med, high, crit)) or not (0 < low < med < high < crit <= 100):
         return jsonify({"message": "Thresholds must be strictly ascending: 0 < Low < Medium < High < Critical <= 100."}), 400
 
     system_config.update_one(
@@ -2997,7 +3066,7 @@ def toggle_emergency_lockdown():
         "success": True,
         "lockdown": enable_lockdown,
         "emergency_lockdown": enable_lockdown,
-        "message": "EMERGENCY PLATFORM LOCKDOWN ENGAGED. Matchmaking and external sessions quarantined." if enable_lockdown else "Platform lockdown disengaged. Normal operations restored."
+        "message": "Lockdown is active. New player sign-ins, game sessions, and room admissions are blocked. Established gameplay connections continue." if enable_lockdown else "Platform lockdown disengaged. Normal operations restored."
     })
 
 
@@ -3007,45 +3076,39 @@ def toggle_emergency_lockdown():
 @require_super_admin
 def get_system_control_metrics():
     """Super Admin: Live backend resources, database health, API latency, and ML inference metrics."""
-    import sys
     import platform
+    import sys
+    from models.ml_model import probe_model
 
-    # Database stats
-    db_stats = {}
+    stats = {}
+    latency_ms = None
+    model_version = None
+    inference_ms = None
     try:
-        db_stats = db.command("dbstats")
+        started = time.monotonic()
+        db.command("ping")
+        latency_ms = round((time.monotonic() - started) * 1000, 2)
+        stats = db.command("dbstats")
     except Exception:
-        db_stats = {"collections": 18, "objects": 4800, "dataSize": 10485760}
+        pass
+    try:
+        version = (system_config.find_one({"type": "global_config"}) or {}).get("active_model_version")
+        started = time.monotonic()
+        model_version = probe_model(version).get("model_version")
+        inference_ms = round((time.monotonic() - started) * 1000, 2)
+    except Exception:
+        pass
 
     return jsonify({
-        "runtime": {
-            "python_version": sys.version.split()[0],
-            "platform": platform.platform(),
-            "server_engine": "Flask WSGI / Werkzeug Multi-threaded",
-            "uptime_seconds": round(time.time() - getattr(g, "server_start_time", time.time() - 7200)),
-            "status": "HEALTHY"
-        },
-        "database": {
-            "status": "CONNECTED",
-            "collections": db_stats.get("collections", 18),
-            "documents": db_stats.get("objects", 4800),
-            "storage_mb": round(db_stats.get("dataSize", 10485760) / (1024 * 1024), 2),
-            "connection_pool_active": 4,
-            "latency_ms": 2.4
-        },
-        "api_gateway": {
-            "latency_p50_ms": 14,
-            "latency_p95_ms": 38,
-            "throughput_rps": 24.5,
-            "error_rate_pct": 0.02
-        },
-        "ml_inference": {
-            "model_version": "v2.0-rf",
-            "engine": "Scikit-Learn Random Forest",
-            "average_inference_ms": 3.8,
-            "queue_depth": 0,
-            "status": "OPTIMAL"
-        }
+        "runtime": {"python_version": sys.version.split()[0], "platform": platform.platform(),
+                    "uptime_seconds": round(time.monotonic() - ADMIN_PROCESS_STARTED)},
+        "database": {"status": "CONNECTED" if latency_ms is not None else "UNAVAILABLE",
+                     "collections": stats.get("collections"), "documents": stats.get("objects"),
+                     "storage_mb": round(stats["storageSize"] / 1048576, 2) if "storageSize" in stats else None,
+                     "latency_ms": latency_ms},
+        "api_gateway": {"latency_p95_ms": None},
+        "ml_inference": {"model_version": model_version, "probe_inference_ms": inference_ms,
+                         "status": "AVAILABLE" if inference_ms is not None else "UNAVAILABLE"},
     })
 
 
@@ -3061,7 +3124,8 @@ def list_system_backups():
             {
                 "backup_id": b.get("backup_id"),
                 "type": b.get("type"),
-                "status": b.get("status"),
+                "scope": b.get("scope") if b.get("archive") else None,
+                "status": b.get("status") if b.get("archive") else "unavailable",
                 "database_name": b.get("database_name"),
                 "size_mb": b.get("size_mb"),
                 "collections_count": b.get("collections_count"),
@@ -3074,10 +3138,10 @@ def list_system_backups():
             for b in backups
         ],
         "schedule": {
-            "frequency": "Daily at 00:00 UTC",
-            "retention_policy": "30 days rolling retention",
-            "storage_target": "Encrypted Immutable Snapshot Store",
-            "last_verified": "Verified automatically on completion"
+            "frequency": "Manual only",
+            "retention_policy": "Unavailable",
+            "storage_target": "Configured local backup directory" if os.getenv("SECUREFPS_BACKUP_DIR") else "Unavailable",
+            "last_verified": "See verified backup entries",
         }
     })
 
@@ -3086,49 +3150,23 @@ def list_system_backups():
 @require_super_admin
 def create_backup_snapshot():
     """Super Admin: Trigger on-demand verified database snapshot."""
+    from services.database_backup import backup_and_verify
+
     admin = current_admin()
-    now = datetime.now(timezone.utc)
-    bak_id = f"bak_{now.strftime('%Y%m%d_%H%M%S')}"
-
-    # Calculate actual counts
-    doc_count = sum(db[col].count_documents({}) for col in ["users", "game_sessions", "game_telemetry", "security_events", "admin_audit_log"])
-
-    backup_entry = {
-        "backup_id": bak_id,
-        "type": "manual_snapshot",
-        "status": "verified",
-        "scope": "full_cluster",
-        "database_name": "secure_fps",
-        "size_mb": round(43.2 + (doc_count * 0.001), 2),
-        "collections_count": 18,
-        "documents_count": doc_count,
-        "checksum": f"sha256:{hash(bak_id) & 0xffffffffffffffff:016x}{hash(now.isoformat()) & 0xffffffffffffffff:016x}",
-        "created_at": now,
-        "retention_days": 30,
-        "created_by": admin.get("email")
-    }
-
-    system_backups.insert_one(backup_entry)
-
-    log_admin_action(
-        admin["_id"],
-        admin["email"],
-        None,
-        "create_backup_snapshot",
-        details={"backup_id": bak_id, "size_mb": backup_entry["size_mb"], "documents_count": doc_count}
-    )
-
-    return jsonify({
-        "success": True,
-        "message": f"Verified snapshot '{bak_id}' created successfully.",
-        "backup": {
-            "backup_id": bak_id,
-            "status": "verified",
-            "size_mb": backup_entry["size_mb"],
-            "documents_count": doc_count,
-            "created_at": format_iso(now)
-        }
-    }), 201
+    directory = os.getenv("SECUREFPS_BACKUP_DIR")
+    if not directory:
+        return jsonify({"message": "Backup storage is unavailable. Configure SECUREFPS_BACKUP_DIR."}), 503
+    try:
+        entry = backup_and_verify(db, directory)
+    except Exception:
+        return jsonify({"message": "Backup creation or the isolated restore check failed."}), 503
+    entry.update({"created_at": datetime.now(timezone.utc), "type": "logical_database", "created_by": admin.get("email")})
+    system_backups.insert_one(entry.copy())
+    log_admin_action(admin["_id"], admin.get("email"), None, "create_backup_snapshot", {
+        "backup_id": entry["backup_id"], "checksum": entry["checksum"],
+    })
+    entry["created_at"] = format_iso(entry["created_at"])
+    return jsonify({"success": True, "message": "Logical backup created and restored in an isolated database.", "backup": entry}), 201
 
 
 # --- Platform Configuration ---
@@ -3174,3 +3212,135 @@ def update_platform_config():
 
     return jsonify({"success": True, "message": "Platform configuration updated successfully."})
 
+
+@admin_bp.get("/rewards/shop")
+def reward_shop_review():
+    import re
+    from routes.player_routes import REWARD_STORE
+    from services.reward_catalog import reward_catalog
+
+    search = request.args.get("q", "").strip()[:120]
+    condition = {"description": {"$regex": re.escape(search), "$options": "i"}} if search else {}
+    rows = list(reward_transactions.find(condition).sort("created_at", -1).limit(40))
+    for field in ("purchase_history", "adjustments"):
+        rows.extend(users.aggregate([
+            {"$project": {"entries": f"$rewards.{field}"}},
+            {"$unwind": "$entries"},
+            {"$set": {"entries.user_id": "$_id"}},
+            {"$replaceRoot": {"newRoot": "$entries"}},
+            {"$match": condition},
+            {"$sort": {"created_at": -1}},
+            {"$limit": 40},
+        ]))
+    rows.sort(key=lambda row: format_iso(row.get("created_at")) or "", reverse=True)
+    pending = game_sessions.find(
+        {"reward_credit.status": {"$in": ["failed", "pending"]}},
+        {"session_id": 1, "user_id": 1, "reward_credit.status": 1},
+    ).sort("started_at", -1).limit(40)
+    return jsonify({
+        "can_manage": current_admin().get("role") != "demo_admin" and (
+            current_admin().get("role") == "super_admin" or current_admin().get("is_super_admin") is True
+        ),
+        "items": [{"id": key, **item} for key, item in reward_catalog(REWARD_STORE).items()],
+        "transactions": [{
+            "player": str(row.get("user_id", "")), "type": row.get("type"),
+            "description": row.get("description"), "coins": row.get("coins", 0),
+            "xp": row.get("xp", 0), "created_at": format_iso(row.get("created_at")),
+        } for row in rows[:40]],
+        "pending": [{
+            "id": str(row["_id"]), "session_id": row.get("session_id"), "player": str(row["user_id"]),
+            "status": row["reward_credit"]["status"],
+        } for row in pending],
+    })
+
+
+@admin_bp.put("/rewards/shop/<item_id>")
+@require_super_admin
+def save_reward_shop_item(item_id):
+    import re
+    from routes.player_routes import REWARD_STORE
+    from services.reward_catalog import ASSET_DIR, catalog, reward_catalog
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not re.fullmatch(r"[a-z0-9_-]{1,64}", item_id):
+        return jsonify({"message": "Enter a valid catalog ID and item details."}), 400
+    admin = current_admin()
+    reason = data.get("reason")
+    if not isinstance(reason, str) or len(reason.strip()) < 10:
+        return jsonify({"message": "Enter a reason of at least 10 characters."}), 400
+    previous = reward_catalog(REWARD_STORE).get(item_id)
+    name, price, enabled = data.get("name"), data.get("price"), data.get("enabled")
+    if not isinstance(name, str) or not name.strip() or len(name) > 80 or type(price) is not int or not 1 <= price <= 100000 or type(enabled) is not bool:
+        return jsonify({"message": "Enter a name, an integer price, and an enabled state."}), 400
+    changes = {"name": name.strip(), "price": price, "enabled": enabled}
+    if previous is None:
+        category, filename = data.get("category"), data.get("filename")
+        if category not in {"avatar", "banner"} or not isinstance(filename, str) or not re.fullmatch(r"[a-zA-Z0-9_-]+\.(png|webp|jpg)", filename):
+            return jsonify({"message": "Choose a cosmetic slot and a local artwork filename."}), 400
+        if not (ASSET_DIR / filename).is_file():
+            return jsonify({"message": "Upload the artwork to frontend/public/cosmetics first."}), 400
+        changes.update({"category": category, "preview": f"/public/cosmetics/{filename}"})
+
+    catalog.update_one({"_id": item_id}, {"$set": {"item_id": item_id, **changes}}, upsert=True)
+    log_admin_action(admin["_id"], admin["email"], None, "reward_catalog_updated", {
+        "item_id": item_id, "reason": reason.strip(), "before": previous, "after": changes,
+    })
+    return jsonify({"message": "Catalog item saved."})
+
+
+@admin_bp.post("/rewards/adjustments")
+@require_super_admin
+def adjust_reward_coins():
+    import re
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"message": "Enter adjustment details."}), 400
+    player_id, coins, reason, key = (data.get(field) for field in ("player_id", "coins", "reason", "request_id"))
+    if (
+        not ObjectId.is_valid(player_id) or type(coins) is not int or not 0 < abs(coins) <= 100000
+        or not isinstance(reason, str) or not 10 <= len(reason.strip()) <= 300
+        or not isinstance(key, str) or not re.fullmatch(r"[a-zA-Z0-9-]{16,80}", key)
+    ):
+        return jsonify({"message": "Enter a valid player ID, nonzero amount, and a reason."}), 400
+    admin = current_admin()
+    if not verify_admin_reauth(admin, reauth_password=data.get("password")):
+        return jsonify({"message": "Administrator reauthentication failed."}), 403
+    player_id = ObjectId(player_id)
+    row = {
+        "type": "adjustment", "coins": coins, "xp": 0, "description": reason.strip(),
+        "request_id": key, "actor_id": admin["_id"], "created_at": datetime.now(timezone.utc),
+    }
+    query = {"_id": player_id, "role": {"$in": ["player", "demo_player"]}, "rewards.adjustments.request_id": {"$ne": key}}
+    if coins < 0:
+        query["rewards.coins"] = {"$gte": -coins}
+    result = users.update_one(query, {"$inc": {"rewards.coins": coins}, "$push": {"rewards.adjustments": row}})
+    if not result.modified_count:
+        if users.find_one({"_id": player_id, "rewards.adjustments": {"$elemMatch": {
+            "request_id": key, "coins": coins, "description": reason.strip(), "actor_id": admin["_id"],
+        }}}, {"_id": 1}):
+            return jsonify({"message": "Adjustment already recorded."})
+        return jsonify({"message": "Player unavailable, balance insufficient, or request already used."}), 409
+    log_admin_action(admin["_id"], admin["email"], player_id, "reward_coin_adjustment", {
+        "coins": coins, "reason": reason.strip(), "request_id": key,
+    })
+    return jsonify({"message": "Coin adjustment recorded."})
+
+
+@admin_bp.post("/rewards/credits/<credit_id>/retry")
+@require_super_admin
+def retry_reward_credit(credit_id):
+    from services.reward_credits import apply_match_credit
+
+    if not ObjectId.is_valid(credit_id):
+        return jsonify({"message": "Invalid match ID."}), 400
+    match = game_sessions.find_one({"_id": ObjectId(credit_id), "status": "completed", "reward_credit": {"$exists": True}})
+    if not match:
+        return jsonify({"message": "No recorded credit exists for this match."}), 404
+    try:
+        apply_match_credit(match)
+    except Exception:
+        return jsonify({"message": "Credit remains pending or failed."}), 503
+    admin = current_admin()
+    log_admin_action(admin["_id"], admin["email"], match["user_id"], "reward_credit_retry", {"session_id": match["session_id"]})
+    return jsonify({"message": "Credit recorded."})

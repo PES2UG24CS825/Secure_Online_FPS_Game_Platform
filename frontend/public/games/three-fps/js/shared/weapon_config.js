@@ -20,7 +20,7 @@
       slot: 1,
       damage: 25,
       headshotMultiplier: 2.0,
-      fireRate: 0.11, // seconds (~545 RPM -> ~110ms)
+      fireRate: 0.13, // ~460 RPM
       bulletSpeed: 240,
       range: 160,
       tracerColor: 0xffb703,
@@ -28,7 +28,7 @@
       tracerRadius: 0.016,
       magSize: 30,
       magAmmo: 30,
-      reserveAmmo: 120,
+      reserveAmmo: 180,
       reloadDuration: 1.6,
       baseSpread: 0.004,
       recoilKickZ: 0.08,
@@ -44,7 +44,7 @@
       slot: 2,
       damage: 18,
       headshotMultiplier: 2.0,
-      fireRate: 0.07, // seconds (~850 RPM -> ~70ms)
+      fireRate: 0.09, // ~665 RPM
       bulletSpeed: 175,
       range: 110,
       tracerColor: 0xffaa00,
@@ -52,7 +52,7 @@
       tracerRadius: 0.014,
       magSize: 35,
       magAmmo: 35,
-      reserveAmmo: 140,
+      reserveAmmo: 210,
       reloadDuration: 1.3,
       baseSpread: 0.007,
       recoilKickZ: 0.05,
@@ -68,7 +68,7 @@
       slot: 3,
       damage: 80,
       headshotMultiplier: 1.375, // 110 Headshot
-      fireRate: 1.1, // seconds (~55 RPM -> ~1100ms)
+      fireRate: 1.25, // bolt-action ~48 RPM
       bulletSpeed: 420,
       range: 300,
       tracerColor: 0x00f0ff,
@@ -76,7 +76,7 @@
       tracerRadius: 0.022,
       magSize: 5,
       magAmmo: 5,
-      reserveAmmo: 25,
+      reserveAmmo: 30,
       reloadDuration: 2.4,
       baseSpread: 0.0005,
       recoilKickZ: 0.18,
@@ -92,7 +92,7 @@
       slot: 4,
       damage: 22,
       headshotMultiplier: 2.0, // 44 Headshot
-      fireRate: 0.15, // seconds (~400 RPM -> ~150ms)
+      fireRate: 0.18, // semi-auto ~330 RPM
       bulletSpeed: 150,
       range: 90,
       tracerColor: 0xffd166,
@@ -100,7 +100,7 @@
       tracerRadius: 0.013,
       magSize: 17,
       magAmmo: 17,
-      reserveAmmo: 68,
+      reserveAmmo: 85,
       reloadDuration: 1.2,
       baseSpread: 0.005,
       recoilKickZ: 0.06,

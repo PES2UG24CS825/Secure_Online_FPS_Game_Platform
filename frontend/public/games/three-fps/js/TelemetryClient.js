@@ -102,7 +102,7 @@ class TelemetryClient {
     });
   }
 
-  async startSession() {
+  async startSession(mode = "bots", difficulty = "normal") {
     try {
       if (this.isSessionActive && this.sessionId) {
         await this.endGameSession(false);
@@ -115,7 +115,7 @@ class TelemetryClient {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ game: 'CyberStrike_3D' })
+        body: JSON.stringify({ game: 'CyberStrike_3D', mode, difficulty })
       });
 
       if (!response.ok) {

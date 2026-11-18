@@ -39,10 +39,15 @@
       </form>
       <div id="message" class="message" aria-live="polite"></div>
       <div id="mfaSetup" class="mfa-setup hidden">
-        <h3>Set up your authenticator</h3>
+        <h3 tabindex="-1">Set up your authenticator</h3>
         <p>Scan this QR code using Google Authenticator, Microsoft Authenticator, or another TOTP app.</p>
         <img id="qrImage" alt="MFA QR code">
         <p class="manual-key">Manual key: <code id="manualKey"></code></p>
+        <details class="auth-recovery-codes" hidden>
+          <summary>Save your recovery codes</summary>
+          <p>Keep these single-use codes somewhere private. You can use one when your authenticator is unavailable.</p>
+          <ul id="signupRecoveryCodes"></ul>
+        </details>
         <a class="primary-btn link-btn" href="login.html">Continue to login</a>
       </div>
       <p class="switch">Already registered? <a href="login.html">Sign in</a></p>

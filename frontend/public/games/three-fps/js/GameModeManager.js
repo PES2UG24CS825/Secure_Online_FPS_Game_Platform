@@ -62,6 +62,7 @@ class GameModeManager {
     this.healthFill = document.getElementById('health-fill');
     this.armourVal = document.getElementById('armour-val');
     this.armourFill = document.getElementById('armour-fill');
+    this.armourCard = this.armourVal?.closest('.vital-card') || null;
     this.matchKills = document.getElementById('match-kills');
     this.matchDeaths = document.getElementById('match-deaths');
     this.matchAssists = document.getElementById('match-assists');
@@ -75,8 +76,9 @@ class GameModeManager {
     this.initEvents();
   }
 
-  setMode(mode) {
+  setMode(mode, duration = 720) {
     this.currentMode = mode;
+    this.matchDuration = duration;
     this.resetMatch();
   }
 
@@ -109,7 +111,7 @@ class GameModeManager {
     this.hasSpawnProtection = true;
     this.spawnProtectionTimer = this.spawnProtectionDuration;
     this.playerHealth = this.maxHealth;
-    this.playerArmour = this.maxArmour;
+    this.playerArmour = this.currentMode === 'multiplayer' ? 0 : this.maxArmour;
     this.isDead = false;
     this.kills = 0;
     this.deaths = 0;
@@ -146,7 +148,7 @@ class GameModeManager {
     this.isMatchCompleted = false;
     this.timeRemaining = this.matchDuration;
     this.playerHealth = this.maxHealth;
-    this.playerArmour = this.maxArmour;
+    this.playerArmour = this.currentMode === 'multiplayer' ? 0 : this.maxArmour;
     this.isDead = false;
     this.targetKills = this.currentMode === 'solo' ? 0 : 25;
     this.hasSpawnProtection = true;
@@ -185,7 +187,7 @@ class GameModeManager {
       this.timeRemaining -= delta;
       if (this.timeRemaining <= 0) {
         this.timeRemaining = 0;
-        this.completeMatch('time_expired');
+        if (this.currentMode !== 'multiplayer') this.completeMatch('time_expired');
       }
       this.updateTimerDisplay();
     }
@@ -234,27 +236,33 @@ class GameModeManager {
     }
   }
 
-  damagePlayer(amount, attackerName, controller, attackerPos = null) {
+  damagePlayer(amount, attackerName, controller, attackerPos = null, authoritativeHealth = null) {
     // If player is dead, match completed, or has spawn protection active, ignore damage completely
     if (this.isDead || this.hasSpawnProtection || this.isMatchCompleted || !this.matchActive) return;
 
-    // Tactical Armour Absorption: absorbs 65% while AP > 0, remainder penetrates to HP
-    let absorbed = 0;
-    let healthDmg = amount;
-    if (this.playerArmour > 0) {
-      const wantAbsorb = amount * 0.65;
-      if (wantAbsorb <= this.playerArmour) {
-        this.playerArmour -= wantAbsorb;
-        absorbed = wantAbsorb;
-        healthDmg = amount - absorbed;
-      } else {
-        absorbed = this.playerArmour;
-        this.playerArmour = 0;
-        healthDmg = amount - absorbed;
+    if (authoritativeHealth !== null) {
+      if (authoritativeHealth >= this.playerHealth && this.playerHealth > 0) return;
+      this.playerHealth = Math.max(0, authoritativeHealth);
+      this.playerArmour = 0;
+    } else {
+      // Tactical Armour Absorption: absorbs 65% while AP > 0, remainder penetrates to HP
+      let absorbed = 0;
+      let healthDmg = amount;
+      if (this.playerArmour > 0) {
+        const wantAbsorb = amount * 0.65;
+        if (wantAbsorb <= this.playerArmour) {
+          this.playerArmour -= wantAbsorb;
+          absorbed = wantAbsorb;
+          healthDmg = amount - absorbed;
+        } else {
+          absorbed = this.playerArmour;
+          this.playerArmour = 0;
+          healthDmg = amount - absorbed;
+        }
       }
-    }
 
-    this.playerHealth = Math.max(0, this.playerHealth - healthDmg);
+      this.playerHealth = Math.max(0, this.playerHealth - healthDmg);
+    }
     this.damageReceived += amount;
     this.updateHUD();
 
@@ -331,19 +339,19 @@ class GameModeManager {
       if (this.respawnTimerEl) this.respawnTimerEl.textContent = `${count}s`;
       if (count <= 0 || this.isMatchCompleted) {
         clearInterval(interval);
-        if (!this.isMatchCompleted && this.matchActive) {
+        if (!this.isMatchCompleted && this.matchActive && this.currentMode !== 'multiplayer') {
           this.respawnPlayer(controller);
         }
       }
     }, 1000);
   }
 
-  respawnPlayer(controller) {
+  respawnPlayer(controller, position) {
     if (this.isMatchCompleted || !this.matchActive) return;
 
     this.isDead = false;
     this.playerHealth = this.maxHealth;
-    this.playerArmour = this.maxArmour;
+    this.playerArmour = this.currentMode === 'multiplayer' ? 0 : this.maxArmour;
     this.hasSpawnProtection = true;
     this.spawnProtectionTimer = this.spawnProtectionDuration;
     this.currentStreak = 0;
@@ -356,7 +364,7 @@ class GameModeManager {
     this.updateSpawnProtectionHUD();
 
     if (controller) {
-      controller.respawn(new THREE.Vector3(0, 1.8, 28));
+      controller.respawn(position ?? new THREE.Vector3(0, 1.8, 28));
       controller.resetKeys();
       controller.requestLock();
     }
@@ -424,7 +432,7 @@ class GameModeManager {
     }
 
     // Check score limit (25 confirmed kills ends match immediately!)
-    if (this.targetKills > 0 && this.kills >= this.targetKills) {
+    if (this.currentMode !== 'multiplayer' && this.targetKills > 0 && this.kills >= this.targetKills) {
       this.completeMatch('score_limit_reached');
     }
   }
@@ -465,6 +473,9 @@ class GameModeManager {
   }
 
   updateHUD() {
+    if (this.armourCard) {
+      this.armourCard.style.display = this.currentMode === 'multiplayer' ? 'none' : '';
+    }
     if (this.healthVal) {
       this.healthVal.textContent = Math.round(this.playerHealth);
       if (this.playerHealth <= 30) this.healthVal.classList.add('low');
@@ -497,7 +508,7 @@ class GameModeManager {
     this.matchTimerEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
 
-  completeMatch(reason = 'score_limit_reached') {
+  completeMatch(reason = 'score_limit_reached', serverResult = null) {
     if (this.isMatchCompleted) return;
     this.matchActive = false;
     this.isMatchCompleted = true;
@@ -583,7 +594,7 @@ class GameModeManager {
     }
 
     window.dispatchEvent(new CustomEvent('fps:game_completed', {
-      detail: completionDetail
+      detail: serverResult ? { ...completionDetail, ...serverResult } : completionDetail
     }));
   }
 }

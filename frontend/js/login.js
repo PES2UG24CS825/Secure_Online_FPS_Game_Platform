@@ -31,7 +31,10 @@ loginForm.addEventListener("submit", async (event) => {
         "This account is active in another browser. Sign in here and end that session?",
         { title: "Replace active session?", confirmText: "Sign in here", tone: "warning" }
       );
-      if (!confirmed) throw error;
+      if (!confirmed) {
+        message.textContent = "Sign-in cancelled. Your other session is still active.";
+        return;
+      }
       data = await api("/auth/login", {
         method: "POST",
         body: JSON.stringify({ ...credentials, takeover: true })
@@ -50,6 +53,7 @@ loginForm.addEventListener("submit", async (event) => {
     if (error.status === 409) {
       window.showAppAlert(error.message, { title: "Account already signed in", tone: "warning" });
     }
+  } finally {
     if (submitButton) {
       submitButton.disabled = false;
       submitButton.textContent = "Continue to MFA →";
