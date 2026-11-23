@@ -50,3 +50,21 @@ test("uses localhost as the fallback for file URLs", () => {
     origin: "null",
   }), "http://127.0.0.1:5000/api");
 });
+
+test("uses remote public HTTPS origin for Cloudflare Tunnel", () => {
+  assert.equal(loadApiBase({
+    protocol: "https:",
+    port: "",
+    hostname: "remote-combat.trycloudflare.com",
+    origin: "https://remote-combat.trycloudflare.com",
+  }), "https://remote-combat.trycloudflare.com/api");
+});
+
+test("uses unified reverse proxy origin for port 8080", () => {
+  assert.equal(loadApiBase({
+    protocol: "http:",
+    port: "8080",
+    hostname: "127.0.0.1",
+    origin: "http://127.0.0.1:8080",
+  }), "http://127.0.0.1:8080/api");
+});

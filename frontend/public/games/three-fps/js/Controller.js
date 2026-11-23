@@ -42,6 +42,7 @@ class Controller {
     this.isSprinting = false;
     this.isCrouching = false;
     this.isLocked = false;
+    this.speedMultiplier = 1.0;
 
     // Input state
     this.keys = {
@@ -301,6 +302,9 @@ class Controller {
     } else if (this.isSprinting) {
       targetSpeed = this.sprintSpeed;
     }
+    if (this.speedMultiplier && this.speedMultiplier > 1.0) {
+      targetSpeed *= this.speedMultiplier;
+    }
 
     // Smooth crouch eye height transition
     const targetHeight = this.isCrouching ? this.crouchEyeHeight : this.standingEyeHeight;
@@ -324,7 +328,7 @@ class Controller {
     const targetVel = moveDir.clone().multiplyScalar(targetSpeed);
 
     if (moveDir.lengthSq() > 0) {
-      const accel = this.isGrounded ? this.groundAcceleration : this.airAcceleration;
+      const accel = (this.isGrounded ? this.groundAcceleration : this.airAcceleration) * (this.speedMultiplier || 1.0);
       currentHorizVel.lerp(targetVel, Math.min(1.0, accel * delta / (targetSpeed || 1)));
     } else {
       // Apply friction to stop smoothly
@@ -599,9 +603,17 @@ class Controller {
   }
 
   respawn(spawnPos) {
-    this.position.copy(spawnPos || new THREE.Vector3(0, 1.8, 28));
+    const target = spawnPos || new THREE.Vector3(0, 1.8, 28);
+    this.position.copy(target);
     this.velocity.set(0, 0, 0);
-    this.yaw = 0;
+    // Face inwards towards arena center (0, 0, 0) on spawn so player never runs into back walls or backwards
+    if (Math.abs(target.z) > 10) {
+      this.yaw = target.z < 0 ? Math.PI : 0;
+    } else if (Math.abs(target.x) > 10) {
+      this.yaw = target.x < 0 ? -Math.PI / 2 : Math.PI / 2;
+    } else {
+      this.yaw = 0;
+    }
     this.pitch = 0;
     this.isGrounded = true;
     this.resetKeys();

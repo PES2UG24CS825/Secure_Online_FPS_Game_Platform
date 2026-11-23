@@ -80,17 +80,27 @@ if os.getenv("PYTEST_CURRENT_TEST") or app.config.get("TESTING") or os.getenv("R
 limiter.init_app(app)
 
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "").strip()
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", os.getenv("CORS_ORIGINS", "")).strip()
+
 cors_origins = [
     re.compile(r"^https?://(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$"),
+    re.compile(r"^https?://[a-zA-Z0-9-]+\.trycloudflare\.com$"),
     "http://127.0.0.1:5500",
     "http://localhost:5500",
     "http://127.0.0.1:3000",
     "http://localhost:3000",
     "http://127.0.0.1:5000",
     "http://localhost:5000",
+    "http://127.0.0.1:8080",
+    "http://localhost:8080",
 ]
 if frontend_origin:
     cors_origins.append(frontend_origin)
+if allowed_origins_env:
+    for orig in allowed_origins_env.split(","):
+        orig_clean = orig.strip()
+        if orig_clean and orig_clean not in cors_origins:
+            cors_origins.append(orig_clean)
 
 CORS(
     app,
@@ -348,6 +358,34 @@ def ensure_default_admin():
             logger.info("[SecureFPS] Configured administrator account ready: %s", email)
     except Exception as exc:
         logger.error("[SecureFPS] Could not ensure the default admin account: %s", exc)
+
+    super_email = os.getenv("SUPER_ADMIN_EMAIL", "superadmin@securefps.io").strip().lower()
+    super_password = os.getenv("SUPER_ADMIN_PASSWORD", "")
+    super_mfa_secret = os.getenv("SUPER_ADMIN_MFA_SECRET", "").strip()
+    if super_password and super_mfa_secret:
+        if not validate_password(super_password):
+            raise ValueError("SUPER_ADMIN_PASSWORD does not satisfy the configured password policy")
+        pyotp.TOTP(super_mfa_secret)
+        users.update_one(
+            {"email": super_email},
+            {
+                "$setOnInsert": {
+                    "name": "Super Administrator",
+                    "email": super_email,
+                    "password_hash": hash_password(super_password),
+                    "mfa_secret": super_mfa_secret,
+                    "mfa_enabled": True,
+                    "created_at": datetime.now(timezone.utc),
+                },
+                "$set": {
+                    "role": "super_admin",
+                    "is_super_admin": True,
+                    "account_status": "active",
+                    "revoked": False,
+                },
+            },
+            upsert=True,
+        )
 
 
 @app.get("/api/health")

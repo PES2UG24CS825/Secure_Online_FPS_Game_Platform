@@ -4,9 +4,44 @@ import os
 from pathlib import Path
 import struct
 from uuid import uuid4
-from zipfile import ZIP_DEFLATED, ZipFile
+from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile
 
 from bson import BSON
+from bson.errors import InvalidBSON
+
+
+def archive_is_recoverable(directory, archive_name, checksum):
+    if not isinstance(archive_name, str) or Path(archive_name).name != archive_name:
+        return False
+    folder = Path(directory).resolve()
+    archive_path = (folder / archive_name).resolve()
+    if archive_path.parent != folder or not archive_path.is_file():
+        return False
+    if not isinstance(checksum, str) or not checksum.startswith("sha256:"):
+        return False
+    try:
+        with archive_path.open("rb") as stream:
+            actual_checksum = hashlib.file_digest(stream, "sha256").hexdigest()
+        if actual_checksum != checksum.removeprefix("sha256:"):
+            return False
+        with ZipFile(archive_path) as archive:
+            if archive.testzip() is not None or "manifest.bson" not in archive.namelist():
+                return False
+            manifest = BSON(archive.read("manifest.bson")).decode()
+            collections = manifest.get("collections")
+            if not isinstance(collections, dict):
+                return False
+            names = set(archive.namelist())
+            return all(
+                isinstance(info, dict)
+                and isinstance(info.get("entry"), str)
+                and info["entry"] in names
+                and isinstance(info.get("count"), int)
+                and info["count"] >= 0
+                for info in collections.values()
+            )
+    except (OSError, BadZipFile, InvalidBSON, KeyError, TypeError, ValueError):
+        return False
 
 
 def backup_and_verify(database, directory):

@@ -59,8 +59,13 @@ class RemotePlayer {
 
   addSnapshot(serverTime, x, y, z, yaw, pitch, isCrouching, health) {
     this.health = (health !== undefined) ? health : this.health;
-    if (this.operator && typeof this.operator.takeDamage === 'function' && this.health <= 0) {
-      this.operator.die();
+    if (this.operator) {
+      if (this.health <= 0 && !this.operator.isDead) {
+        this.operator.die();
+      } else if (this.health > 0 && this.operator.isDead) {
+        this.operator.respawn(new THREE.Vector3(Number(x), Number(y), Number(z)));
+        if (this.mesh) this.mesh.visible = true;
+      }
     }
     this.snapshotBuffer.push({
       time: serverTime,
@@ -206,6 +211,8 @@ class MultiplayerClient {
     this.isHost = false;
     this.isReady = false;
     this.remotePlayers = new Map();
+    this.confirmedShotIds = new Set();
+    this.confirmedHitIds = new Set();
 
     // 30Hz network sync rate (~33.33ms)
     this.syncInterval = 33.33;
@@ -253,6 +260,9 @@ class MultiplayerClient {
 
     const host = window.location.hostname || '127.0.0.1';
     const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+    const port = window.location.port;
+    const isDirectFlask = port === '5000';
+    const isPublicOrProxy = protocol === 'https:' || port === '' || port === '80' || port === '443' || port === '8080';
 
     let savedUrl = localStorage.getItem('securefps_server_url');
     if (savedUrl && savedUrl.includes(':4000')) {
@@ -262,8 +272,19 @@ class MultiplayerClient {
     if (savedUrl && (savedUrl.includes('localhost') || savedUrl.includes('127.0.0.1')) && host !== 'localhost' && host !== '127.0.0.1') {
       savedUrl = null;
     }
-    const primaryUrl = customUrl || savedUrl || `${protocol}//${host}:4001`;
-    const apiBase = window.SecureFPSGame?.telemetry?.apiBase || `${protocol}//${host}:5000/api`;
+
+    // On Cloudflare Tunnel / Public HTTPS / Reverse Proxy, Socket.IO routes through the reverse proxy on window.location.origin
+    // On direct local Flask port 5000 without proxy, fallback to :4001
+    const defaultMultiplayerUrl = isPublicOrProxy
+      ? window.location.origin
+      : (isDirectFlask ? `${protocol}//${host}:4001` : window.location.origin);
+
+    const primaryUrl = customUrl || window.SECUREFPS_MULTIPLAYER_URL || savedUrl || defaultMultiplayerUrl;
+    const apiBase = window.SecureFPSGame?.telemetry?.apiBase || window.APP_CONFIG?.apiBase || (
+      isPublicOrProxy || (isDirectFlask && window.location.origin)
+        ? `${window.location.origin}/api`
+        : `${protocol}//${host}:5000/api`
+    );
 
     console.log(`[SecureFPS Multiplayer] Connecting to authoritative server at ${primaryUrl}...`);
     this.isConnecting = true;
@@ -277,7 +298,7 @@ class MultiplayerClient {
       return body.socket_token;
     };
     this.connectingPromise = (async () => {
-      const serverHost = new URL(primaryUrl).hostname;
+      const serverHost = new URL(primaryUrl, window.location.origin).hostname;
       const bothLoopback = ['localhost', '127.0.0.1'].includes(host) && ['localhost', '127.0.0.1'].includes(serverHost);
       if (serverHost !== host && !bothLoopback) {
         throw new Error('Use the multiplayer service on the same host as the dashboard.');
@@ -380,7 +401,16 @@ class MultiplayerClient {
 
       if (data.players) {
         data.players.forEach(p => {
-          if (p.id !== sock.id) this.addOrUpdatePlayer(p);
+          if (p.id !== sock.id) {
+            this.addOrUpdatePlayer(p);
+            const remote = this.remotePlayers.get(p.id);
+            if (remote) {
+              remote.health = p.health ?? remote.health;
+              remote.kills = p.kills ?? 0;
+              remote.deaths = p.deaths ?? 0;
+              remote.assists = p.assists ?? 0;
+            }
+          }
         });
       }
 
@@ -460,6 +490,8 @@ class MultiplayerClient {
     sock.on('game:start', (data) => {
       console.log(`[SecureFPS Multiplayer] Match starting in room ${data.roomCode}!`);
       this.clearRemotePlayers();
+      this.confirmedShotIds.clear();
+      this.confirmedHitIds.clear();
 
       const myId = this.localPlayerId || sock.id;
       data.players.forEach(p => {
@@ -535,8 +567,19 @@ class MultiplayerClient {
           remote.position.set(data.x, data.y, data.z);
           remote.health = 100;
           remote.snapshotBuffer = [];
+          if (Math.abs(data.z) > 10) {
+            remote.currentRotation = data.z < 0 ? Math.PI : 0;
+          } else if (Math.abs(data.x) > 10) {
+            remote.currentRotation = data.x < 0 ? -Math.PI / 2 : Math.PI / 2;
+          } else {
+            remote.currentRotation = 0;
+          }
+          if (remote.operator && typeof remote.operator.respawn === 'function') {
+            remote.operator.respawn(remote.position);
+          }
           if (remote.mesh) {
             remote.mesh.position.set(data.x, data.y, data.z);
+            remote.mesh.rotation.y = remote.currentRotation + Math.PI;
             remote.mesh.visible = true;
           }
         }
@@ -576,6 +619,15 @@ class MultiplayerClient {
     });
 
     // --- Damage / Combat Events ---
+    sock.on('player:shot_confirmed', (data) => {
+      const shotId = data?.shotId;
+      if (typeof shotId !== 'string' || this.confirmedShotIds.has(shotId)) return;
+      this.confirmedShotIds.add(shotId);
+      window.dispatchEvent(new CustomEvent('fps:telemetry_fire', {
+        detail: { weapon: data.weaponKey, shot_id: shotId }
+      }));
+    });
+
     sock.on('player:hurt', (data) => {
       if (window.SecureFPSGame?.gameMode) {
         if (!window.SecureFPSGame.gameMode.matchActive) {
@@ -589,12 +641,20 @@ class MultiplayerClient {
     });
 
     sock.on('player:hit_confirmed', (data) => {
+      const shotId = data?.shotId;
+      if (typeof shotId !== 'string' || this.confirmedHitIds.has(shotId)) return;
+      this.confirmedHitIds.add(shotId);
       if (this.audio) this.audio.playHitmarker(data.headshot);
       if (window.SecureFPSGame?.weapons) {
         window.SecureFPSGame.weapons.triggerHitmarkerHUD(data.headshot);
       }
       window.dispatchEvent(new CustomEvent('fps:telemetry_hit', {
-        detail: { damage: data.damage, headshot: !!data.headshot, target: data.victimId }
+        detail: {
+          damage: data.damage,
+          headshot: !!data.headshot,
+          target: data.victimId,
+          shot_id: shotId,
+        }
       }));
       if (window.SecureFPSGame?.hud && data.damage) {
         const sx = window.innerWidth / 2 + (Math.random() * 40 - 20);
@@ -633,9 +693,11 @@ class MultiplayerClient {
         if (this.audio?.playEliminationSound) {
           this.audio.playEliminationSound(data.headshot);
         }
-        if (window.SecureFPSGame?.gameMode) {
-          window.SecureFPSGame.gameMode.onKill({ victim: data.victimName, headshot: data.headshot, weapon: data.weapon });
-        }
+        // Emit fps:kill once. GameModeManager listens to fps:kill and calls onKill(detail),
+        // and TelemetryClient streams authoritative enemy_killed events for genuine combat stats.
+        window.dispatchEvent(new CustomEvent('fps:kill', {
+          detail: { victim: data.victimName, headshot: Boolean(data.headshot), weapon: data.weapon }
+        }));
       }
 
       if (window.SecureFPSGame?.hud?.addKillFeedEntry) {
@@ -658,24 +720,34 @@ class MultiplayerClient {
       console.log(`[Match Lifecycle] Match ended (${data.reason}). Final scoreboard received:`, data.scoreboard);
       this.clearRemotePlayers();
       const gameMode = window.SecureFPSGame?.gameMode;
-      if (gameMode?.currentMode !== 'multiplayer' || !gameMode.matchActive) return;
-      const local = data.scoreboard.find(row => row.id === (this.localPlayerId || sock.id));
-      const winner = data.scoreboard.find(row => row.isWinner);
-      if (!local) return;
+      if (gameMode?.currentMode !== 'multiplayer') return;
+
+      const myId = this.localPlayerId || sock.id;
+      const myName = (typeof sessionStorage !== 'undefined' && sessionStorage?.getItem('securefps_player_name')) || this.playerName;
+      let local = data.scoreboard?.find(row => row.id === myId);
+      if (!local && myName) {
+        local = data.scoreboard?.find(row => row.name === myName);
+      }
+      if (!local && data.scoreboard?.length > 0) {
+        local = data.scoreboard[0];
+      }
+      const winner = data.scoreboard?.find(row => row.isWinner) || data.scoreboard?.[0];
+      const isVictory = local ? Boolean(local.isWinner) : (winner?.name === myName);
+
       gameMode.completeMatch(data.reason, {
-        winner: winner?.name ?? 'Draw',
-        isVictory: local.isWinner,
-        isDraw: !winner,
-        kills: local.kills,
-        deaths: local.deaths,
-        assists: local.assists,
-        shots: local.shotsFired,
-        hits: local.shotsHit,
-        accuracy: local.accuracy / 100,
-        kdr: local.deaths ? local.kills / local.deaths : local.kills,
-        score: local.score,
-        duration: data.durationSeconds,
-        mvp: data.scoreboard[0]
+        winner: winner?.name ?? (isVictory ? myName : 'Draw'),
+        isVictory: isVictory,
+        isDraw: !winner || (winner.kills === 0 && data.reason === 'time_expired'),
+        kills: local?.kills ?? gameMode.kills,
+        deaths: local?.deaths ?? gameMode.deaths,
+        assists: local?.assists ?? gameMode.assists,
+        shots: local?.shotsFired ?? gameMode.shotsFired,
+        hits: local?.shotsHit ?? gameMode.shotsHit,
+        accuracy: local?.accuracy ? (local.accuracy / 100) : (gameMode.shotsFired > 0 ? (gameMode.shotsHit / gameMode.shotsFired) : 0),
+        kdr: local ? (local.deaths ? local.kills / local.deaths : local.kills) : (gameMode.deaths ? gameMode.kills / gameMode.deaths : gameMode.kills),
+        score: local?.score ?? 0,
+        duration: data.durationSeconds ?? Math.max(1, Math.round(gameMode.matchDuration - gameMode.timeRemaining)),
+        mvp: data.scoreboard?.[0]
       });
     });
   }
@@ -769,7 +841,7 @@ class MultiplayerClient {
         'lobby:created', 'lobby:joined', 'lobby:host_changed', 'lobby:player_update',
         'lobby:error', 'lobby:left', 'game:start', 'world:snapshot', 'player:rubberband',
         'player:respawned', 'player:fired', 'player:pong', 'player:hurt',
-        'player:hit_confirmed', 'player:assist', 'player:killed', 'player:left',
+        'player:shot_confirmed', 'player:hit_confirmed', 'player:assist', 'player:killed', 'player:left',
         'match:ended'
       ];
       registeredEvents.forEach(evt => this.socket.removeAllListeners(evt));

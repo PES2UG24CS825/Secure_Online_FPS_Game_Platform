@@ -3,6 +3,7 @@
  * Ban appeals queue, anti-cheat decisions review panel, and audit log viewer.
  */
 import { escapeHtml, formatTimeAgo, promptAdminAction } from './admin_core.js';
+import { initCheaterDemoControls, loadCheaterDemoState } from './admin_demo_cheater.js';
 
 let appealsFilter = 'pending';
 let auditPage = 0;
@@ -37,9 +38,12 @@ export async function initSecuritySection() {
     });
   }
 
+  initCheaterDemoControls();
+
   await Promise.all([
     loadBanAppeals(),
     loadAntiCheatDecisions(),
+    loadCheaterDemoState(),
     loadAuditLogTable(),
     loadRecentLoginsTable()
   ]);

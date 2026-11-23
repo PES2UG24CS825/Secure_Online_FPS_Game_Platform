@@ -301,6 +301,66 @@
         <div id="antiCheatDecisionsPanel"><div class="empty">Loading anti-cheat decisions…</div></div>
       </section>
 
+      <!-- CHEATER DEMONSTRATION & REAL-TIME DETECTION (Academic Review Mode) -->
+      <section class="panel admin-table-panel" id="cheaterDemoSection">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow" style="color: #ef4444; font-weight: 700; letter-spacing: 0.05em;">ANTI-CHEAT LAB • ISOLATED DEMO ENVIRONMENT</p>
+            <h2>Cheater Demonstration &amp; Real-Time Detection Feed</h2>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span id="demoAccountBadge" class="badge badge-purple" style="font-size: 11px;">cheater_demo: READY</span>
+            <button id="resetDemoAlertsBtn" class="ghost-btn" type="button" style="padding: 6px 12px; font-size: 12px; color: #f87171;">Clear Alert History</button>
+            <button id="refreshDemoFeedBtn" class="ghost-btn" type="button" style="padding: 6px 12px; font-size: 12px;">Refresh</button>
+          </div>
+        </div>
+
+        <!-- Real-Time Metrics & Model Analysis Cards -->
+        <div class="demo-stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 20px;">
+          <div class="stat-card" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 14px;">
+            <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase;">Combined ML Risk Score</div>
+            <div id="demoRiskScoreVal" style="font-size: 28px; font-weight: 800; color: #ef4444; margin-top: 4px;">—</div>
+            <small id="demoRiskCategory" style="color: #cbd5e1;">Awaiting telemetry session</small>
+          </div>
+          <div class="stat-card" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 8px; padding: 14px;">
+            <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase;">Random Forest Model</div>
+            <div id="demoRfDecisionVal" style="font-size: 20px; font-weight: 700; color: #38bdf8; margin-top: 6px;">—</div>
+            <small id="demoRfProbVal" style="color: #cbd5e1;">Cheater Probability: —</small>
+          </div>
+          <div class="stat-card" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 8px; padding: 14px;">
+            <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase;">Isolation Forest Model</div>
+            <div id="demoIfDecisionVal" style="font-size: 20px; font-weight: 700; color: #c084fc; margin-top: 6px;">—</div>
+            <small id="demoIfAnomalyVal" style="color: #cbd5e1;">Anomaly Score: —</small>
+          </div>
+          <div class="stat-card" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 14px;">
+            <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase;">Server Hard-Rule Violations</div>
+            <div id="demoViolationCountVal" style="font-size: 28px; font-weight: 800; color: #f59e0b; margin-top: 4px;">0</div>
+            <small id="demoViolationSummary" style="color: #cbd5e1;">Impossible hits &amp; speed anomalies</small>
+          </div>
+        </div>
+
+        <!-- 5-Feature Telemetry Breakdown -->
+        <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;">
+          <div style="font-size: 11px; font-weight: 600; color: #94a3b8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">Authoritative Five-Feature Telemetry Contract</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 20px; font-size: 13px;">
+            <div>Accuracy: <strong id="demoFeatAccuracy" style="color: #38bdf8;">—</strong></div>
+            <div>Fire Rate: <strong id="demoFeatFireRate" style="color: #38bdf8;">—</strong></div>
+            <div>Movement Speed: <strong id="demoFeatSpeed" style="color: #38bdf8;">—</strong></div>
+            <div>Aim Smoothness: <strong id="demoFeatSmoothness" style="color: #38bdf8;">—</strong></div>
+            <div>KDR: <strong id="demoFeatKdr" style="color: #38bdf8;">—</strong></div>
+          </div>
+        </div>
+
+        <!-- Live Real-Time Security Alert Stream -->
+        <div class="section-subtitle" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <span>Live Real-Time Security Alert Feed (SSE Active)</span>
+          <span class="badge badge-emerald" style="font-size: 10px; font-weight: 600;">● STREAMING</span>
+        </div>
+        <div id="demoAlertsFeed" style="display: flex; flex-direction: column; gap: 8px; max-height: 380px; overflow-y: auto; padding-right: 4px;">
+          <div class="empty" id="demoAlertsEmpty">No simulated cheat violations recorded yet. Launch CyberStrike 3D with cheater_demo to trigger real-time detection.</div>
+        </div>
+      </section>
+
       <!-- Dev Fixtures (Hidden unless enabled) -->
       <section class="panel admin-table-panel" id="hackerDemoSection" hidden>
         <div class="section-title">
@@ -1052,6 +1112,20 @@
           <strong id="modalCareerKdr">0.00</strong>
         </div>
         <div class="modal-stat-box">
+          <small>Total Shots Fired</small>
+          <strong id="modalTotalShots">—</strong>
+          <small id="modalShotsCoverage">Unavailable</small>
+        </div>
+        <div class="modal-stat-box">
+          <small>Successful Hits</small>
+          <strong id="modalTotalHits">—</strong>
+          <small id="modalHitsCoverage">Unavailable</small>
+        </div>
+        <div class="modal-stat-box">
+          <small>Career Accuracy</small>
+          <strong id="modalCareerAccuracy">—</strong>
+        </div>
+        <div class="modal-stat-box">
           <small>Honour Score</small>
           <strong id="modalHonourScore">100</strong>
         </div>
@@ -1120,12 +1194,41 @@
                 <th>Kills</th>
                 <th>Deaths</th>
                 <th>K/D</th>
+                <th>Total Shots Fired</th>
+                <th>Successful Hits</th>
+                <th>Accuracy</th>
                 <th>Risk Score</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody id="modalMatchesTableBody">
-              <tr><td colspan="8" class="loading-cell">Loading player sessions…</td></tr>
+              <tr><td colspan="11" class="loading-cell">Loading player sessions…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Player Anti-Cheat Infractions & Security Violations Table -->
+      <div style="margin-top:24px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:16px;">⚠️</span>
+            <h4 style="margin:0; font-size:14px; text-transform:uppercase; letter-spacing:0.05em; color:#B91C1C; font-weight:700;">Anti-Cheat Infractions &amp; Security Violations</h4>
+          </div>
+          <span id="modalViolationsCountBadge" class="badge badge-danger" style="font-weight:700;">0 Infractions</span>
+        </div>
+        <div class="admin-table-wrap" style="max-height:260px; overflow-y:auto; border:1px solid #FECACA; border-radius:10px;">
+          <table class="modal-match-table">
+            <thead>
+              <tr style="background:#FEF2F2;">
+                <th style="width:25%;">Violation Type</th>
+                <th style="width:15%;">Severity</th>
+                <th style="width:40%;">Details &amp; Telemetry Finding</th>
+                <th style="width:20%;">Recorded</th>
+              </tr>
+            </thead>
+            <tbody id="modalViolationsTableBody">
+              <tr><td colspan="4" class="empty">No security infractions recorded for this operator.</td></tr>
             </tbody>
           </table>
         </div>

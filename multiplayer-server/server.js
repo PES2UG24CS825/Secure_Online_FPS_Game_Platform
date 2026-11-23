@@ -26,15 +26,17 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const os = require('os');
 const { z } = require('zod');
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../backend/.env') });
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 require('dotenv').config();
 
 const WeaponConfig = require('./shared/weapon_config');
 const ArenaCollision = require('./shared/arena_collision');
 
 const PORT = parseInt(process.env.PORT || '4001', 10);
-const configuredMatchDuration = Number(process.env.SECUREFPS_MATCH_DURATION_SECONDS);
-const MATCH_DURATION_SECONDS = Number.isInteger(configuredMatchDuration) &&
-  configuredMatchDuration >= 2 && configuredMatchDuration <= 3600 ? configuredMatchDuration : 600;
+const MATCH_DURATION_SECONDS = 480;
+const MATCH_SCORE_LIMIT = (process.env.MATCH_SCORE_LIMIT === '15') ? 10 : parseInt(process.env.MATCH_SCORE_LIMIT || '10', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const GAME_SERVER_SECRET = process.env.GAME_SERVER_SECRET || 'securefps-multiplayer-secret-key-2026';
 const ALLOW_ANONYMOUS = process.env.ALLOW_ANONYMOUS === 'true' || process.env.NODE_ENV !== 'production';
@@ -68,6 +70,14 @@ const activeUserSockets = new Map();
 const ipRoomCount = new Map();
 const MAX_ROOMS_PER_IP = 6;
 const MAX_TOTAL_ROOMS = 500;
+
+function releaseRoomIpQuota(room) {
+  const ip = room?.creatorIp;
+  if (!ip) return;
+  const remaining = Math.max(0, (ipRoomCount.get(ip) || 0) - 1);
+  if (remaining === 0) ipRoomCount.delete(ip);
+  else ipRoomCount.set(ip, remaining);
+}
 
 // =========================================================================
 // ZOD VALIDATION SCHEMAS
@@ -180,6 +190,15 @@ function generateReconnectToken() {
 /**
  * Farthest-from-enemies spawn selection
  */
+/**
+ * Tactical respawn selection:
+ * Evaluates candidates based on:
+ * 1. Safe distance from all active opponents (>= 20m preferred)
+ * 2. Static obstacle occlusion (ArenaCollision raycast occlusion)
+ * 3. Opponent viewing cone / field of view (prohibits spawning directly in front of crosshairs)
+ * 4. Deprioritizes exposed open areas (such as central spire)
+ * 5. Safely retains player starting base when base is uncamped and occluded
+ */
 function getTacticalSpawn(room, excludePlayerId = null) {
   const activePlayers = [];
   if (room && room.players) {
@@ -190,26 +209,89 @@ function getTacticalSpawn(room, excludePlayerId = null) {
     });
   }
 
+  const victim = room?.players?.get(excludePlayerId);
+  const startingSpawn = (victim && victim.spawnIndex !== undefined)
+    ? ArenaCollision.ARENA_SPAWNS[victim.spawnIndex % ArenaCollision.ARENA_SPAWNS.length]
+    : ArenaCollision.ARENA_SPAWNS[0];
+
   if (activePlayers.length === 0) {
-    const idx = crypto.randomInt(0, ArenaCollision.ARENA_SPAWNS.length);
-    return { ...ArenaCollision.ARENA_SPAWNS[idx] };
+    return { ...startingSpawn };
   }
 
-  let bestSpawn = ArenaCollision.ARENA_SPAWNS[0];
-  let maxMinDistance = -1;
+  // Filter out the center elevated platform (index 6: {x: 0, y: 2.0, z: 0}) from active respawns
+  const candidateSpawns = ArenaCollision.ARENA_SPAWNS.filter((s, idx) => idx !== 6);
 
-  for (const spawn of ArenaCollision.ARENA_SPAWNS) {
-    let minDistanceToEnemy = Infinity;
+  let bestSpawn = startingSpawn;
+  let bestScore = -Infinity;
+
+  for (const spawn of candidateSpawns) {
+    let minDist = Infinity;
+    let anyDirectLoS = false;
+    let inFrontOfAnyEnemy = false;
+    let enemyLookingDirectlyAtSpawn = false;
+
+    const spawnHead = { x: spawn.x, y: (spawn.y || 0) + 1.2, z: spawn.z };
+
     for (const enemy of activePlayers) {
       const dx = spawn.x - enemy.x;
       const dz = spawn.z - enemy.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist < minDistanceToEnemy) {
-        minDistanceToEnemy = dist;
+      const dist = Math.hypot(dx, dz);
+      if (dist < minDist) {
+        minDist = dist;
+      }
+
+      const enemyEye = { x: enemy.x, y: (enemy.y || 0) + 1.6, z: enemy.z };
+      const isOccluded = typeof ArenaCollision.checkRaycastOcclusion === 'function'
+        ? ArenaCollision.checkRaycastOcclusion(enemyEye, spawnHead)
+        : false;
+
+      // Enemy horizontal forward unit vector from yaw (Three.js camera convention: yaw=0 -> -Z)
+      const enemyYaw = Number(enemy.yaw) || 0;
+      const fwdX = -Math.sin(enemyYaw);
+      const fwdZ = -Math.cos(enemyYaw);
+
+      const toSpawnLen = Math.max(0.001, dist);
+      const toSpawnDirX = dx / toSpawnLen;
+      const toSpawnDirZ = dz / toSpawnLen;
+      const dot = (toSpawnDirX * fwdX) + (toSpawnDirZ * fwdZ);
+
+      if (dot > 0.25) {
+        inFrontOfAnyEnemy = true;
+        if (!isOccluded) {
+          enemyLookingDirectlyAtSpawn = true;
+        }
+      }
+      if (!isOccluded) {
+        anyDirectLoS = true;
       }
     }
-    if (minDistanceToEnemy > maxMinDistance) {
-      maxMinDistance = minDistanceToEnemy;
+
+    // Safety scoring
+    let score = minDist;
+    if (minDist < 16.0) score -= 500;
+    else if (minDist < 22.0) score -= 100;
+
+    // Never respawn directly in front of an enemy looking towards the spawn point
+    if (enemyLookingDirectlyAtSpawn) {
+      score -= 2000;
+    } else if (anyDirectLoS) {
+      score -= 250;
+    } else {
+      score += 120; // Fully occluded behind static walls/bunkers
+    }
+
+    if (!inFrontOfAnyEnemy) {
+      score += 60; // Behind opponents' back
+    }
+
+    // Starting spawn retention priority: always prefer player starting base unless camped
+    const isHomeBase = (spawn.x === startingSpawn.x && spawn.z === startingSpawn.z);
+    if (isHomeBase && !enemyLookingDirectlyAtSpawn && minDist >= 10.0) {
+      score += 1500;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
       bestSpawn = spawn;
     }
   }
@@ -233,6 +315,9 @@ function sanitizePlayer(p) {
     kills: p.kills,
     deaths: p.deaths,
     assists: p.assists || 0,
+    totalShots: p.totalShots || 0,
+    totalHits: p.totalHits || 0,
+    headshots: p.headshots || 0,
     isCrouching: !!p.isCrouching,
     isSprinting: !!p.isSprinting,
     spawnProtected: Boolean(p.spawnProtectedUntil && p.spawnProtectedUntil > Date.now())
@@ -262,12 +347,19 @@ async function checkMatchmakingAdmission(socket, errorEvent) {
       headers: { Authorization: 'Bearer ' + GAME_SERVER_SECRET },
       signal: AbortSignal.timeout(1500)
     });
-    if (!response.ok) throw new Error('Policy unavailable');
+    if (!response.ok) throw new Error(`Policy check returned HTTP ${response.status}`);
     const policy = await response.json();
     if (policy.allow_new_admissions === true) return socket.connected;
-    if (policy.allow_new_admissions !== false) throw new Error('Invalid policy');
-    socket.emit(errorEvent, { message: 'New room admissions are paused during platform lockdown.' });
-  } catch {
+    if (policy.allow_new_admissions === false) {
+      socket.emit(errorEvent, { message: 'New room admissions are paused during platform lockdown.' });
+      return false;
+    }
+    throw new Error('Invalid policy');
+  } catch (err) {
+    if (ALLOW_ANONYMOUS || process.env.NODE_ENV !== 'production') {
+      console.warn(`[Matchmaking] Backend policy check bypassed in dev/local mode (${err.message}). Allowing admission.`);
+      return socket.connected;
+    }
     socket.emit(errorEvent, { message: 'Matchmaking policy is unavailable. Try again shortly.' });
   }
   return false;
@@ -746,6 +838,7 @@ io.on('connection', (socket) => {
         currentRoom.respawnTimers.forEach(t => clearTimeout(t));
       }
       rooms.delete(roomCode);
+      releaseRoomIpQuota(currentRoom);
       console.log(`[Lobby] Room ${roomCode} destroyed (empty)`);
     } else {
       if (socket.id === currentRoom.hostId) {
@@ -803,7 +896,7 @@ io.on('connection', (socket) => {
         state: 'lobby',
         maxPlayers: 8,
         matchDuration: MATCH_DURATION_SECONDS,
-        scoreLimit: 25,
+        scoreLimit: MATCH_SCORE_LIMIT,
         matchStartTime: 0,
         players: new Map(),
         respawnTimers: new Map(),
@@ -832,6 +925,7 @@ io.on('connection', (socket) => {
         totalShots: 0,
         totalHits: 0,
         headshots: 0,
+        shotSequence: 0,
         rubberbandCount: 0,
         isFirstPacket: true,
         lastMoveTime: performance.now(),
@@ -996,7 +1090,11 @@ io.on('connection', (socket) => {
         roomCode: room.code,
         isHost: targetPlayer.isHost,
         state: room.state,
-        matchTimeRemaining: Math.max(0, room.matchDuration - Math.floor((Date.now() - room.matchStartTime) / 1000)),
+        matchDuration: room.matchDuration,
+        scoreLimit: room.scoreLimit,
+        matchTimeRemaining: room.state === 'in_game'
+          ? Math.max(0, room.matchDuration - Math.floor((Date.now() - room.matchStartTime) / 1000))
+          : room.matchDuration,
         players: sanitizeRoomPlayers(room)
       });
 
@@ -1054,6 +1152,7 @@ io.on('connection', (socket) => {
       // Assign tactical spawns
       let spawnIdx = 0;
       currentRoom.players.forEach(p => {
+        p.spawnIndex = spawnIdx;
         const spawn = ArenaCollision.ARENA_SPAWNS[spawnIdx % ArenaCollision.ARENA_SPAWNS.length];
         spawnIdx++;
         p.x = spawn.x;
@@ -1068,6 +1167,7 @@ io.on('connection', (socket) => {
         p.totalShots = 0;
         p.totalHits = 0;
         p.headshots = 0;
+        p.shotSequence = 0;
         p.damageDealtMap = {};
         p.lastShotTime = 0;
         p.isFirstPacket = true;
@@ -1152,6 +1252,9 @@ io.on('connection', (socket) => {
       }
       playerState.lastShotTime = now;
       playerState.totalShots = (playerState.totalShots || 0) + 1;
+      playerState.shotSequence = (playerState.shotSequence || 0) + 1;
+      const shotId = `${currentRoom.code}:${currentRoom.matchStartTime}:${socket.id}:${playerState.shotSequence}`;
+      socket.emit('player:shot_confirmed', { shotId, weaponKey });
 
       // Determine ray origin and direction
       const origin = fireData.origin;
@@ -1285,7 +1388,8 @@ io.on('connection', (socket) => {
         socket.emit('player:hit_confirmed', {
           victimId: victim.id,
           damage: dealtDamage,
-          headshot: closestHit.isHeadshot
+          headshot: closestHit.isHeadshot,
+          shotId
         });
 
         // Notify victim of damage taken
@@ -1334,6 +1438,12 @@ io.on('connection', (socket) => {
             headshot: closestHit.isHeadshot
           });
 
+          // Check if match score limit is reached (10 kills ends match immediately!)
+          if (playerState.kills >= currentRoom.scoreLimit) {
+            endMatch(currentRoom, 'score_limit_reached', playerState);
+            return;
+          }
+
           // Room-level respawn scheduler
           scheduleRespawn(currentRoom, victim);
         }
@@ -1376,6 +1486,7 @@ io.on('connection', (socket) => {
 
                 if (currentRoom.players.size === 0) {
                   rooms.delete(roomCode);
+                  releaseRoomIpQuota(currentRoom);
                   console.log(`[Lobby] Room ${roomCode} destroyed after grace expiry.`);
                 }
               }

@@ -395,7 +395,9 @@ export async function openPlayerMatchesModal(id, name, email) {
   if (fbSec) fbSec.textContent = '';
 
   const tbody = document.getElementById('modalMatchesTableBody');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">Loading combat sessions…</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="loading-cell">Loading combat sessions…</td></tr>';
+  const violationsTbodyPre = document.getElementById('modalViolationsTableBody');
+  if (violationsTbodyPre) violationsTbodyPre.innerHTML = '<tr><td colspan="4" class="loading-cell">Loading security infractions…</td></tr>';
 
   if (!modal.open) modal.showModal();
 
@@ -413,6 +415,11 @@ export async function openPlayerMatchesModal(id, name, email) {
     const totalK = document.getElementById('modalTotalKills');
     const totalD = document.getElementById('modalTotalDeaths');
     const kdrEl = document.getElementById('modalCareerKdr');
+    const totalShotsEl = document.getElementById('modalTotalShots');
+    const totalHitsEl = document.getElementById('modalTotalHits');
+    const accuracyEl = document.getElementById('modalCareerAccuracy');
+    const shotsCoverageEl = document.getElementById('modalShotsCoverage');
+    const hitsCoverageEl = document.getElementById('modalHitsCoverage');
     const honourEl = document.getElementById('modalHonourScore');
     const honourRankBadge = document.getElementById('modalHonourRankBadge');
     const riskEl = document.getElementById('modalRiskScore');
@@ -423,7 +430,21 @@ export async function openPlayerMatchesModal(id, name, email) {
     if (totalM) totalM.textContent = stats.total_matches ?? 0;
     if (totalK) totalK.textContent = stats.kills ?? 0;
     if (totalD) totalD.textContent = stats.deaths ?? 0;
-    if (kdrEl) kdrEl.textContent = stats.kdr ?? '0.00';
+    const careerKdr = Number(stats.deaths) > 0
+      ? Number(stats.kills || 0) / Number(stats.deaths)
+      : Number(stats.kills || 0);
+    if (kdrEl) kdrEl.textContent = careerKdr.toFixed(2);
+    if (totalShotsEl) totalShotsEl.textContent = stats.shots_fired == null ? '—' : Number(stats.shots_fired).toLocaleString();
+    if (totalHitsEl) totalHitsEl.textContent = stats.shots_hit == null ? '—' : Number(stats.shots_hit).toLocaleString();
+    const careerAccuracy = stats.shots_fired != null && stats.shots_hit != null && Number(stats.shots_fired) > 0
+      ? (Number(stats.shots_hit) / Number(stats.shots_fired)) * 100
+      : null;
+    if (accuracyEl) accuracyEl.textContent = careerAccuracy == null ? '—' : `${careerAccuracy.toFixed(1)}%`;
+    const coverage = (status, total) => total == null || status === 'unavailable'
+      ? 'Unavailable'
+      : status === 'partial' ? 'Partial history' : 'Complete history';
+    if (shotsCoverageEl) shotsCoverageEl.textContent = coverage(stats.shots_fired_coverage, stats.shots_fired);
+    if (hitsCoverageEl) hitsCoverageEl.textContent = coverage(stats.shots_hit_coverage, stats.shots_hit);
     
     const hScore = data.account_info?.honour_score ?? 100;
     if (honourEl) honourEl.textContent = hScore;
@@ -451,7 +472,7 @@ export async function openPlayerMatchesModal(id, name, email) {
 
     if (!tbody) return;
     if (matches.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" class="empty">No completed combat sessions found for this player.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" class="empty">No completed combat sessions found for this player.</td></tr>';
       return;
     }
 
@@ -463,16 +484,50 @@ export async function openPlayerMatchesModal(id, name, email) {
           <td><code style="background:#EDE9FE; color:#5B21B6; padding:2px 8px; border-radius:4px; font-weight:700;">${escapeHtml(m.session_id ? (String(m.session_id).startsWith('#') ? m.session_id : '#' + m.session_id) : '—')}</code></td>
           <td><strong>${escapeHtml(m.game || 'CyberStrike 3D')}</strong></td>
           <td>${formatTimeAgo(m.started_at)}</td>
-          <td><strong style="color:#059669;">${m.kills ?? 0}</strong></td>
-          <td><strong style="color:#DC2626;">${m.deaths ?? 0}</strong></td>
-          <td><span style="font-weight:700; color:#4C1D95;">${m.kdr ?? '0.00'}</span></td>
+          <td><strong style="color:#059669;">${m.kills == null ? '—' : m.kills}</strong></td>
+          <td><strong style="color:#DC2626;">${m.deaths == null ? '—' : m.deaths}</strong></td>
+          <td><span style="font-weight:700; color:#4C1D95;">${m.kdr == null ? '—' : Number(m.kdr).toFixed(2)}</span></td>
+          <td>${m.shots_fired == null ? '—' : Number(m.shots_fired).toLocaleString()}</td>
+          <td>${m.shots_hit == null ? '—' : Number(m.shots_hit).toLocaleString()}</td>
+          <td>${m.accuracy == null ? '—' : `${Number(m.accuracy).toFixed(1)}%`}</td>
           <td><span class="risk-pill ${riskClass}">${riskScore}</span></td>
           <td><span class="badge badge-success">${escapeHtml(m.status || 'completed')}</span></td>
         </tr>
       `;
     }).join('');
+
+    // Render Anti-Cheat Violations & Infractions
+    const violationsTbody = document.getElementById('modalViolationsTableBody');
+    const violationsBadge = document.getElementById('modalViolationsCountBadge');
+    const secEvents = data.security_events || [];
+
+    if (violationsBadge) {
+      violationsBadge.textContent = `${secEvents.length} Infraction${secEvents.length === 1 ? '' : 's'}`;
+      violationsBadge.className = `badge ${secEvents.length > 0 ? 'badge-danger' : 'badge-success'}`;
+    }
+
+    if (violationsTbody) {
+      if (secEvents.length === 0) {
+        violationsTbody.innerHTML = '<tr><td colspan="4" class="empty">No security infractions recorded for this operator.</td></tr>';
+      } else {
+        violationsTbody.innerHTML = secEvents.map(e => {
+          const sev = (e.severity || 'medium').toLowerCase();
+          const sevClass = sev === 'high' ? 'badge-danger' : (sev === 'medium' ? 'badge-warning' : 'badge-cyan');
+          return `
+            <tr>
+              <td><span class="badge ${sevClass}">${escapeHtml(e.incident_type || e.type || 'Infraction')}</span></td>
+              <td><strong style="text-transform:uppercase; font-size:11px; color:${sev === 'high' ? '#DC2626' : '#D97706'};">${escapeHtml(sev)}</strong></td>
+              <td><div style="font-size:12px; color:#1E293B; line-height:1.4;">${escapeHtml(e.description || 'Physical anomaly detected by server anti-cheat netcode.')}</div></td>
+              <td><small class="muted">${formatTimeAgo(e.timestamp)}</small></td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
   } catch (err) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="error-cell">Error: ${escapeHtml(err.message)}</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="11" class="error-cell">Error: ${escapeHtml(err.message)}</td></tr>`;
+    const violationsTbody = document.getElementById('modalViolationsTableBody');
+    if (violationsTbody) violationsTbody.innerHTML = '<tr><td colspan="4" class="error-cell">Failed to load infraction records.</td></tr>';
   }
 }
 

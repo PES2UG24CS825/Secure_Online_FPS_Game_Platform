@@ -1,7 +1,7 @@
 /**
  * SecureFPS: Game Mode & Combat Progression Manager
  * Coordinates Training, Free-for-All, Solo Combat, Multiplayer, and Difficulty Settings,
- * 5-second spawn protection shields, 12:00 match countdown timers, 25-kill target limits,
+ * 5-second spawn protection shields, 08:00 match countdown timers, 15-kill target limits,
  * player vitals (Health & Tactical Armour), respawns, kill feed announcements, streak tracking,
  * assist arbitration, winner & MVP determination, and anti-cheat telemetry.
  */
@@ -40,14 +40,16 @@ class GameModeManager {
     this.recentKillTimestamps = [];
     this.enemyDamageHistory = {}; // victimName -> { damage: number, lastHitTime: number }
 
-    // Timers: 12 minutes (720 seconds) for standard timed operations
-    this.matchDuration = 720; // 12:00
-    this.timeRemaining = 720;
+    // Bot Combat and multiplayer use a maximum of 8 minutes.
+    this.matchDuration = 480;
+    this.timeRemaining = 480;
     this.matchActive = false;
     this.isMatchCompleted = false;
 
     // Score Limits
-    this.targetKills = 25; // 25 eliminations for Solo & optional bot target
+    this.targetKills = 10;
+    this.respawnCountdown = 0;
+    this.respawnController = null;
 
     // Bot Scores (for scoreboard winner arbitration)
     this.botScores = {
@@ -76,10 +78,16 @@ class GameModeManager {
     this.initEvents();
   }
 
-  setMode(mode, duration = 720) {
+  setMode(mode, duration = 480) {
     this.currentMode = mode;
-    this.matchDuration = duration;
+    this.matchDuration = mode === 'multiplayer' ? duration : 480;
     this.resetMatch();
+  }
+
+  isLocalSimulationPaused() {
+    return this.currentMode !== 'multiplayer' &&
+      typeof window !== 'undefined' &&
+      Boolean(window.SecureFPSGame?.isPaused);
   }
 
   setDifficulty(diff) {
@@ -94,11 +102,21 @@ class GameModeManager {
       this.onKill(e.detail);
     });
 
-    window.addEventListener('fps:telemetry_fire', () => {
+    window.addEventListener('fps:telemetry_fire', (event) => {
+      const shotId = event.detail?.shot_id;
+      if (this.currentMode === 'multiplayer') {
+        if (!shotId || this.confirmedShotIds.has(shotId)) return;
+        this.confirmedShotIds.add(shotId);
+      }
       this.shotsFired++;
     });
 
     window.addEventListener('fps:telemetry_hit', (e) => {
+      const shotId = e.detail?.shot_id;
+      if (this.currentMode === 'multiplayer') {
+        if (!shotId || this.confirmedHitIds.has(shotId) || !this.confirmedShotIds.has(shotId)) return;
+        this.confirmedHitIds.add(shotId);
+      }
       this.shotsHit++;
       if (e.detail?.headshot) this.headshots++;
     });
@@ -125,6 +143,10 @@ class GameModeManager {
     this.highestStreak = 0;
     this.recentKillTimestamps = [];
     this.enemyDamageHistory = {};
+    this.respawnCountdown = 0;
+    this.respawnController = null;
+    this.confirmedShotIds = new Set();
+    this.confirmedHitIds = new Set();
     this.resetBotScores();
     this.updateHUD();
     this.updateSpawnProtectionHUD();
@@ -144,13 +166,17 @@ class GameModeManager {
     this.highestStreak = 0;
     this.recentKillTimestamps = [];
     this.enemyDamageHistory = {};
+    this.respawnCountdown = 0;
+    this.respawnController = null;
+    this.confirmedShotIds = new Set();
+    this.confirmedHitIds = new Set();
     this.matchActive = false;
     this.isMatchCompleted = false;
     this.timeRemaining = this.matchDuration;
     this.playerHealth = this.maxHealth;
     this.playerArmour = this.currentMode === 'multiplayer' ? 0 : this.maxArmour;
     this.isDead = false;
-    this.targetKills = this.currentMode === 'solo' ? 0 : 25;
+    this.targetKills = ['bots', 'multiplayer'].includes(this.currentMode) ? 10 : 0;
     this.hasSpawnProtection = true;
     this.spawnProtectionTimer = this.spawnProtectionDuration;
     this.resetBotScores();
@@ -169,7 +195,16 @@ class GameModeManager {
   }
 
   update(delta, controller) {
-    if (!this.matchActive || this.isMatchCompleted) return;
+    if (!this.matchActive || this.isMatchCompleted || this.isLocalSimulationPaused()) return;
+
+    if (this.respawnCountdown > 0) {
+      this.respawnCountdown = Math.max(0, this.respawnCountdown - delta);
+      if (this.respawnTimerEl) this.respawnTimerEl.textContent = `${Math.ceil(this.respawnCountdown)}s`;
+      if (this.respawnCountdown === 0 && this.currentMode !== 'multiplayer') {
+        this.respawnPlayer(this.respawnController);
+        this.respawnController = null;
+      }
+    }
 
     // 1. Update Spawn Protection Shield Timer
     if (this.hasSpawnProtection) {
@@ -181,13 +216,13 @@ class GameModeManager {
       this.updateSpawnProtectionHUD();
     }
 
-    // 2. Countdown Match Timer (12:00 -> 00:00)
+    // 2. Countdown the local Bot Combat timer. Multiplayer time comes from the server.
     // Training mode and Free Roam (solo) do not run an expiring match countdown
-    if (this.currentMode !== 'training' && this.currentMode !== 'solo') {
+    if (this.currentMode === 'bots') {
       this.timeRemaining -= delta;
       if (this.timeRemaining <= 0) {
         this.timeRemaining = 0;
-        if (this.currentMode !== 'multiplayer') this.completeMatch('time_expired');
+        this.completeMatch('time_expired');
       }
       this.updateTimerDisplay();
     }
@@ -238,7 +273,16 @@ class GameModeManager {
 
   damagePlayer(amount, attackerName, controller, attackerPos = null, authoritativeHealth = null) {
     // If player is dead, match completed, or has spawn protection active, ignore damage completely
-    if (this.isDead || this.hasSpawnProtection || this.isMatchCompleted || !this.matchActive) return;
+    if (this.isDead || this.hasSpawnProtection || this.isMatchCompleted || !this.matchActive || this.isLocalSimulationPaused()) return;
+
+    // Cheater Demonstration: God mode / Damage Immunity active, cheater takes no damage, health remains at 100%
+    if (this.demoGodMode || window.isDemoGodModeActive || window.SecureFPSGame?.isCheaterDemoActive) {
+      this.playerHealth = 100;
+      this.playerArmour = 100;
+      this.isDead = false;
+      this.updateHUD();
+      return;
+    }
 
     if (authoritativeHealth !== null) {
       if (authoritativeHealth >= this.playerHealth && this.playerHealth > 0) return;
@@ -330,20 +374,11 @@ class GameModeManager {
     // If match ended while dying, do not schedule respawn
     if (this.isMatchCompleted) return;
 
-    // 3-second respawn timer
-    let count = 3;
-    if (this.respawnTimerEl) this.respawnTimerEl.textContent = `${count}s`;
-
-    const interval = setInterval(() => {
-      count--;
-      if (this.respawnTimerEl) this.respawnTimerEl.textContent = `${count}s`;
-      if (count <= 0 || this.isMatchCompleted) {
-        clearInterval(interval);
-        if (!this.isMatchCompleted && this.matchActive && this.currentMode !== 'multiplayer') {
-          this.respawnPlayer(controller);
-        }
-      }
-    }, 1000);
+    if (this.currentMode !== 'multiplayer') {
+      this.respawnCountdown = 3;
+      this.respawnController = controller;
+      if (this.respawnTimerEl) this.respawnTimerEl.textContent = '3s';
+    }
   }
 
   respawnPlayer(controller, position) {
@@ -371,7 +406,7 @@ class GameModeManager {
   }
 
   onKill(detail) {
-    if (this.isMatchCompleted || !this.matchActive) return;
+    if (this.isMatchCompleted || !this.matchActive || this.isLocalSimulationPaused()) return;
 
     this.kills++;
     this.currentStreak++;
@@ -431,9 +466,23 @@ class GameModeManager {
       this.audio?.playStreakSound?.(10);
     }
 
-    // Check score limit (25 confirmed kills ends match immediately!)
-    if (this.currentMode !== 'multiplayer' && this.targetKills > 0 && this.kills >= this.targetKills) {
-      this.completeMatch('score_limit_reached');
+    // Check score limit (10 confirmed kills ends the match immediately!)
+    if (this.targetKills > 0 && this.kills >= this.targetKills) {
+      if (this.currentMode === 'multiplayer') {
+        const myName = (typeof sessionStorage !== 'undefined' && sessionStorage?.getItem('securefps_player_name')) || 'Operator (You)';
+        this.completeMatch('score_limit_reached', {
+          isVictory: true,
+          winner: myName,
+          kills: this.kills,
+          deaths: this.deaths,
+          shots: this.shotsFired,
+          hits: this.shotsHit,
+          accuracy: this.shotsFired > 0 ? (this.shotsHit / this.shotsFired) : 0,
+          kdr: this.deaths > 0 ? (this.kills / this.deaths) : this.kills
+        });
+      } else {
+        this.completeMatch('score_limit_reached');
+      }
     }
   }
 
@@ -509,9 +558,12 @@ class GameModeManager {
   }
 
   completeMatch(reason = 'score_limit_reached', serverResult = null) {
-    if (this.isMatchCompleted) return;
+    if (this.isMatchCompleted && !serverResult) return;
     this.matchActive = false;
     this.isMatchCompleted = true;
+    this.respawnCountdown = 0;
+    this.respawnController = null;
+    this.deathOverlay?.classList.remove('active');
 
     // Stop all bot activity immediately!
     if (window.SecureFPSGame?.botManager) {
@@ -519,31 +571,43 @@ class GameModeManager {
     }
 
     // Determine Winner & Placings
-    let winnerName = 'Operator (You)';
+    const currentPlName = (typeof sessionStorage !== 'undefined' && sessionStorage?.getItem('securefps_player_name')) || 'Operator (You)';
+    let winnerName = currentPlName;
     let isVictory = true;
     let isDraw = false;
 
-    // Find highest scoring bot
-    let topBotName = null;
-    let topBotKills = -1;
-    Object.keys(this.botScores).forEach(name => {
-      if (this.botScores[name].kills > topBotKills) {
-        topBotKills = this.botScores[name].kills;
-        topBotName = name;
-      }
-    });
-
-    const currentPlName = sessionStorage.getItem('securefps_player_name') || 'Operator (You)';
-    if (this.kills > topBotKills) {
-      winnerName = currentPlName;
-      isVictory = true;
-    } else if (this.kills === topBotKills) {
-      winnerName = 'Draw Match';
-      isVictory = false;
-      isDraw = true;
+    // Adopt authoritative server results if coming from multiplayer match completion
+    if (serverResult) {
+      if (typeof serverResult.kills === 'number') this.kills = serverResult.kills;
+      if (typeof serverResult.deaths === 'number') this.deaths = serverResult.deaths;
+      if (typeof serverResult.shots === 'number') this.shotsFired = serverResult.shots;
+      if (typeof serverResult.hits === 'number') this.shotsHit = serverResult.hits;
+      if (typeof serverResult.assists === 'number') this.assists = serverResult.assists;
+      if (typeof serverResult.winner === 'string') winnerName = serverResult.winner;
+      if (typeof serverResult.isVictory === 'boolean') isVictory = serverResult.isVictory;
+      if (typeof serverResult.isDraw === 'boolean') isDraw = serverResult.isDraw;
     } else {
-      winnerName = topBotName || 'Enemy Forces';
-      isVictory = false;
+      // Find highest scoring bot
+      let topBotName = null;
+      let topBotKills = -1;
+      Object.keys(this.botScores).forEach(name => {
+        if (this.botScores[name].kills > topBotKills) {
+          topBotKills = this.botScores[name].kills;
+          topBotName = name;
+        }
+      });
+
+      if (this.kills > topBotKills) {
+        winnerName = currentPlName;
+        isVictory = true;
+      } else if (this.kills === topBotKills) {
+        winnerName = 'Draw Match';
+        isVictory = false;
+        isDraw = true;
+      } else {
+        winnerName = topBotName || 'Enemy Forces';
+        isVictory = false;
+      }
     }
 
     const matchDurationSec = Math.max(1, Math.round(this.matchDuration - this.timeRemaining));

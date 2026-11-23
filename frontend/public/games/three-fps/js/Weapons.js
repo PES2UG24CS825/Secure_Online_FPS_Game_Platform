@@ -101,6 +101,15 @@ const WEAPON_REGISTRY = (typeof WeaponConfig !== "undefined" && WeaponConfig.WEA
   }
 };
 
+function findBlockingSceneryHit(targetCandidate, sceneHits, isUsableHit, isCombatObject) {
+  if (!targetCandidate) return null;
+  return sceneHits.find(hit =>
+    isUsableHit(hit) &&
+    !isCombatObject(hit.object) &&
+    hit.distance < targetCandidate.distance - 0.01
+  ) || null;
+}
+
 class WeaponManager {
   constructor(scene, camera, audio) {
     this.scene = scene;
@@ -128,6 +137,11 @@ class WeaponManager {
     this.isSwitching = false;
     this.switchTimer = 0;
     this.targetWeaponKey = null;
+
+    // Demonstration Anomaly Multipliers (Phase 3 & 7)
+    this.fireRateMultiplier = 1.0;
+    this.demoImpossibleHit = false;
+    this.demoHighAccuracy = false;
 
     // Viewmodel Positioning & Animation State
     this.weaponRoot = new THREE.Object3D();
@@ -620,7 +634,8 @@ class WeaponManager {
         if (!this.isReloading && !this.isSwitching && (isLocked || inGame)) {
           const now = performance.now() / 1000;
           const w = this.activeWeapon;
-          if (now - this.lastShotTime >= w.fireRate) {
+          const effectiveFireRate = w.fireRate / (this.fireRateMultiplier || 1.0);
+          if (now - this.lastShotTime >= effectiveFireRate) {
             if (w.magAmmo > 0) {
               this.fire(this.controller, this.botManager);
               this.lastShotTime = now;
@@ -713,6 +728,22 @@ class WeaponManager {
     if (this.reloadingIndicator) this.reloadingIndicator.classList.add('active');
   }
 
+  resetForMatch() {
+    Object.keys(this.weapons).forEach(key => {
+      const starting = WEAPON_REGISTRY[key];
+      this.weapons[key].magAmmo = starting.magAmmo ?? starting.magSize;
+      this.weapons[key].reserveAmmo = starting.reserveAmmo ?? starting.magSize * 4;
+    });
+    this.isFiring = false;
+    this.isReloading = false;
+    this.isSwitching = false;
+    this.targetWeaponKey = null;
+    this.lastShotTime = 0;
+    this.isAiming = false;
+    this.currentAimAlpha = 0;
+    this.updateHUD();
+  }
+
   update(delta, controller, botManager) {
     if (controller) this.controller = controller;
     if (botManager) this.botManager = botManager;
@@ -772,7 +803,8 @@ class WeaponManager {
     const isLocked = !!(controller?.isLocked || this.controller?.isLocked || document.pointerLockElement);
     const inGame = !window.SecureFPSGame?.isMenuOpen && !window.SecureFPSGame?.isPaused;
     if (this.isFiring && this.isPlayerAlive() && !this.isReloading && !this.isSwitching && (isLocked || inGame)) {
-      if (now - this.lastShotTime >= w.fireRate) {
+      const effectiveFireRate = w.fireRate / (this.fireRateMultiplier || 1.0);
+      if (now - this.lastShotTime >= effectiveFireRate) {
         if (w.magAmmo > 0) {
           this.fire(controller || this.controller, botManager || this.botManager);
           this.lastShotTime = now;
@@ -865,12 +897,18 @@ class WeaponManager {
   }
 
   fire(controller, botManager) {
+    const gameMode = window.SecureFPSGame?.gameMode;
+    if (gameMode?.isLocalSimulationPaused?.()) {
+      this.isFiring = false;
+      return;
+    }
     if (!this.isPlayerAlive()) {
       this.isFiring = false;
       return;
     }
     const w = this.activeWeapon;
     w.magAmmo--;
+    this.shotsFired = (this.shotsFired || 0) + 1;
     this.updateHUD();
 
     // Play Caliber-Specific Gunshot Audio
@@ -884,6 +922,15 @@ class WeaponManager {
 
     // Eject Brass Bullet Casing
     this.spawnShellEjection();
+
+    const camPos = new THREE.Vector3();
+    this.camera.getWorldPosition(camPos);
+
+    if (window.SecureFPSGame?.gameMode?.hasSpawnProtection) {
+      window.SecureFPSGame.gameMode.hasSpawnProtection = false;
+      window.SecureFPSGame.gameMode.spawnProtectionTimer = 0;
+      window.SecureFPSGame.gameMode.updateSpawnProtectionHUD?.();
+    }
 
     // Alert nearby tactical AI bots to audible gunfire
     if (botManager && typeof botManager.notifyGunshot === 'function' && !w.isSilenced) {
@@ -903,7 +950,9 @@ class WeaponManager {
 
     // Spread Calculation
     let spread = w.baseSpread;
-    if (controller) {
+    if (this.demoHighAccuracy) {
+      spread = 0.0;
+    } else if (controller) {
       if (!controller.isGrounded) spread *= 3.0;
       else if (controller.isSprinting) spread *= 2.2;
       else if (controller.isCrouching) spread *= 0.6;
@@ -915,8 +964,7 @@ class WeaponManager {
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(spreadX, spreadY), this.camera);
 
-    // Test combat hitboxes first. This prevents visible decorative GLB meshes,
-    // viewmodels, tracers, and effects from intercepting a valid bone-aligned hit.
+    // Test target hitboxes separately, then compare them with scene scenery.
     const hitboxMeshes = [];
     if (botManager?.getHitboxMeshes) hitboxMeshes.push(...botManager.getHitboxMeshes());
     if (window.SecureFPSGame?.multiplayer?.getHitboxMeshes) {
@@ -927,38 +975,112 @@ class WeaponManager {
     }
     raycaster.setFromCamera(new THREE.Vector2(spreadX, spreadY), this.camera);
     const hitboxHits = hitboxMeshes.length ? raycaster.intersectObjects(hitboxMeshes, false) : [];
-    const hits = hitboxHits.length
-      ? hitboxHits
-      : raycaster.intersectObjects(this.scene.children, true);
 
-    let targetHit = null;
-    let hitPoint = new THREE.Vector3();
-    let hitNormal = new THREE.Vector3(0, 1, 0);
-
-    const camPos = new THREE.Vector3();
-    this.camera.getWorldPosition(camPos);
     const camDir = new THREE.Vector3();
     this.camera.getWorldDirection(camDir);
 
-    for (const hit of hits) {
-      // Discard viewmodel self-intersections or muzzle mesh
+    const isCombatObject = (object) => {
+      let current = object;
+      while (current) {
+        const data = current.userData || {};
+        if (data.bot || data.remotePlayer || data.target || data.operator?.bot || data.operator?.remotePlayer) {
+          return true;
+        }
+        current = current.parent;
+      }
+      return false;
+    };
+    const isUsableHit = (hit) => {
       if (hit.object === this.muzzleMesh || this.weaponRoot.getObjectById(hit.object.id)) {
-        continue;
+        return false;
       }
-      // Discard FX particles, active tracers, casings, and 2D UI elements / name tags
       if (hit.object.userData?.isFX || hit.object.userData?.isUI || hit.object.isSprite || hit.object.type === 'Sprite') {
-        continue;
+        return false;
       }
-      // Ignore self-clipping under 0.35m
-      if (hit.distance < 0.35) continue;
-      // Strictly prevent hits behind or perpendicular to player
+      if (hit.distance < 0.35) return false;
       const toHit = hit.point.clone().sub(camPos).normalize();
-      if (camDir.dot(toHit) < 0.1) continue;
+      return camDir.dot(toHit) >= 0.1;
+    };
+    const sceneHits = raycaster.intersectObjects(this.scene.children, true);
+    const headCandidate = hitboxHits.find(h => isUsableHit(h) && (h.object.userData?.isHead || h.object.userData?.isHeadshot || h.object.name === 'head' || h.object.parent?.userData?.isHead));
+    const anyCandidate = hitboxHits.find(isUsableHit) || null;
+    const targetCandidate = headCandidate || anyCandidate;
+    const sceneryHits = sceneHits.filter(hit => isUsableHit(hit) && !isCombatObject(hit.object));
+    const blocker = findBlockingSceneryHit(targetCandidate, sceneHits, isUsableHit, isCombatObject);
+    let targetHit = blocker || targetCandidate || sceneryHits[0] || null;
 
-      targetHit = hit;
-      hitPoint.copy(hit.point);
-      if (hit.face) hitNormal.copy(hit.face.normal);
-      break;
+    let isImpossibleHit = false;
+    let hitThroughObstacle = false;
+    let hitDist = targetCandidate ? targetCandidate.distance : 10.0;
+
+    // Cheater Demonstration Overrides (Phases 3 & 7)
+    // When cheater demo player fires, automatically lock onto bot's head (Headshot Aimbot & Impossible Hit)
+    const isCheaterDemo = Boolean(
+      this.demoHighAccuracy ||
+      this.demoImpossibleHit ||
+      window.SecureFPSGame?.isCheaterDemoActive ||
+      window.isDemoGodModeActive
+    );
+
+    if (isCheaterDemo) {
+      w.reserveAmmo = 999;
+      if (w.magAmmo <= 1) w.magAmmo = w.magSize || 30;
+    }
+
+    const effectiveBotManager = botManager || this.botManager || window.SecureFPSGame?.botManager;
+    let bestBot = null;
+
+    if (isCheaterDemo && effectiveBotManager?.bots) {
+      let bestScore = -Infinity;
+
+      for (const bot of effectiveBotManager.bots) {
+        if (!bot.isActive || bot.isDead) continue;
+        const botPos = bot.position || (bot.mesh && bot.mesh.position) || bot.operator?.root?.position;
+        if (!botPos) continue;
+
+        const toBot = botPos.clone().sub(camPos);
+        const dist = toBot.length();
+        const dir = toBot.normalize();
+        const dot = camDir.dot(dir);
+
+        // Score: prioritize bots in front of player, then closest distance
+        const score = dot * 100.0 - dist * 0.15;
+        if (score > bestScore) {
+          bestScore = score;
+          bestBot = bot;
+        }
+      }
+
+      if (bestBot) {
+        const botPos = bestBot.position || (bestBot.mesh && bestBot.mesh.position) || bestBot.operator?.root?.position;
+        const headTarget = bestBot.operator?.headMesh || bestBot.headMesh || bestBot.mesh || (bestBot.operator && bestBot.operator.root);
+        const headPos = botPos.clone().add(new THREE.Vector3(0, 1.65, 0));
+        const dist = camPos.distanceTo(headPos);
+
+        targetHit = {
+          object: headTarget,
+          point: headPos,
+          distance: this.demoImpossibleHit ? Math.max(105.0, dist) : dist,
+          face: { normal: new THREE.Vector3(0, 0, 1) }
+        };
+        if (targetHit.object) {
+          if (!targetHit.object.userData) targetHit.object.userData = {};
+          targetHit.object.userData.bot = bestBot;
+          targetHit.object.userData.isHead = true;
+          targetHit.object.userData.isHeadshot = true;
+        }
+        hitDist = targetHit.distance;
+
+        // Wall penetration & impossible distance flag
+        hitThroughObstacle = true;
+        isImpossibleHit = true;
+      }
+    }
+    let hitPoint = new THREE.Vector3();
+    let hitNormal = new THREE.Vector3(0, 1, 0);
+    if (targetHit) {
+      hitPoint.copy(targetHit.point);
+      if (targetHit.face) hitNormal.copy(targetHit.face.normal);
     }
 
     if (!targetHit) {
@@ -979,7 +1101,7 @@ class WeaponManager {
     // Target Resolver: traverse up hierarchy to find bot or remote player
     const resolveCombatTarget = (obj) => {
       let curr = obj;
-      let isHead = !!(obj.userData?.isHead || obj.userData?.isHeadshot);
+      let isHead = !!(obj?.userData?.isHead || obj?.userData?.isHeadshot || obj?.name === 'head');
       let foundBot = null;
       let foundRemote = null;
       let foundTarget = null;
@@ -1018,14 +1140,42 @@ class WeaponManager {
       return null;
     };
 
-    const resolved = targetHit ? resolveCombatTarget(targetHit.object) : null;
+    const canPenetrate = Boolean(this.demoImpossibleHit || (isCheaterDemo && hitThroughObstacle));
+    let resolved = null;
+    if (isCheaterDemo && bestBot) {
+      resolved = { type: 'bot', bot: bestBot, isHead: true };
+    } else if (targetHit && (!blocker || canPenetrate)) {
+      resolved = resolveCombatTarget(targetHit.object);
+    }
+    const isMultiplayer = Boolean(window.SecureFPSGame?.multiplayer?.isInRoom);
 
     // 1. Check Bot Hit
     if (resolved && resolved.type === 'bot') {
       const bot = resolved.bot;
-      isHeadshot = resolved.isHead;
-      const dealtDamage = Math.round(isHeadshot ? w.damage * w.headshotMultiplier : w.damage);
+      if (isCheaterDemo) {
+        bot.spawnProtectionTimer = 0;
+      }
+      const botPos = bot.position || (bot.mesh && bot.mesh.position) || bot.operator?.root?.position;
+      const relY = botPos ? (hitPoint.y - botPos.y) : 0;
+      isHeadshot = Boolean(
+        resolved.isHead ||
+        (relY >= 1.35) ||
+        isCheaterDemo
+      );
+      // Cheater demo player deals lethal headshot damage on hit
+      const baseDmg = isHeadshot ? w.damage * (w.headshotMultiplier || 2.0) : w.damage;
+      const dealtDamage = isCheaterDemo ? Math.max(100, Math.round(baseDmg)) : Math.round(baseDmg);
 
+      this.shotsHit = (this.shotsHit || 0) + 1;
+      if (isHeadshot) {
+        this.headshots = (this.headshots || 0) + 1;
+      }
+      if (window.SecureFPSGame?.gameMode) {
+        window.SecureFPSGame.gameMode.shotsHit = (window.SecureFPSGame.gameMode.shotsHit || 0) + 1;
+        if (isHeadshot) {
+          window.SecureFPSGame.gameMode.headshots = (window.SecureFPSGame.gameMode.headshots || 0) + 1;
+        }
+      }
       const botDead = bot.takeDamage(dealtDamage, isHeadshot);
       hitTargetName = bot.name || "Combat Bot";
 
@@ -1058,7 +1208,27 @@ class WeaponManager {
       }
 
       window.dispatchEvent(new CustomEvent('fps:telemetry_hit', {
-        detail: { target: hitTargetName, damage: dealtDamage, headshot: isHeadshot }
+        detail: {
+          target: hitTargetName,
+          damage: dealtDamage,
+          headshot: isHeadshot,
+          distance: parseFloat((hitDist || 10.0).toFixed(1)),
+          visible_through_wall: hitThroughObstacle,
+          through_obstacle: hitThroughObstacle,
+          impossible_hit: isImpossibleHit,
+          line_of_sight: !hitThroughObstacle,
+          player_position: { x: parseFloat(camPos.x.toFixed(2)), y: parseFloat(camPos.y.toFixed(2)), z: parseFloat(camPos.z.toFixed(2)) },
+          target_position: { x: parseFloat(hitPoint.x.toFixed(2)), y: parseFloat(hitPoint.y.toFixed(2)), z: parseFloat(hitPoint.z.toFixed(2)) }
+        }
+      }));
+
+      window.dispatchEvent(new CustomEvent('fps:telemetry_hit_detail', {
+        detail: {
+          target_id: hitTargetName,
+          body_part: isHeadshot ? 'head' : 'body',
+          distance: parseFloat((hitDist || 10.0).toFixed(1)),
+          damage: dealtDamage
+        }
       }));
 
     // Check Training Target Hit
@@ -1070,37 +1240,7 @@ class WeaponManager {
 
     // 2. Check Remote Player Hit (Multiplayer)
     } else if (resolved && resolved.type === 'remote') {
-      const remote = resolved.remote;
-      isHeadshot = !!targetHit.object.userData.isHead;
-      const dealtDamage = Math.round(isHeadshot ? w.damage * w.headshotMultiplier : w.damage);
-      hitTargetName = remote.name || "Remote Operator";
-
-      if (window.SecureFPSGame?.gameMode?.recordDamageDealt) {
-        window.SecureFPSGame.gameMode.recordDamageDealt(hitTargetName, dealtDamage);
-      }
-
-      if (this.audio) this.audio.playHitmarker(isHeadshot);
-      this.triggerHitmarkerHUD(isHeadshot);
-
-      const isMultiplayer = Boolean(window.SecureFPSGame?.multiplayer?.isInRoom);
-      if (!isMultiplayer && this.camera && window.SecureFPSGame?.hud?.showFloatingDamage) {
-        const screenPos = hitPoint.clone().project(this.camera);
-        const screenX = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
-        const screenY = (-(screenPos.y * 0.5) + 0.5) * window.innerHeight;
-        window.SecureFPSGame.hud.showFloatingDamage(screenX, screenY, dealtDamage, isHeadshot);
-      }
-
-      if (window.SecureFPSGame?.multiplayer) {
-        window.SecureFPSGame.multiplayer.emitFire(
-          raycaster.ray.origin,
-          raycaster.ray.direction,
-          this.activeKey
-        );
-      }
-
-      window.dispatchEvent(new CustomEvent('fps:telemetry_hit', {
-        detail: { target: hitTargetName, damage: dealtDamage, headshot: isHeadshot }
-      }));
+      // Multiplayer hit indicators and combat statistics wait for server confirmation.
 
     // 3. Environmental Impact (Sparks / Dust & Bullet Audio)
     } else if (targetHit) {
@@ -1110,19 +1250,18 @@ class WeaponManager {
         this.audio.playBulletImpact(isMetal);
       }
 
-      if (window.SecureFPSGame?.multiplayer) {
-        window.SecureFPSGame.multiplayer.emitFire(raycaster.ray.origin, raycaster.ray.direction, this.activeKey);
-      }
-    } else {
-      if (window.SecureFPSGame?.multiplayer) {
-        window.SecureFPSGame.multiplayer.emitFire(raycaster.ray.origin, raycaster.ray.direction, this.activeKey);
-      }
     }
 
-    // Telemetry Weapon Fire Notification
-    window.dispatchEvent(new CustomEvent('fps:telemetry_fire', {
-      detail: { weapon: w.name }
-    }));
+    if (isMultiplayer) {
+      window.SecureFPSGame.multiplayer.emitFire(raycaster.ray.origin, raycaster.ray.direction, this.activeKey);
+    } else {
+      if (window.SecureFPSGame?.gameMode) {
+        window.SecureFPSGame.gameMode.shotsFired = Math.max(window.SecureFPSGame.gameMode.shotsFired || 0, this.shotsFired || 0);
+      }
+      window.dispatchEvent(new CustomEvent('fps:telemetry_fire', {
+        detail: { weapon: w.name, shot_id: `shot_${Date.now()}_${Math.random().toString(36).substring(2, 7)}` }
+      }));
+    }
   }
 
   getActiveConfig() {

@@ -11,7 +11,8 @@ import pyotp
 
 from app import app, ensure_default_admin
 from database.db import (
-    users, sessions_db, ban_appeals, player_notifications, admin_audit_log, game_sessions
+    users, sessions_db, ban_appeals, player_notifications, admin_audit_log,
+    game_sessions, login_history
 )
 from services.auth import hash_password
 

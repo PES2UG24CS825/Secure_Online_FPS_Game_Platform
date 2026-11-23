@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime, timezone, timedelta
+import pyotp
 from bson import ObjectId
 from app import app
 from database.db import users, admin_approvals, sessions_db, security_events, admin_audit_log
@@ -58,7 +59,9 @@ class TestTwoTierAdminMatrix(unittest.TestCase):
         c = app.test_client()
         r1 = c.post("/api/auth/login", json={"email": email, "password": password, "takeover": True})
         self.assertEqual(r1.status_code, 200, f"Login failed: {r1.json}")
-        r2 = c.post("/api/auth/verify-mfa", json={"code": "123456"})
+        user = users.find_one({"email": email})
+        code = pyotp.TOTP(user["mfa_secret"]).now()
+        r2 = c.post("/api/auth/verify-mfa", json={"code": code})
         self.assertEqual(r2.status_code, 200, f"MFA failed: {r2.json}")
         return c
 

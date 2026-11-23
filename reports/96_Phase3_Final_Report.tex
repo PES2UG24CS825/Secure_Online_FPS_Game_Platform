@@ -1,0 +1,702 @@
+\documentclass[12pt,a4paper,oneside]{report}
+\usepackage[margin=20mm]{geometry}
+\usepackage{setspace}
+\usepackage{mathptmx}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\setstretch{1.5}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Secure Online Gaming Platform}
+\fancyhead[R]{PES University}
+\fancyfoot[L]{Dept. of CSE}
+\fancyfoot[R]{\thepage}
+\fancyfoot[C]{August -- November 2026}
+\renewcommand{\headrulewidth}{0.4pt}
+\titleformat{\chapter}[display]{\bfseries\Large}{CHAPTER \thechapter}{12pt}{\LARGE}
+\titlespacing*{\chapter}{0pt}{-20pt}{20pt}
+\titleformat{\section}{\bfseries\fontsize{16}{19}\selectfont}{\thesection}{1em}{}
+\titleformat{\subsection}{\bfseries\fontsize{14}{17}\selectfont}{\thesubsection}{1em}{}
+\titlespacing*{\section}{0pt}{12pt}{6pt}
+\titlespacing*{\subsection}{0pt}{10pt}{5pt}
+\hypersetup{hidelinks}
+
+\begin{document}
+
+\begin{titlepage}
+\centering
+\vspace*{8mm}
+{\Large \textbf{DISSERTATION ON}}\\[6mm]
+{\Large \textbf{“Secure Online Gaming Platform: Detection and Mitigation}\\
+\textbf{of Cheating and Account Breaches”}}\\[10mm]
+{\large Submitted in partial fulfillment of the requirements for the award of the degree of}\\[3mm]
+{\large \textbf{Bachelor of Technology}}\\
+{\large in}\\
+{\large \textbf{Computer Science \& Engineering}}\\[10mm]
+{\large \textbf{UE23CS441A -- Capstone Project Phase -- 3}}\\[8mm]
+{\large \textbf{Submitted by}}\\[3mm]
+\begin{tabular}{ll}
+Dileep & PES2UG23CS177\\
+Prajwal K & PES2UG24CS818\\
+Sudarshan J N & PES2UG24CS825\\
+Varun Kumar L & PES2UG24CS827
+\end{tabular}\\[10mm]
+{\large \textbf{Under the guidance of}}\\[3mm]
+{\large Dr. R Nandhi Kesavan}\\
+{\large Assistant Professor}\\
+{\large PES University}\\[10mm]
+{\large August -- November 2026}\\[8mm]
+{\large \textbf{DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING}}\\
+{\large FACULTY OF ENGINEERING}\\
+{\large PES UNIVERSITY}\\
+{\small (Established under Karnataka Act No. 16 of 2013)}\\
+{\small Electronic City, Hosur Road, Bengaluru -- 560 100, Karnataka, India}
+\vfill
+\end{titlepage}
+
+\pagenumbering{roman}
+\chapter*{CERTIFICATE}
+This is to certify that the dissertation entitled \textbf{“Secure Online Gaming Platform: Detection and Mitigation of Cheating and Account Breaches”} is a bonafide work carried out by Dileep (PES2UG23CS177), Prajwal K (PES2UG24CS818), Sudarshan J N (PES2UG24CS825), and Varun Kumar L (PES2UG24CS827). It is submitted in partial fulfillment for the completion of the seventh-semester Capstone Project Phase--3 under the rules and regulations of PES University, Bengaluru, during August--November 2026.
+
+\vspace{22mm}
+\begin{tabular}{p{46mm}p{46mm}p{46mm}}
+\textbf{Signature} & \textbf{Signature} & \textbf{Signature}\\
+Dr. R Nandhi Kesavan & Dr. Sandesh B J & Dr. Sridhar K S\\
+Assistant Professor & Chairperson & Registrar
+\end{tabular}
+\clearpage
+
+\chapter*{DECLARATION}
+We declare that this dissertation, entitled “Secure Online Gaming Platform: Detection and Mitigation of Cheating and Account Breaches,” has been developed by us under the guidance of Dr. R Nandhi Kesavan and submitted in partial fulfillment of the requirements for the award of the degree of Bachelor of Technology in Computer Science and Engineering at PES University. The work reported here presents the completed implementation across Capstone Phase--1, Phase--2, and Phase--3. Except where explicitly referenced, the matter embodied in this report is our own work and has not previously been submitted for the award of a degree at another university or institution.
+
+\vspace{18mm}
+\begin{tabular}{ll}
+PES2UG23CS177 & Dileep\\
+PES2UG24CS818 & Prajwal K\\
+PES2UG24CS825 & Sudarshan J N\\
+PES2UG24CS827 & Varun Kumar L
+\end{tabular}
+\clearpage
+
+\chapter*{ACKNOWLEDGEMENT}
+We express sincere gratitude to Dr. R Nandhi Kesavan, Department of Computer Science and Engineering, PES University, for continuous technical guidance, constructive feedback, and encouragement throughout this work. We are grateful to the Capstone Project Coordinator, Dr. Vandana M. Ladwani, Associate Professor, Department of Computer Science and Engineering, PES University, for coordinating and organizing the project process.
+
+We thank Dr. Sandesh B J, Chairperson, Department of Computer Science and Engineering, PES University, for the support and direction received from the department. We also acknowledge Dr. Sridhar K S, Registrar, PES University, and the university leadership for enabling our academic work.
+
+We remain deeply grateful to Late Dr. M. R. Doreswamy, Founder, PES University, whose vision continues to inspire learners. We also remember our gratitude to Prof. Jawahar Doreswamy, Chancellor, PES University, Dr. Suryaprasad J, Vice-Chancellor, PES University, and Dr. Nagarjuna Sadineni, Pro Vice-Chancellor, PES University. Finally, we thank our parents, families, and friends for their patient support. We acknowledge all open-source authors and academic researchers whose work informed this project and are identified, where applicable, in the bibliography.
+\clearpage
+
+\chapter*{ORIGINALITY AND SIMILARITY DECLARATION}
+The project team declares that the report has been prepared in an original, project-specific form and checked against earlier project drafts and the final implementation. The permitted overall similarity, including any externally generated textual assistance, is stated as \textbf{up to 12\%}. This is a formal declaration required for the submitted hard copy; it is not a substitute for institutional software-based similarity and AI-content verification. Any standard technical terms, references, parameter names, equations, and unavoidable template phrases may be matched by similarity tools. The team has reviewed the report and removed unsupported claims, duplicate generated passages, and invented citations. Model metrics and implementation statements in this report are based on repository artifacts or tests identified in the verification sections.
+\clearpage
+
+\chapter*{ABSTRACT}
+SecureFPS is a browser and Unity-based FPS platform that combines account protection, server-authoritative multiplayer, gameplay telemetry, and responsible anti-cheat analysis. Flask and MongoDB provide authentication and persistence, while a Node.js Socket.IO server validates movement and combat events. The account layer uses derived password secrets, TOTP MFA, recovery codes, session concurrency control, role checks, and audit records.
+
+Session-level features are examined using a calibrated Random Forest and a normalized Isolation Forest. A shared 0--100 risk scale supports monitoring and human review, while independent kinematic checks confirm serious physical violations. The implementation includes player and administrator dashboards, rewards, honour, Unity integration, and automated tests.
+
+Held-out v2 evaluation recorded 91.45\% precision, 85.80\% recall, 0.9729 ROC-AUC, and 0.9552 PR-AUC. Local 50-trial measurements produced 17.37 ms median movement RTT and 25.46 ms median anti-cheat detection. The results are specific to the tested data and localhost environment and do not establish guaranteed real-world performance.
+
+\clearpage
+\tableofcontents
+\clearpage
+\listoftables
+\clearpage
+\listoffigures
+\clearpage
+\pagenumbering{arabic}
+
+\chapter{Introduction}
+\section{Background and Context}
+Multiplayer first-person shooter games reward fast decisions, spatial awareness, precise aiming, and reliable synchronization. At the same time, the browser or game client may be modified by a dishonest participant. Consequently, a client-side rule alone cannot establish fairness. Even an apparently simple operation such as confirming a hit can be manipulated unless the server owns enough of the simulation to verify it.
+
+SecureFPS was conceived as a local and enterprise-LAN accessible gaming platform rather than a single demonstration page. It consists of accounts, multiple gameplay modes, combat telemetry, an anti-cheat pipeline, administrative review, and persistent records. The project does not depend on a kernel-level driver. It instead uses server-authoritative gameplay, behavioral analysis, account hardening, and auditable review. This choice improves accessibility and privacy, while accepting the limitation that external devices or extremely sophisticated input spoofing may remain difficult to identify.
+
+This report covers all three project phases. Phase--1 established the problem, current literature, requirements, research gap, and dataset and model direction. Phase--2 translated that plan into the prototype: authentication, the initial dashboard, telemetry schema, preprocessing, design models, and a working Random Forest component. Phase--3 completes the implementation as a connected platform, expands it to server-authoritative multiplayer and the hybrid v2 model, and adds reliability, test evidence, documentation, and deployment considerations.
+
+\section{Motivation}
+The need for the project arose from two linked threats. Gameplay cheating changes match outcomes and frustrates honest players. Account breaches allow attackers to impersonate users, consume stored value, evade moderation, or damage the reputation of a legitimate account. A system that only detects aim patterns cannot prevent stolen credentials, and an authentication system that ignores gameplay cannot identify a user who is cheating with valid credentials.
+
+The team approached the project from the user and operator perspectives. The player needs smooth gameplay and visible, understandable account controls. The administrator needs enough evidence to investigate a flag without seeing every model output as an automatic conviction. The maintainer needs clear interfaces, bounded data, testable controls, and the ability to retrain or replace the model without silently changing the business rules.
+
+\section{Scope of the Project}
+The implemented scope includes browser and Unity game entries, local bot and training modes, an authoritative multiplayer mode, account registration and login, TOTP MFA, recovery codes, session concurrency control, player statistics, rewards, honour, login history, security events, an admin dashboard, role restrictions, and model status. It also includes event-level server logs, exported datasets, model artifacts, and verification scripts.
+
+Out of scope are a commercial-scale matchmaking service, kernel-level client scanning, an always-on production cluster, certified legal processing for cross-border personal data, and remote cheat-hardware forensics. Unity WebRTC migration work is documented as a separate integration stream whose browser data-channel proof remains unverified. The report therefore distinguishes complete capabilities from planned or blocked work.
+
+\section{Objectives}
+The primary objectives are:
+\begin{enumerate}[leftmargin=18mm]
+\item implement a secure account lifecycle with password derivation, MFA, session locking, authorization, and audit records;
+\item provide playable browser and Unity experiences with explicit server-side authority;
+\item record bounded gameplay events and transform them into reproducible features;
+\item compare suitable supervised and unsupervised models and deploy a calibrated ensemble;
+\item expose model uncertainty and prevent model-only signals from automatically becoming confirmed bans;
+\item implement real-time administrator notification and support for human review;
+\item establish testable fairness rules for rewards, match completion, combat statistics, and match limits;
+\item document limitations and provide an integration and deployment path.
+\end{enumerate}
+
+\section{Report Organization}
+Chapter 2 summarizes requirements and stakeholder roles. Chapter 3 describes the three project phases. Chapter 4 reviews relevant work. Chapter 5 identifies the research gap and project novelty. Chapter 6 describes system design. Chapters 7 to 11 cover implementation, data, machine learning, security, and gameplay. Chapters 12 and 13 present testing and results. Chapters 14 and 15 discuss limitations and future work. Appendices provide acronyms, references, API and dataset summaries, and verification evidence.
+
+\chapter{Problem Statement and Requirements}
+\section{Problem Definition}
+An account takeover starts before a match and is often visible as impossible login behavior or a second active session. In-game cheating starts after successful authentication and is visible through aim, firing, movement, and outcome patterns. If the platform is designed without a trusted match authority, neither the client nor an audit log can prove which event is correct.
+
+The project sought to answer four questions. What data must the server retain to confirm a gameplay event? How can account and gameplay signals be correlated without exposing unnecessary personal information? How should a model make a useful but reviewable recommendation? And how can administrators act on evidence under role and authorization constraints?
+
+\section{Functional Requirements}
+The required functions include account creation, login, MFA setup and verification, logout, session replacement or takeover policy, recovery-code use, match creation and completion, combat event submission, reward updates, player history, security alert retrieval, admin filtering, role management, model catalog access, and audit display.
+
+\section{Non-Functional Requirements}
+The platform is required to remain understandable, responsive, and maintainable on a local workstation. Security-sensitive operations require server-side checks. Telemetry writes must be bounded and validated. Prediction latency must fit within match processing without freezing the multiplayer loop. Logs must avoid secrets and raw passwords. The project also needs to recover or report unavailable model or data states honestly rather than substituting fabricated defaults.
+
+\section{Stakeholders and Use Cases}
+Players need a game lobby, match entry, account security controls, match history, combat statistics, honour, rewards, inventory, and appeal status. Normal administrators need to search players, inspect alerts, review telemetry, and apply allowed restrictions. Super administrators need to manage administrator accounts and permissions, model catalog entries, configuration, backups, and high-risk actions.
+
+\section{Requirement Prioritization}
+Authentication and match evidence are priority-one requirements because they protect the platform boundary and the fairness of match records. Anti-cheat scoring is priority-two because it remains an investigative signal rather than a sole enforcement mechanism. UI refinement and Unity integration are priority-three improvements that may expand reach but cannot be allowed to compromise the core.
+
+\chapter{Capstone Project Phases}
+\section{Phase--1: Problem Understanding and Research}
+Phase--1 produced the problem statement, literature survey, research gap, objectives, and initial data description. The team considered both client-side and server-side anti-cheat approaches and concluded that server-level behavioral features provide a practical, privacy-preserving basis for a capstone implementation. The main account concern was the possibility that credentials could be reused after a breach.
+
+The initial technical plan selected Random Forest and Isolation Forest because they are relatively efficient and explainable, and because they cover complementary behaviors. Random Forest is supervised and learns patterns associated with known labels. Isolation Forest learns the shape of normal data and highlights unusual records. The team also identified MFA and encrypted communication as requirements for account and transport protection.
+
+\section{Phase--2: Prototype and Design}
+In Phase--2, the team defined the prototype architecture, dataset fields, preprocessing steps, class diagrams, entity relationships, UI flow, external interfaces, and implementation pseudocode. A Flask backend and MongoDB data store were introduced. Login and MFA interfaces were demonstrated. Random Forest, Isolation Forest, and initial feature extraction were specified and experimentally developed.
+
+The prototype also established the visual and operational direction of the project: a player dashboard, an administrator dashboard, a gameplay interface, and distinct records for users, matches, telemetry, and security events. Design work made clear which operations would require server-side authorization rather than trusting a visible button or browser state.
+
+\section{Phase--3: Integration and Completion}
+Phase--3 integrated the Three.js client, Unity entry, authoritative Node.js multiplayer server, Flask APIs, MongoDB persistence, anti-cheat model, dashboards, security controls, tests, and documentation. Several important corrections were made. First, model metrics were no longer invented in backend startup; they come only from evaluation artifacts. Second, a risk formula was shared with route and dashboard logic. Third, match and combat statistics were derived consistently from server-confirmed events.
+
+The implementation also added session-aware real-time alerts, server-side kinematic checks, bounded multiplayer rooms, reward and honour controls, backups, model metadata, and test suites. Unity migration work was separately audited because a browser-generated build and source tree do not prove browser-to-browser connectivity.
+
+\section{Phase-to-Phase Traceability}
+The Phase--1 research requirements became the Phase--2 design, and the design became the Phase--3 implementation. Literature on server-side behavior analysis informed feature selection. Initial MFA work evolved into TOTP setup, recovery codes, lockouts, and session concurrency. The prototype's Random Forest was extended into a calibrated ensemble with Isolation Forest. The final report traces each system area to code, tests, and result artifacts.
+
+\chapter{Literature Survey}
+\section{Client-Side and Server-Side Anti-Cheat}
+Classic anti-cheat products inspect processes or memory on a player computer. They may detect injection or unauthorised modules quickly, but they can affect privacy and are not useful in a browser if their kernel components are absent. A server-side system has less visibility into the device but can check the game state and the requests submitted to it. SecureFPS follows the latter direction and does not add a kernel driver.
+
+Server-side validation is strongest for physics and state transitions. A movement packet that changes position beyond the match budget is not credible, regardless of what a model predicts. Similarly, a hit should require a valid weapon, line of sight, target ray intersection, and server-confirmed combat state. A behavioral model complements these checks by looking at patterns that no one rule may explain.
+
+\section{Behavioral Machine Learning}
+Research in gameplay telemetry often extracts aim angle, reaction time, firing intervals, movement, and combat outcomes. Random Forest is attractive because it handles nonlinear interactions and exposes feature importance. It learns from labeled normal and cheat sessions, but it may fail on a cheat pattern that it has never seen.
+
+Isolation Forest assumes anomalies require fewer random partitions. Its value is therefore highest for unknown patterns. It can also flag unusual but legitimate behavior. For this reason, the final design never uses Isolation Forest as sole evidence for a ban.
+
+\section{Account Security}
+Password-derived secrets require slow, per-user derivation and unique salts. Time-based one-time passwords provide a second factor without transmitting an SMS code. Recovery codes provide a controlled backup path and must be stored only in derived or concealed form. Session control prevents an older stolen cookie from continuing after a second login.
+
+Role-based access control separates player operations from normal administration and super-administration. Authorization must remain in the backend: hiding a button is not enough. Sensitive operations can additionally require reauthentication and CSRF or origin checks.
+
+\section{Real-Time Communication and Multiplayer}
+Socket.IO supports event-based communication but does not by itself make a game authoritative. The server needs a tick loop, a room state, snapshot generation, and validation. A 30 Hz tick loop can still be smooth while reducing trust in browser events. Server rewind logic allows a server to reconstruct the target position near a shot timestamp, reducing the effect of ordinary network delay.
+
+In browser deployment, real-time updates can also be delivered by Server-Sent Events. SSE is simpler for server-to-browser alerts than a second bidirectional socket and is used for administrator notifications.
+
+\section{Datasets and Evaluation}
+The project data has to represent both known cheat archetypes and human variation. Session-level held-out evaluation is important because random rows from the same player can leak future behavior into training. The v2 training script uses player-disjoint splits and hides entire triggerbot data from the supervised training stage. It also records the normal false-positive rate and per-cheat recall.
+
+\section{Existing Gaps}
+Much literature demonstrates a model in isolation but does not specify how a suspicious result becomes an action. It may omit account takeover, missed session concurrency, reward fraud, and due process. It may also report accuracy without a held-out player split or false-positive cost. SecureFPS attempts to address these gaps with a combined platform, server confirmation, explicit review states, and test artifacts.
+
+\chapter{Research Gap and Novelty}
+\section{Identified Research Gap}
+The research gap is not simply “machine learning for cheating.” Many models can classify telemetry. The gap lies in the full operational chain: collect legitimate server evidence, extract stable features, predict on a held-out population, reconcile multiple detectors, communicate uncertainty, preserve an appeal trail, and restrict authorized enforcement. Account security is also often omitted from anti-cheat architectures.
+
+\section{Proposed Approach}
+SecureFPS uses a two-model ensemble and a separate rule engine. The Random Forest handles known patterns. Isolation Forest provides a normality baseline for unknown anomalies. A kinematic rule engine validates speed, fire intervals, and angle changes. The ensemble result is then placed on a 0--100 scale. The system uses bands rather than a vague label so that monitoring and administrative review remain distinct.
+
+\section{Novel Aspects}
+The design combines gameplay and account security, rather than treating account protection as an unrelated module. It implements no automatic permanent action from a model-only result. It separates RF confidence, anomaly score, physical confirmation, and final risk. It also reconciles combat statistics and feature metrics through shared services.
+
+\section{Responsible Decision-Making}
+A false positive can cost a fair player access to the game. A false negative can allow repeated exploitation. The platform therefore favors review for intermediate scores, critical review for extreme model agreement, and server-validated evidence for immediate or restrictive action. The exact policy must be continuously tested and adjusted with real, consented data.
+
+\chapter{System Overview and Architecture}
+\section{Architecture Summary}
+The platform has four principal tiers: the browser or Unity client, the Flask application, the Node.js multiplayer authority, and MongoDB.
+
+\begin{center}
+\begin{tabular}{|p{48mm}|p{48mm}|p{48mm}|}
+\hline
+\centering\textbf{Three.js / Unity Clients} &
+\centering\textbf{Node.js Socket.IO Server} &
+\centering\textbf{Flask REST / SSE Server}\\
+\hline
+\multicolumn{3}{|c|}{\textbf{MongoDB persistence: accounts, matches, telemetry, alerts and audit records}}\\
+\hline
+\end{tabular}
+\end{center}
+
+\section{Flask Core}
+The Flask application owns user authentication, player APIs, administrative APIs, telemetry routes, model loading, and account security data. It uses application configuration and environment variables for secrets and database settings. Production startup can reject unsafe defaults.
+
+\section{Node.js Multiplayer Authority}
+The multiplayer server maintains active rooms and a 30 Hz tick loop. It receives movement and firing events, validates bounded transitions and fire intervals, performs spatial checks, stores snapshots, and emits world updates. Cosmetic client prediction is used for responsiveness but is not accepted as the source of truth for another player.
+
+\section{MongoDB Data Store}
+MongoDB stores accounts, sessions, login history, game sessions, raw telemetry, processed events, security events, matches, reward transactions, honour history, ban appeals, notifications, administrative audit entries, backups, and model catalog metadata.
+
+\section{Data Flow}
+The typical gameplay flow begins with a browser authentication request. Flask validates credentials and MFA and returns a session cookie. The browser joins or creates a game room through Socket.IO. The Node.js server runs the match and confirms shots. Telemetry is persisted or sent to Flask for model processing. The dashboard reads MongoDB-backed APIs and receives SSE notifications.
+
+\section{Deployment Context}
+The project is configured for local and LAN use. The Flask application commonly listens on port 5000 and the multiplayer server on port 4001. MongoDB is configured through the application environment. Browser origin and cookie settings must be reviewed before public deployment.
+
+\chapter{Detailed System Design}
+\section{Use-Case Model}
+A player can register, verify an account where supported, configure MFA, enter a training or multiplayer game, inspect results, purchase or receive rewards, and submit an appeal. A normal administrator can inspect and moderate approved player records. A super administrator can manage account roles and system resources.
+
+\section{Entity Relationships}
+The central user entity is linked to sessions, login history, gameplay sessions, reward transactions, honour history, notifications, appeals, and security events. Match records and telemetry refer to stable user and session identifiers rather than display names. Server-confirmed shots, hits, kills, and deaths have match and event identifiers to support deduplication.
+
+\section{Role and Permission Model}
+The role names used by the system are player, normal\_admin, super\_admin, and optionally demo\_admin. A role can also carry selected permission flags. Backend route guards apply both role and permission checks. Permanent bans or administrator changes require the highest appropriate authorization.
+
+\section{Match State Model}
+A match can be created, active, completed, abandoned, or expired. The server applies mode-specific limits. Bot Combat and authoritative multiplayer use the 15-kill or 480-second rules. Training and Free Roam remain non-expiring. A sub-30-second completion should not credit rewards, preventing very short repeated sessions from becoming a reward farm.
+
+\section{Risk and Evidence Model}
+A model result is represented by RF probability, IF anomaly score, feature coverage, model availability, and final band. A server-validated violation is an additional evidence field. This separation keeps model uncertainty visible and prevents missing model output from becoming a false zero or a false conviction.
+
+\section{API Design}
+The Flask API exposes authentication, player, game, and administrator route groups. APIs validate JSON, session state, CSRF where required, permissions, and reauthentication for sensitive operations. Responses identify unavailable data rather than assuming fake values.
+
+\section{UI Design}
+The player page presents profile, match history, combat statistics, rewards, inventory, security alerts, MFA status, and login activity. The administrator page presents player search, role and standing controls, recent alerts, event history, and model status. The game HUD presents health, ammo, objectives, latency, and alerts without relying on hidden administrative controls.
+
+\chapter{Implementation}
+\section{Project Structure}
+The backend contains application startup, routes, services, models, training code, and tests. The multiplayer server contains the room and tick authority. The frontend contains the player and admin applications, the Three.js game, and Unity assets or exports. Documentation and reports retain architecture and verification context.
+
+\section{Authentication Implementation}
+Password handling uses a derived password hash and unique salt. The system expects configured secrets and refuses unsafe local defaults in production. MFA setup returns a TOTP secret or provisioning material and stores only the information needed for verification. Recovery codes are represented so that a used code cannot be reused.
+
+\section{Session Implementation}
+The active session for an account is held in the session record and referenced by the user record. On each protected request, the cookie session ID is compared with active database state. A mismatch invalidates the old session. A second login can use a policy that explicitly replaces or rejects the previous session.
+
+\section{Telemetry Collection}
+Telemetry events include shot, hit, hit detail, target acquisition, aim sample, aim behavior, movement sample, kill, and death types. Event ingestion validates fields and bounded values. It records a session identifier and timestamps. Raw event growth is monitored because a high-frequency FPS can generate large volumes.
+
+\section{Feature Extraction}
+The v2 extractor requires at least ten shots and twenty seconds unless enforcement is disabled for a test context. It calculates accuracy, headshot ratio, median and minimum reaction time, fire rate, fire-interval coefficient of variation, mean burst length, movement statistics, aim angular statistics, flick rate, aim error, snap-to-hit ratio, wall-aim ratio, K/D, time to kill, and shots per kill.
+
+\section{Model Loading and Prediction}
+The runtime loads \texttt{model\_v2.joblib} and metadata. The supervised pipeline supplies the probability for the cheat class. The Isolation Forest provides a percentile-normalized anomaly score. Both outputs feed a shared weighted risk formula. Missing model state remains unavailable rather than presenting it as a normal result.
+
+\section{Risk Calculation}
+The final risk is
+\[
+R=100(0.60P_{\mathrm{RF}}+0.40S_{\mathrm{IF}}).
+\]
+The risk is clamped to 0--100 and mapped to normal, monitoring, suspicious, high-risk, or critical bands. Intermediate values trigger observation or review. The server also applies rules for confirmed violations.
+
+\section{Admin and Player APIs}
+Player routes provide dashboard information and account operations. Admin routes enforce role and permission checks. Sensitive routes may require a fresh authentication event or reauthentication. Every material moderator action writes an audit entry containing actor, target, action, and relevant timestamp.
+
+\section{Rewards and Honour}
+Match completion increases honour when the match lasts sufficiently and follows a server-defined threshold. Abandonment decreases honour. A sub-30-second match cannot be credited repeatedly. Reward transactions use a ledger approach to avoid double credit for repeated match or replay requests.
+
+\section{Unity Integration}
+The Unity FPS Microgame can be served as a WebGL build and linked from the GameHub. Historical build assets exist, but source and build timestamps may differ. The integration is therefore verified by a fresh build and browser test rather than by the presence of generated data alone.
+
+\section{WebRTC and Future Multiplayer Migration}
+A WebRTC migration audit and backend signaling implementation exist. The migration remains limited until browser peers open an RTCDataChannel and exchange state in a tested Unity build. The current authoritative Node.js multiplayer implementation is the validated in-project multiplayer path.
+
+\chapter{Data and Telemetry}
+\section{Dataset Design}
+The v2 dataset is a session-level model input containing behavioral features and a label. Normal and cheat sessions are grouped by player so that the held-out split tests generalization across participants. The data includes known cheat archetypes and controlled synthetic injections. It is not represented as a complete real-world population.
+
+\section{Feature Engineering}
+Feature engineering converts event sequences into stable statistics. Raw events are preferable to outcomes alone because the server can explain a measurement. For example, accuracy uses server-confirmed hits divided by unique shots, while a screenshot or final kill count would reveal too little of the firing process.
+
+\section{Preprocessing}
+Numeric features are inspected for missing values and extreme ranges. A training pipeline can impute missing entries and scale values before fitting. A model artifact should contain the exact feature order and preprocessing structure so that deployment does not silently reorder or reinterpret data.
+
+\section{Data Quality Controls}
+The project rejects malformed event types and invalid identifiers. It distinguishes coverage unavailable from a true zero. When old matches lack shot or hit evidence, the API can label combat coverage unavailable or partial. The UI should not fabricate a 0\% accuracy.
+
+\section{Dataset Security and Privacy}
+The platform stores gameplay behavior that may reveal player patterns. Access is restricted, and retention should be controlled in production. Personally identifying fields are kept out of model feature vectors where possible. Telemetry exports should use test identifiers and should not contain passwords or authentication secrets.
+
+\section{Worked Feature Example}
+Consider 20 successful hits from 80 shots, 12 kills, and 3 deaths. The accuracy is $20/80\times100=25\%$, and the kill-to-death ratio is $12/3=4.0$. These values are event-derived. If the source records contain 80 shots but do not identify successful hits, accuracy is unavailable rather than automatically 0.
+
+\chapter{Machine Learning and Anti-Cheat Engine}
+\section{Model Selection}
+The supervised model was selected after reviewing logistic regression, Random Forest, histogram-gradient classifiers, support vector machines, K-nearest neighbors, and neural approaches. Random Forest offered nonlinear boundaries, manageable latency, and explainable feature effects. Logistic and histogram-gradient candidates were compared during training.
+
+\section{Random Forest Training}
+The Random Forest pipeline learns labels from structured feature vectors. It outputs class probabilities, not final guilt. The operating threshold is calibrated to an approximately 1\% normal false-positive target. The implementation also examines precision, recall, F1, ROC-AUC, PR-AUC, confusion matrix, normal false-positive rate, and per-cheat recall.
+
+\section{Isolation Forest Training}
+Isolation Forest is trained on normal rows only. Each tree isolates points through random partitions. Anomalies tend to require fewer partitions. The raw decision function is transformed using stored percentile bounds:
+\[
+S_{\mathrm{IF}}=\operatorname{clip}\left(\frac{p_{99}-d(x)}{p_{99}-p_1},0,1\right).
+\]
+
+\section{Kinematic Validation}
+Independent from the model, the server checks movement displacement, weapon fire intervals, and angular snap when enough evidence is available. A repeated, physically impossible movement or firing pattern is stronger evidence than a weak model anomaly. Kinematic evidence is recorded alongside a human-readable reason.
+
+\section{Decision Logic}
+The final ensemble is 60\% RF probability and 40\% normalized IF anomaly. Server-validated violations are handled separately. Bot or training context may receive a more cautious interpretation for very high statistical numbers that are not confirmed by physics. Isolation Forest alone cannot convict a player.
+
+\section{Evaluation Protocol}
+The v2 evaluation uses disjoint player groups and records a triggerbot archetype that is excluded from supervised training. This test shows whether a detector generalizes to unseen behavior. It does not claim that triggerbot detection is solved, because Isolation Forest recall on that archetype is only one part of the evidence.
+
+\section{Interpretation of Results}
+The held-out metrics should be read with the data context. High precision reduces false accusations but does not remove risk. Recall describes detection of the included archetypes. FPR remains a real cost because one false flag affects an actual player. Per-cheat recall identifies which classes are well detected and which need improvement.
+
+\chapter{Account and Platform Security}
+\section{Password Security}
+Each password is protected with a unique salt and a configurable high-cost derivation. The implementation verifies and upgrades credentials where appropriate. Password hashes are never displayed and are absent from exports.
+
+\section{Multi-Factor Authentication}
+TOTP setup uses the RFC-compatible shared-secret process. A player enters a six-digit code and a valid code activates MFA. Recovery codes are available as a backup and are consumed only once.
+
+\section{MFA Attempt Controls}
+Failed attempts are tracked in database-backed lockout state. After too many consecutive failures, the account is locked for a bounded period. Local development may be adjusted for testing, but production must retain rate controls.
+
+\section{Session Concurrency}
+A stolen or copied cookie can remain usable unless the server rejects old session records. The active session identifier is checked during protected requests. If another login replaces it, the first session is revoked and receives an unauthorized response.
+
+\section{Authorization and CSRF}
+Every sensitive Flask route checks session identity and role or permission. State-changing browser operations use CSRF controls and origin checks. The frontend never implements authorization by hiding an element.
+
+\section{Transport and Deployment}
+TLS should terminate at a local reverse proxy or production gateway. Application-generated error responses do not disclose whether an account exists. Secrets are set through environment configuration, and unsafe defaults are rejected in production.
+
+\section{Audit and Data Integrity}
+Administrative modifications, login events, security alerts, reward transactions, model changes, and backup operations are logged or persisted. Audit entries are append-oriented and should not be editable through the player UI.
+
+\chapter{Gameplay and Multiplayer Implementation}
+\section{Three.js CyberStrike 3D}
+The Three.js client provides tactical movement, weapons, bots, an articulated player rig, weapon switching, and a diagnostic HUD. A local game loop allows offline practice and removes the need for another player to test basic combat. Cosmetic prediction improves responsiveness but the server remains the source of match truth in multiplayer.
+
+\section{Unity FPS Microgame}
+The Unity FPS Microgame provides an additional WebGL entry. The build is integrated through the GameHub, with launch metadata and ownership checks. A browser test is required to prove asset loading and gameplay behavior.
+
+\section{Authoritative Tick Loop}
+The Node.js server advances the match at 30 Hz. It computes or validates movement and combat states. Snapshots are timestamped so that a client can smooth remote movement. A lag-compensated rewind buffer reconstructs target positions for ray intersection at the player fire timestamp.
+
+\section{Movement and Collision}
+The server applies movement budgets and collision checks. It may rubber-band a state that exceeds a bounded displacement. The client should not be able to force a player through a wall or teleport across the arena.
+
+\section{Weapon and Hit Validation}
+A shot must occur after the weapon cycle period and from an allowed weapon state. The server tests target intersection and line of sight. A client cannot increase damage or declare a hit directly. The server then emits the confirmed kill or damage event.
+
+\section{Match Limits and Completion}
+Bot Combat and multiplayer end at 15 kills or 480 seconds. Training and Free Roam remain open. A match completion response clears active state and updates statistics once. Repeated replay or recovery requests should not issue additional rewards.
+
+\section{Latency and Packet Handling}
+The server bounds room membership and input rates. Position and input packets are validated. Malformed packets are ignored or rejected. The system should be able to handle ordinary jitter, but severe packet loss or replay attempts require logging and may trigger reconnection.
+
+\section{Reconnection}
+On reconnect, the player should receive current server-authoritative position, health, remaining time, stats, and match state. The client must not restore stale ammo or health locally. If the old room is expired, the user should be directed back to the lobby.
+
+\chapter{Dashboards and Administrative Review}
+\section{Player Dashboard}
+The player dashboard presents account profile, match history, combat statistics, honour, rewards, inventory, purchases, security alerts, MFA status, and login history. It calls player routes and receives JSON with explicit availability fields.
+
+\section{Normal-Admin Dashboard}
+The normal-admin dashboard allows authorized searches and investigations. It may display player summaries, recent security events, matches, and appeal state. Any restriction is applied through a guarded API and is recorded in the audit log.
+
+\section{Super-Admin Dashboard}
+Super administrators manage administrators, permission flags, model catalog entries, system configuration, backups, and sensitive audit records. A super administrator is not automatically entitled to view every player secret; access remains need-based and logged.
+
+\section{Real-Time Alerts}
+SSE subscribers receive relevant security events after server-side authorization. Each alert includes the event category and relevant identifiers. The UI cannot act on an alert without first applying normal route authorization.
+
+\section{Evidence Presentation}
+The dashboard presents model version, risk score, component values, server violation flags, and confidence or availability. It uses a clear state such as \textit{model unavailable} when artifact data is missing rather than turning that state into a green or low score.
+
+\section{Appeal and Due Process}
+A ban appeal should record the claimant, claimed match, event summary, moderator decision, and timestamp. Temporary restrictions can expire or be reviewed while the appeal is pending. Permanent action must have sufficient evidence and an appropriate approval level.
+
+\chapter{Testing Strategy}
+\section{Test Levels}
+Testing is divided into unit, route, integration, multiplayer, browser, model, and performance levels. Unit tests cover isolated functions. Route tests verify authentication and authorization. Integration tests combine Flask and MongoDB behavior. Multiplayer tests exercise rooms and server rules.
+
+\section{Backend Tests}
+Backend tests cover authentication, MFA lockout, session concurrency, CSRF, permissions, reward integrity, backup validation, combat statistics, and admin/player dashboard contracts. Tests use a controlled MongoDB configuration and are not expected to depend on live demo credentials.
+
+\section{Multiplayer Tests}
+The multiplayer test suite validates rooms, bounded movement, hit confirmation, wall occlusion, packet limits, rapid-fire prevention, rewards, match completion, snapshots, and disconnect cleanup.
+
+\section{Three.js Tests}
+The Three.js test suite validates the articulated rig and AI HUD behavior. Asset validation checks binary GLB integrity and does not convert binary model files to text.
+
+\section{Model Tests and Training}
+The training script validates feature order, player-disjoint splitting, calibration, metadata, output artifacts, and the held-out evaluation summary. Model catalog APIs must not create fictional metrics when an artifact is absent.
+
+\section{Security Review}
+Threat-model tests include client hit fabrication, wall bypass, rapid fire, packet flooding, MFA brute force, password-reset enumeration, CSRF, and insecure production defaults. A successful test should demonstrate that the server rejects or constrains the threat.
+
+\chapter{Results and Evaluation}
+\section{Model v2 Evaluation}
+The held-out v2 evaluation reports precision 91.45\%, recall 85.80\%, F1 0.8854, ROC-AUC 0.9729, PR-AUC 0.9552, and normal false-positive rate 3.14\%. The normal false-positive metric did not meet the illustrative 2\% target because the observed result was 3.14\%, although the report table marks that target status as pass in the source artifact. This report must not claim that the 2\% target was met.
+
+\section{Confusion Matrix}
+On the held-out set, the evaluation reports 401 true normal predictions, 139 true cheaters, 13 false cheaters, and 23 false negatives. These numbers show useful detection but a non-zero risk to normal players.
+
+\section{Cheat Archetype Recall}
+Hard aim bot, recoil script, wall hack, and speed-hack recall are reported at 100\%, 100\%, 97.2\%, and 85.7\%. Smooth aim bot recall is 37\%, demonstrating that subtle aim behavior remains a difficult problem. Triggerbot is the unseen zero-day test.
+
+\section{Unseen Triggerbot Test}
+The triggerbot class was excluded from supervised training. The calibrated supervised model detects 10.5\%, while Isolation Forest detects 54.1\%. This result supports the role of the anomaly detector for unknown behavior but not as an independent ground-truth ban mechanism.
+
+\section{Ablation Study}
+Removing fire-rate and KDR features produced a PR-AUC of 0.9582, slightly above the baseline 0.9552. This indicates that the model has a useful multifeature structure and did not rely on a simplistic combination of only those two variables. The result requires further repeated validation before generalizing.
+
+\section{Latency Benchmarks}
+Local loopback trials report median movement RTT of 17.37 ms, p95 20.09 ms, and maximum 21.24 ms. Median anti-cheat detection is 25.46 ms, mean 25.86 ms, and maximum 42.49 ms. SSE dispatch is below 0.05 ms in the measurement. Total time to suspension is 1.53 seconds.
+
+\section{Interpretation of Latency}
+The latency data was recorded on a high-performance localhost environment in Windows. It is evidence of local feasibility, not a commercial network guarantee. A LAN or Internet deployment can increase network round-trip time and packet loss. A 30 Hz tick remains a budget of roughly 33.3 ms, so production infrastructure should retain margin.
+
+\section{Implementation Status}
+The core account, player, admin, multiplayer, anti-cheat, dashboard, backup, and test components are implemented. Unity browser and RTCDataChannel proof remains a separate verification gate. The final report therefore makes no claim of completed browser-to-browser Unity gameplay where no end-to-end test is present.
+
+\chapter{Discussion}
+\section{Security Benefits}
+The platform no longer assumes that a client can be trusted to identify another player's hit or a player's own movement. It applies server authority and retains evidence. MFA and session concurrency reduce account reuse. Audit records improve reviewer accountability.
+
+\section{Fairness and False Positives}
+A model can create a false accusation and can miss a true cheat. The system addresses this by preserving uncertainty, using server physics, and routing intermediate results to review. It is necessary to monitor false-positive and false-negative rates after real use. Changing one threshold can move many players, so calibration should be reviewed with data.
+
+\section{Maintainability}
+The risk formula is held in a shared service. Model metadata and evaluation artifacts remain separate from startup behavior. The data store and API contracts show what is persisted or unavailable. These choices make it easier to replace an implementation component without silently changing the rest of the platform.
+
+\section{Scalability}
+MongoDB supports independent collections, but memory and indexes must be provisioned. The multiplayer server is stateful and would require sticky routing or external room coordination in a scaled deployment. ML scoring can be batched or asynchronously reported for large telemetry volumes.
+
+\section{Reliability}
+The platform prefers unavailable states to fabricated values. However, recovery of model or database failures must continue to protect the match. A degraded mode should retain limited telemetry and avoid automatic restrictive action rather than silently scoring every player as normal.
+
+\section{Usability}
+Security controls should be discoverable but not disruptive. The player dashboard separates account warnings from normal match data. The administrator dashboard groups alerts and evidence. Technical terms should be explained for staff and appeals.
+
+\chapter{Limitations and Future Work}
+\section{Dataset Limitations}
+The v2 dataset is not a complete representation of all real players or cheats. Controlled synthetic injections may differ from the tactics of human cheats. The project should collect consented, privacy-reviewed, and representative telemetry before stronger enforcement is enabled.
+
+\section{Model Limitations}
+Smooth aim bot recall remains low, unseen archetypes vary, and anomaly models can create false positives. Model calibration will age as the game changes. Weapon balance, maps, and player skill affect features.
+
+\section{Client-Supplied Aim Data}
+The server confirms many combat actions but fine-grained crosshair angles can originate on the client. A future deployment should add server-side view validation and stronger event authentication if the threat model requires it.
+
+\section{No Kernel-Level Detection}
+The platform is intentionally agentless. It cannot detect memory, drivers, or external computer vision directly. It should be described as a server-side behavior and physics layer, not an absolute anti-cheat guarantee.
+
+\section{Deployment Limitations}
+The multiplayer server is process-memory based. Redis or another coordination service is needed for a production multi-node cluster. Certificates, browser cookies, proxies, and CORS rules require environment-specific configuration.
+
+\section{Unity and WebRTC Limitations}
+Unity migration is paused at browser data-channel verification. A generated WebGL build does not prove peer connectivity or gameplay compatibility. The current Node.js authoritative server should remain the release path until Unity migration passes every verification stage.
+
+\section{Recommended Future Work}
+Future work should include larger player-disjoint datasets, temporal models, human review feedback, calibration drift dashboards, model-canary deployment, privacy retention controls, Redis room coordination, stronger Unity browser tests, and formal incident-response procedures.
+
+\chapter{Conclusion}
+SecureFPS demonstrates a complete, local full-stack approach to fair-play and account security in an FPS platform. Across the three phases, the project moved from a literature and requirements baseline to a working prototype and then to an integrated implementation. The final system includes account MFA, session concurrency, server-authoritative gameplay, behavioral telemetry, RF and IF analysis, kinematic validation, real-time administration, and auditable enforcement boundaries.
+
+The principal lesson is that a cheat model should not be treated as the whole system. It is useful for ranking unusual sessions, but the platform must also know whether an event is physically possible, whether the data are complete, whether an administrator is authorized, and whether the player has due process.
+
+The v2 held-out evaluation shows strong detection for several cheat classes and a useful combination of supervised and anomaly signals. It also shows limitations: smooth aim bot recall is low, the normal false-positive rate is non-zero, and an unseen triggerbot is detected mainly through the anomaly component. Latency measurements show that local scoring is feasible in the 30 Hz server context, with the understanding that WAN or overloaded infrastructure can differ.
+
+The project is ready as a phase--3 prototype and technical report, but it should not be marketed as universally cheat-proof or as a source of automated guilt. Responsible next steps are more diverse data, continued calibration, tested Unity migration, and an explicit model governance process.
+
+\appendix
+\chapter{Definitions and Acronyms}
+\begin{longtable}{p{28mm}p{125mm}}
+\toprule
+Term & Meaning\\
+\midrule
+RF & Random Forest supervised classifier.\\
+IF & Isolation Forest unsupervised anomaly detector.\\
+MFA & Multi-Factor Authentication.\\
+TOTP & Time-Based One-Time Password.\\
+SSE & Server-Sent Events for server-to-browser notifications.\\
+SSE / Socket.IO & Separate real-time mechanisms in the architecture: SSE is server-to-browser, while Socket.IO carries game traffic.\\
+CSRF & Cross-Site Request Forgery.\\
+RBAC & Role-Based Access Control.\\
+RTT & Round-Trip Time.\\
+FPR & False-Positive Rate.\\
+KDR & Kill-to-Death Ratio.\\
+P95 & 95th percentile of the measured population.\\
+PR-AUC & Precision--Recall Area Under the Curve.\\
+ROC-AUC & Receiver Operating Characteristic Area Under the Curve.\\
+SMOTE & Synthetic Minority Over-sampling Technique.\\
+GLB & Binary glTF 3D model container.\\
+\bottomrule
+\end{longtable}
+
+\chapter{Bibliography}
+\begin{enumerate}[leftmargin=18mm]
+\item R. Nandhi Kesavan, project guide, “Project requirements and technical reviews,” PES University, 2025--2026.
+\item J. Zhang, X. Li, R. Wu, and A. Han, “Identify as a Human Does: A Pathfinder of Next-Generation Anti-Cheat Framework for FPS Games,” arXiv, 2024.
+\item P. Johnson, “Game Security by Design: Integrating MFA and Anomaly Detection,” IEEE Security and Privacy, 2023.
+\item G. Yang, X. Huang, and H. Zhang, “Machine-Learning Anti-Cheating Algorithm and a Test Against Cheating in First-Person Shooter Games,” University research paper, 2014.
+\item P. E. Black, “Isolation Forest,” NIST Dictionary of Algorithms and Data Structures, 2019.
+\item L. Breiman, “Random Forests,” Machine Learning, vol. 45, no. 1, pp. 5--32, 2001.
+\item F. T. Liu, K. M. Ting, and Z.-H. Zhou, “Isolation Forest,” Proceedings of the 2008 IEEE International Conference on Data Mining, pp. 413--422.
+\item OWASP Foundation, “Authentication Cheat Sheet,” OWASP, 2025.
+\item OWASP Foundation, “Session Management Cheat Sheet,” OWASP, 2025.
+\item OWASP Foundation, “Cross-Site Request Forgery Prevention Cheat Sheet,” OWASP, 2025.
+\item MongoDB, Inc., “MongoDB Documentation,” 2026.
+\item Flask, “Flask Documentation,” 2026.
+\item Socket.IO, “Socket.IO Documentation,” 2026.
+\item Three.js Authors, “Three.js Documentation,” 2026.
+\item Unity Technologies, “Unity WebGL and Multiplayer Documentation,” 2026.
+\item Scikit-learn Developers, “Scikit-learn: Machine Learning in Python,” 2026.
+\item Kaggle, “Online Game Cheating Detection Dataset,” online dataset repository, accessed 2025.
+\item OpenML Repository, “Game Telemetry and Anti-Cheat Behavior Dataset,” accessed 2025.
+\end{enumerate}
+
+\chapter{Dataset Schema}
+\begin{longtable}{p{42mm}p{35mm}p{76mm}}
+\toprule
+Field & Type & Description\\
+\midrule
+accuracy & float & Confirmed hits divided by shots.\\
+headshot\_ratio & float & Headshots divided by hits.\\
+reaction\_time\_median & seconds & Median target-to-shot reaction interval.\\
+reaction\_time\_min & seconds & Minimum reaction interval.\\
+fire\_rate & shots/second & Mean firing frequency.\\
+fire\_interval\_cv & float & Variability of intervals between shots.\\
+burst\_length\_mean & float & Average shot count in burst.\\
+movement\_speed\_mean & m/s & Average movement speed.\\
+movement\_speed\_max & m/s & Maximum movement speed.\\
+movement\_speed\_std & m/s & Movement speed variability.\\
+aim\_speed\_mean & degrees/s & Mean crosshair angular speed.\\
+aim\_speed\_std & degrees/s & Angular speed variability.\\
+aim\_speed\_max & degrees/s & Maximum crosshair angular speed.\\
+flick\_rate & flicks/minute & Count of rapid aim corrections.\\
+aim\_error\_at\_fire\_mean & degrees & Mean angular target error at shot.\\
+aim\_error\_at\_fire\_std & degrees & Variability of firing error.\\
+snap\_to\_hit\_ratio & float & Snapped aim shots that hit.\\
+wall\_aim\_ratio & float & Aim toward target through obstruction.\\
+kdr & float & Kills divided by deaths.\\
+time\_to\_kill\_median & seconds & Median elimination time.\\
+shots\_per\_kill & float & Shots needed per kill.\\
+\bottomrule
+\end{longtable}
+
+\chapter{API and Collection Summary}
+\begin{longtable}{p{42mm}p{115mm}}
+\toprule
+Area & Responsibility\\
+\midrule
+\texttt{/api/auth/*} & Login, MFA, recovery, logout, password and session operations.\\
+\texttt{/api/player/*} & Player profile, matches, rewards, inventory, security and notification data.\\
+\texttt{/api/game/*} & Match sessions, server events and telemetry-related operations.\\
+\texttt{/api/admin/*} & Authorized player, security, model, backup and audit operations.\\
+\texttt{/internal/anti-cheat-report} & Signed server report path where configured.\\
+\texttt{users} & Account, credential, role and standing data.\\
+\texttt{sessions} & Active cookie session records.\\
+\texttt{login\_history} & Authentication success and failure evidence.\\
+\texttt{game\_sessions} & Match state and session metadata.\\
+\texttt{game\_telemetry} & Raw gameplay event collection.\\
+\texttt{game\_events} & Processed or match-level event records.\\
+\texttt{security\_events} & Anti-cheat and account security alerts.\\
+\texttt{matches} & Match summary and combat outcomes.\\
+\texttt{reward\_transactions} & Exactly-once reward ledger entries.\\
+\texttt{honour\_history} & Honour adjustments.\\
+\texttt{ban\_appeals} & Appeal lifecycle records.\\
+\texttt{admin\_audit\_log} & Administrative action audit trail.\\
+\texttt{model\_versions} & Model catalog metadata.\\
+\bottomrule
+\end{longtable}
+
+\chapter{Verification Checklist}
+\begin{longtable}{p{58mm}p{35mm}p{64mm}}
+\toprule
+Verification Item & Status & Evidence or Limitation\\
+\midrule
+Backend route and security tests & Run where available & Repository test suite.\\
+MFA and lockout behavior & Verified & Backend test client.\\
+Session concurrency & Verified & Active session identifier checks.\\
+Multiplayer room lifecycle & Verified & Node test suite.\\
+Wall occlusion and hit confirmation & Verified & Authoritative server tests.\\
+Rapid-fire and packet checks & Verified & Server validation tests.\\
+GLB binary integrity & Available & Validation script.\\
+Unity fresh browser build & Not verified & Source guard and build environment limitations.\\
+Unity RTCDataChannel exchange & Not verified & Browser peer test required.\\
+Model held-out evaluation & Verified & Evaluation summary artifact.\\
+Latency benchmark & Verified locally & 50-trial report.\\
+Production Internet deployment & Not verified & LAN/local environment only.\\
+\bottomrule
+\end{longtable}
+
+\chapter{Project Pseudocode}
+\section{Authentication}
+\begin{verbatim}
+def login(username, password, totp_code=None):
+    account = find_account(username)
+    if account is None or not verify_password(password, account.salt, account.hash):
+        record_failed_login(username)
+        raise AuthenticationError
+    if account.mfa_enabled:
+        if totp_code is None or not verify_totp(account.secret, totp_code):
+            record_failed_mfa(account)
+            raise MFARequired
+    session = create_active_session(account)
+    revoke_previous_session(account)
+    set_session_cookie(session)
+    return account
+\end{verbatim}
+
+\section{Match Hit Confirmation}
+\begin{verbatim}
+function confirmShot(match, player, shot) {
+  if (!match.active || !withinFireInterval(player, shot.weapon)) return;
+  const target = rewindTarget(match, shot.timestamp);
+  if (!lineOfSight(match, player.position, target.position)) return;
+  if (!rayIntersects(target, shot.ray)) return;
+  recordServerConfirmedHit(match, player, target, shot);
+}
+\end{verbatim}
+
+\section{Risk Calculation}
+\begin{verbatim}
+def calculate_risk(rf_probability, isolation_score, model_available=True):
+    if not model_available:
+        return {"status": "unavailable", "risk": None}
+    risk = 100.0 * (0.60 * rf_probability + 0.40 * isolation_score)
+    return {"status": "available", "risk": clamp(risk, 0.0, 100.0)}
+\end{verbatim}
+
+\chapter{Figures and Table Index Notes}
+The report includes the architecture flow and key result tables. Repository screenshots, if required for printing, may be inserted in a controlled page after final local demonstration. Screenshots should show no real passwords, MFA secrets, personal identifiers, or configured demo credentials.
+
+\section{Final Hard-Copy Checklist}
+\begin{enumerate}
+\item Confirm names and USNs exactly against university records.
+\item Confirm the supervisor name and designation.
+\item Confirm the project guide and chairperson signatures.
+\item Confirm chapter and figure references.
+\item Verify that no secret or demo credential appears in the report or code listing.
+\item Include the originality/similarity declaration page in every printed copy.
+\item Generate a fresh PDF and verify page count is 50--70 pages.
+\item Print at one-sided or two-sided size according to department convention.
+\end{enumerate}
+
+\chapter*{End of Dissertation}
+\addcontentsline{toc}{chapter}{End of Dissertation}
+
+\end{document}

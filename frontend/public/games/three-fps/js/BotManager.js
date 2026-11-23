@@ -311,7 +311,11 @@ class Bot {
 
     if (!this.isActive) {
       this.currentSpeed = 0;
-      this.operator.updateAnimation(delta, 0, true, camera, false, 0);
+      this.isDead = true;
+      if (this.operator?.root) {
+        this.operator.root.position.set(0, -999, 0);
+        this.operator.root.visible = false;
+      }
       return;
     }
 
@@ -536,6 +540,7 @@ class Bot {
   fireSingleShot(targetPos, onPlayerHurt) {
     this.currentAmmo = Math.max(0, this.currentAmmo - 1);
     this.botManager.botShotsFiredCount++;
+    this.spawnProtectionTimer = 0;
 
     const muzzlePos = new THREE.Vector3(this.position.x, this.position.y + 1.4, this.position.z);
     const dist = muzzlePos.distanceTo(targetPos);
@@ -579,6 +584,10 @@ class Bot {
       const totalDamage = Math.round(isHeadshot ? baseDamage * 1.75 : baseDamage);
 
       if (typeof onPlayerHurt === 'function') {
+        if (window.isDemoGodModeActive || window.SecureFPSGame?.isCheaterDemoActive || window.SecureFPSGame?.gameMode?.demoGodMode) {
+          // Cheater Demonstration: Damage immunity / God Mode active, bot deals no damage to cheater demo player
+          return;
+        }
         const botWorldPos = this.mesh ? this.mesh.position.clone() : this.position.clone();
         onPlayerHurt(totalDamage, this.name, botWorldPos);
         this.botManager.playerDamageEventsCount++;
@@ -858,7 +867,7 @@ class Bot {
   }
 
   takeDamage(amount, isHeadshot) {
-    if (this.isDead || this.spawnProtectionTimer > 0) return false;
+    if (!this.isActive || this.isDead || this.spawnProtectionTimer > 0) return false;
 
     this.health = Math.max(0, this.health - amount);
     let isFatal = false;
@@ -883,6 +892,17 @@ class Bot {
   }
 
   respawn(playerPos) {
+    if (!this.isActive) {
+      this.isDead = true;
+      this.currentSpeed = 0;
+      this.position.set(0, -999, 0);
+      if (this.operator?.root) {
+        this.operator.root.position.set(0, -999, 0);
+        this.operator.root.visible = false;
+      }
+      return;
+    }
+
     this.isDead = false;
     this.health = this.maxHealth;
     this.currentAmmo = this.magCapacity;
@@ -1008,7 +1028,7 @@ class BotManager {
       // Must be at least 6 meters from other living bots
       let tooClose = false;
       for (const bot of this.bots) {
-        if (bot.id !== currentBotId && !bot.isDead) {
+        if (bot.id !== currentBotId && bot.isActive && !bot.isDead) {
           if (bot.position.distanceTo(pt) < 6.0) {
             tooClose = true;
             break;
@@ -1047,17 +1067,22 @@ class BotManager {
       const activeCount = diff === 'easy' ? 2 : (diff === 'normal' ? 3 : 4);
       this.bots.forEach((bot, index) => {
         bot.isActive = index < activeCount;
-        if (bot.operator?.root) bot.operator.root.visible = bot.isActive;
-        bot.isDead = false;
-        bot.spawnProtectionTimer = 2.5;
+        bot.isDead = !bot.isActive;
+        bot.spawnProtectionTimer = bot.isActive ? 2.5 : 0;
         if (!bot.isActive) {
           bot.currentSpeed = 0;
           bot.state = 'PATROL';
           bot.currentAmmo = bot.magCapacity;
           bot.isReloading = false;
+          bot.position.set(0, -999, 0);
+          if (bot.operator?.root) {
+            bot.operator.root.position.set(0, -999, 0);
+            bot.operator.root.visible = false;
+          }
           return;
         }
-        const preferredSpawn = TACTICAL_SPAWN_POINTS[(index * 4 + index) % TACTICAL_SPAWN_POINTS.length].clone();
+        if (bot.operator?.root) bot.operator.root.visible = true;
+        const preferredSpawn = TACTICAL_SPAWN_POINTS[(index * 2) % TACTICAL_SPAWN_POINTS.length].clone();
         if (preferredSpawn) {
           preferredSpawn.y = 0;
           bot.position.copy(preferredSpawn);
@@ -1108,6 +1133,16 @@ class BotManager {
     this.isStopped = false;
     const pPos = playerPos || new THREE.Vector3(0, 1.8, 28);
     this.bots.forEach(bot => {
+      if (!bot.isActive) {
+        bot.isDead = true;
+        bot.currentSpeed = 0;
+        bot.position.set(0, -999, 0);
+        if (bot.operator?.root) {
+          bot.operator.root.position.set(0, -999, 0);
+          bot.operator.root.visible = false;
+        }
+        return;
+      }
       bot.respawn(pPos);
     });
   }
