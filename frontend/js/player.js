@@ -176,7 +176,7 @@ function matchCard(match) {
   const analysisStatus = String(match.analysis_status || "pending").replaceAll("_", " ");
   return `<article class="match-card" data-session-id="${escapeHtml(match.session_id || match.id || match.match_id)}">
     <div class="match-card-head"><div><span class="match-card-kicker">${escapeHtml(match.game || "CyberStrike 3D")}${match.demo_test ? ` · ${playerText(match.hacker_profile || "hacker demo")}` : ""}</span><h3>Match ${playerText(match.match_id || "—")}</h3><div class="match-card-date">${playerText(playerDate(match.date))}</div></div><div style="display:flex; align-items:center; gap:8px;"><button type="button" class="match-drilldown-btn ghost-btn" data-session-id="${escapeHtml(match.session_id || match.id || match.match_id)}" style="background:transparent; border:1px solid var(--player-border,#38bdf8); border-radius:4px; padding:3px 8px; color:var(--player-blue,#38bdf8); cursor:pointer; font-size:11px;">Details</button><span class="badge ${badge}">${playerText(state === "terminated_banned" ? "PERMANENTLY BANNED" : state)}</span></div></div>
-    <div class="match-stat-grid"><div class="match-stat"><span>Kills</span><strong>${value("kills")}</strong></div><div class="match-stat"><span>Deaths</span><strong>${value("deaths")}</strong></div><div class="match-stat"><span>K/D</span><strong>${match.kd == null ? "—" : Number(match.kd).toFixed(2)}</strong></div><div class="match-stat"><span>Duration</span><strong>${duration}</strong></div><div class="match-stat"><span>Accuracy</span><strong>${accuracyStr}</strong></div><div class="match-stat"><span>Analysis</span><strong>${playerText(analysisStatus)}</strong></div></div>
+    <div class="match-stat-grid"><div class="match-stat"><span>Kills</span><strong>${value("kills")}</strong></div><div class="match-stat"><span>Deaths</span><strong>${value("deaths")}</strong></div><div class="match-stat"><span>K/D</span><strong>${match.kd == null ? "—" : Number(match.kd).toFixed(2)}</strong></div><div class="match-stat"><span>Total Shots Fired</span><strong>${value("shots_fired")}</strong></div><div class="match-stat"><span>Successful Hits</span><strong>${value("shots_hit")}</strong></div><div class="match-stat"><span>Accuracy</span><strong>${accuracyStr}</strong></div><div class="match-stat"><span>Duration</span><strong>${duration}</strong></div><div class="match-stat"><span>Analysis</span><strong>${playerText(analysisStatus)}</strong></div></div>
     <div class="match-risk"><span>Security risk score</span><strong>${playerText(playerRisk(match.risk_score))} ${match.risk_category ? `<span class="badge ${match.risk_category === 'Normal' ? 'good' : match.risk_category === 'Monitoring' ? 'warn' : 'bad'}">${escapeHtml(match.risk_category)}</span>` : ''}</strong></div>
     <div class="match-features-strip" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid rgba(148,163,184,0.18); font-size:11px;">
       <span style="background:rgba(14,165,233,0.1); color:#0284c7; padding:4px 10px; border-radius:6px; font-weight:600;">🛡️ Fair Play Verified</span>
@@ -379,10 +379,14 @@ async function loadPlayerDashboard() {
     // Populate Combat Career Lifetime Overview Statistics
     const totalKills = statsData?.kills ?? completedMatches.reduce((sum, m) => sum + (Number(m.kills) || 0), 0);
     const totalDeaths = statsData?.deaths ?? completedMatches.reduce((sum, m) => sum + (Number(m.deaths) || 0), 0);
-    const careerKd = statsData?.kdr ?? (totalDeaths > 0 ? (totalKills / totalDeaths).toFixed(2) : totalKills.toFixed(2));
-    const totalShots = statsData?.shots_fired ?? completedMatches.reduce((sum, m) => sum + (Number(m.shots_fired) || 0), 0);
-    const totalHits = statsData?.shots_hit ?? completedMatches.reduce((sum, m) => sum + (Number(m.shots_hit) || 0), 0);
-    const careerAcc = statsData?.accuracy ?? (totalShots > 0 ? ((totalHits / totalShots) * 100).toFixed(1) : "0.0");
+    const careerKd = totalDeaths > 0 ? totalKills / totalDeaths : totalKills;
+    const shotValues = completedMatches.map(match => match.shots_fired).filter(value => value != null);
+    const hitValues = completedMatches.map(match => match.shots_hit).filter(value => value != null);
+    const totalShots = statsData?.shots_fired ?? (shotValues.length ? shotValues.reduce((sum, value) => sum + Number(value), 0) : null);
+    const totalHits = statsData?.shots_hit ?? (hitValues.length ? hitValues.reduce((sum, value) => sum + Number(value), 0) : null);
+    const careerAcc = totalShots != null && totalHits != null && Number(totalShots) > 0
+      ? (Number(totalHits) / Number(totalShots)) * 100
+      : null;
     const totalMatchesCount = statsData?.total_matches ?? Number(matchesData?.total_matches ?? completedMatches.length);
 
     const careerKillsEl = document.getElementById("careerTotalKills");
@@ -395,10 +399,23 @@ async function loadPlayerDashboard() {
     if (careerKdEl) careerKdEl.textContent = Number(careerKd).toFixed(2);
 
     const careerAccEl = document.getElementById("careerAccuracy");
-    if (careerAccEl) careerAccEl.textContent = `${Number(careerAcc).toFixed(1)}%`;
+    if (careerAccEl) careerAccEl.textContent = careerAcc == null ? "—" : `${careerAcc.toFixed(1)}%`;
 
     const careerShotsEl = document.getElementById("careerShotsSummary");
-    if (careerShotsEl) careerShotsEl.textContent = "";
+    if (careerShotsEl) careerShotsEl.textContent = careerAcc == null
+      ? "Unavailable — confirmed shot totals are incomplete"
+      : `${totalHits.toLocaleString()} / ${totalShots.toLocaleString()} confirmed hits / shots`;
+    const careerShotsCountEl = document.getElementById("careerTotalShots");
+    if (careerShotsCountEl) careerShotsCountEl.textContent = totalShots == null ? "—" : Number(totalShots).toLocaleString();
+    const careerHitsCountEl = document.getElementById("careerTotalHits");
+    if (careerHitsCountEl) careerHitsCountEl.textContent = totalHits == null ? "—" : Number(totalHits).toLocaleString();
+    const coverageText = (coverage, value) => value == null || coverage === "unavailable"
+      ? "Unavailable"
+      : coverage === "partial" ? "Partial — some match history unavailable" : "Complete match history";
+    const shotsCoverageEl = document.getElementById("careerShotsCoverage");
+    if (shotsCoverageEl) shotsCoverageEl.textContent = coverageText(statsData?.shots_fired_coverage, totalShots);
+    const hitsCoverageEl = document.getElementById("careerHitsCoverage");
+    if (hitsCoverageEl) hitsCoverageEl.textContent = coverageText(statsData?.shots_hit_coverage, totalHits);
 
     const careerMatchesEl = document.getElementById("careerMatches");
     if (careerMatchesEl) careerMatchesEl.textContent = totalMatchesCount;
@@ -1139,23 +1156,34 @@ async function openMatchDetail(sessionId) {
     if (version !== matchDetailVersion || !modal.open) return;
     const feats = data.features || {};
     const timeline = data.timeline || [];
+    const combatCount = (value) => value == null ? "—" : Number(value).toLocaleString();
+
+    const shotsFired = data.shots_fired != null ? Number(data.shots_fired) : 0;
+    const shotsHit = data.shots_hit != null ? Number(data.shots_hit) : 0;
+    const headshots = data.headshots != null ? Number(data.headshots) : (feats.headshot_ratio != null && shotsHit ? Math.round(Number(feats.headshot_ratio) * shotsHit) : 0);
+    const headshotRatio = data.headshot_ratio != null ? Number(data.headshot_ratio) : (shotsHit > 0 ? (headshots / shotsHit) : 0);
+    const bodyHits = data.body_hits != null ? Number(data.body_hits) : Math.max(0, shotsHit - headshots);
+    const missedShots = data.missed_shots != null ? Number(data.missed_shots) : Math.max(0, shotsFired - shotsHit);
+    const headshotPercentStr = shotsHit > 0 ? (headshotRatio * 100).toFixed(1) + '%' : '0.0%';
 
     content.innerHTML = `
       <div class="match-features-grid">
-        <div class="feat-stat-box"><strong>${escapeHtml(data.kills)} / ${escapeHtml(data.deaths)}</strong><small>Kills / Deaths</small></div>
-        <div class="feat-stat-box"><strong>${escapeHtml(data.kdr)}</strong><small>K/D Ratio</small></div>
+        <div class="feat-stat-box"><strong>${combatCount(data.kills)} / ${combatCount(data.deaths)}</strong><small>Kills / Deaths</small></div>
+        <div class="feat-stat-box"><strong>${data.kdr == null ? '—' : Number(data.kdr).toFixed(2)}</strong><small>K/D Ratio</small></div>
+        <div class="feat-stat-box"><strong>${combatCount(shotsFired)}</strong><small>Total Shots Fired</small></div>
+        <div class="feat-stat-box"><strong>${combatCount(shotsHit)}</strong><small>Successful Hits</small></div>
         <div class="feat-stat-box"><strong>${data.accuracy != null ? Number(data.accuracy).toFixed(1) + '%' : '—'}</strong><small>Accuracy Rate</small></div>
         <div class="feat-stat-box"><strong>${data.duration_seconds != null ? data.duration_seconds + 's' : '—'}</strong><small>Duration</small></div>
       </div>
 
-      <h4 style="margin: 14px 0 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--player-muted, #94a3b8);">Anti-Cheat Telemetry Feature Analysis</h4>
+      <h4 style="margin: 14px 0 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--player-muted, #94a3b8);">Combat Ballistics & Headshot Details</h4>
       <div class="match-features-grid">
-        <div class="feat-stat-box"><strong>${feats.reaction_time_median != null ? Number(feats.reaction_time_median).toFixed(3) + 's' : '—'}</strong><small>Median Reaction</small></div>
-        <div class="feat-stat-box"><strong>${feats.reaction_time_min != null ? Number(feats.reaction_time_min).toFixed(3) + 's' : '—'}</strong><small>Min Reaction</small></div>
-        <div class="feat-stat-box"><strong>${feats.aim_speed_mean != null ? Number(feats.aim_speed_mean).toFixed(1) + '°/s' : '—'}</strong><small>Mean Aim Speed</small></div>
-        <div class="feat-stat-box"><strong>${feats.aim_speed_max != null ? Number(feats.aim_speed_max).toFixed(1) + '°/s' : '—'}</strong><small>Max Aim Speed</small></div>
-        <div class="feat-stat-box"><strong>${feats.flick_rate != null ? Number(feats.flick_rate).toFixed(2) : '—'}</strong><small>Flick Rate</small></div>
-        <div class="feat-stat-box"><strong>${feats.headshot_ratio != null ? (Number(feats.headshot_ratio) * 100).toFixed(0) + '%' : '—'}</strong><small>Headshot %</small></div>
+        <div class="feat-stat-box"><strong>${combatCount(shotsFired)}</strong><small>Total Shots</small></div>
+        <div class="feat-stat-box"><strong>${combatCount(shotsHit)}</strong><small>Shots on Target</small></div>
+        <div class="feat-stat-box"><strong style="color: #38BDF8;">${combatCount(headshots)}</strong><small>Headshot Hits</small></div>
+        <div class="feat-stat-box"><strong style="color: #F59E0B;">${headshotPercentStr}</strong><small>Headshot % of Hits</small></div>
+        <div class="feat-stat-box"><strong>${combatCount(bodyHits)}</strong><small>Body / Torso Hits</small></div>
+        <div class="feat-stat-box"><strong>${combatCount(missedShots)}</strong><small>Missed Shots</small></div>
       </div>
 
       <h4 style="margin: 14px 0 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--player-muted, #94a3b8);">Match Combat Timeline</h4>

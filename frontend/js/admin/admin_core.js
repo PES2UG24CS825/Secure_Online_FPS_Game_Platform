@@ -125,6 +125,12 @@ export function connectAdminLiveEvents() {
     sse.addEventListener('update', (e) => {
       try {
         PollingManager.triggerAll();
+        if (e.data) {
+          const payload = JSON.parse(e.data);
+          if (payload.type === 'security_alert' || payload.alert_type) {
+            import('./admin_demo_cheater.js').then(m => m.handleLiveDemoAlert(payload)).catch(() => {});
+          }
+        }
       } catch (err) {}
     });
     sse.onopen = () => {

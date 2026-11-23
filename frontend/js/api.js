@@ -1,4 +1,8 @@
-const API_BASE = window.APP_CONFIG?.apiBase || `http://${window.location.hostname || "127.0.0.1"}:5000/api`;
+const API_BASE = window.APP_CONFIG?.apiBase || (
+  (window.location.port === "5000" || window.location.port === "" || window.location.protocol === "https:" || window.location.port === "8080")
+    ? (window.location.origin && window.location.origin !== "null" ? `${window.location.origin}/api` : `http://${window.location.hostname || "127.0.0.1"}:5000/api`)
+    : `http://${window.location.hostname || "127.0.0.1"}:5000/api`
+);
 window.API_BASE = API_BASE;
 window.text = window.text || ((value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character])));
 window.dateText = window.dateText || ((value) => value ? new Date(value).toLocaleString() : "Unknown");

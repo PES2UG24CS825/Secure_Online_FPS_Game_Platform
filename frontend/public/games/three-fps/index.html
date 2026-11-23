@@ -106,7 +106,7 @@
         <div class="menu-view active" id="view-bots">
           <div class="view-header">
             <h3>Tactical Bot Engagement</h3>
-            <p>Face bots using the Vanguard and Valkyrie tactical operators, with reaction delays and burst fire.</p>
+            <p>Face bots using the Vanguard and Valkyrie tactical operators, with reaction delays and burst fire. First to 10 kills wins; otherwise the match ends at 08:00.</p>
           </div>
 
           <div class="difficulty-grid">
@@ -193,7 +193,7 @@
         <div class="menu-view" id="view-multiplayer">
           <div class="view-header">
             <h3>Authoritative Multiplayer Operations</h3>
-            <p>Peer-to-peer WAN matchmaking with 6-character room codes and 30Hz physics sync</p>
+            <p>Authoritative matches end at 10 kills or 08:00, whichever comes first. The server controls match limits and results.</p>
           </div>
 
           <!-- Callsign & Server Status Bar -->
@@ -216,7 +216,7 @@
               <div class="mp-card create-card">
                 <div class="mp-card-icon">⚡</div>
                 <h4>CREATE MATCH</h4>
-                <p>Generate a private 6-character room code. Host a dedicated match for up to 8 operators.</p>
+                <p>Generate a private 6-character room code. Host a match for up to 8 operators; first to 10 kills or 08:00 ends play.</p>
                 <button id="btn-create-room" class="hud-btn primary wide" type="button">
                   CREATE NEW LOBBY
                 </button>
@@ -226,7 +226,7 @@
               <div class="mp-card join-card">
                 <div class="mp-card-icon">🔑</div>
                 <h4>JOIN MATCH</h4>
-                <p>Enter a 6-character code provided by another operator to enter their combat room.</p>
+                <p>Enter a 6-character code provided by another operator. Match limits are 10 kills or 08:00, server controlled.</p>
                 <div class="code-input-row">
                   <input id="mp-room-code-input" type="text" maxlength="6" placeholder="ROOM CODE" spellcheck="false" autocomplete="off" />
                   <button id="btn-join-room" class="hud-btn primary" type="button">
@@ -472,6 +472,7 @@
             <div class="control-item"><kbd>SPACE</kbd><span>Tactical Jump</span></div>
             <div class="control-item"><kbd>TAB</kbd><span>Scoreboard</span></div>
           </div>
+          <p class="controls-match-limits">Bot Combat and multiplayer matches end at 10 kills or 08:00, whichever comes first. Multiplayer limits are enforced by the server.</p>
 
           <button id="btn-save-settings" class="hud-btn primary wide" type="button" style="margin-top: 12px;">
             SAVE &amp; RETURN
@@ -561,9 +562,9 @@
       <div id="mc-mode-badge" class="mc-mode-badge">SOLO COMBAT MATCH</div>
 
       <div class="mc-stats-grid">
-        <div class="mc-stat-box"><span class="stat-lbl">ELIMINATIONS</span><strong id="mc-kills" class="stat-val highlight">25</strong></div>
+        <div class="mc-stat-box"><span class="stat-lbl">ELIMINATIONS</span><strong id="mc-kills" class="stat-val highlight">15</strong></div>
         <div class="mc-stat-box"><span class="stat-lbl">DEATHS</span><strong id="mc-deaths" class="stat-val">0</strong></div>
-        <div class="mc-stat-box"><span class="stat-lbl">K/D RATIO</span><strong id="mc-kd" class="stat-val">25.0</strong></div>
+        <div class="mc-stat-box"><span class="stat-lbl">K/D RATIO</span><strong id="mc-kd" class="stat-val">15.0</strong></div>
         <div class="mc-stat-box"><span class="stat-lbl">ACCURACY</span><strong id="mc-accuracy" class="stat-val">0%</strong></div>
         <div class="mc-stat-box"><span class="stat-lbl">SHOTS FIRED</span><strong id="mc-shots" class="stat-val">0</strong></div>
         <div class="mc-stat-box"><span class="stat-lbl">SHOTS LANDED</span><strong id="mc-hits" class="stat-val highlight">0</strong></div>
@@ -641,7 +642,7 @@
       <div class="match-panel-divider"></div>
       <div class="match-panel-stat" id="match-kills-box">
         <span class="panel-icon">🎯</span>
-        <span id="match-kills-display">KILLS <strong id="match-kills">0</strong><span id="match-kills-target"> / 25</span></span>
+        <span id="match-kills-display">KILLS <strong id="match-kills">0</strong><span id="match-kills-target"> / 15</span></span>
       </div>
       <div class="match-panel-divider"></div>
       <div class="match-panel-stat" id="match-timer-box">
@@ -738,6 +739,73 @@
           <input type="range" id="slider-wep-rot-z" min="-3.14" max="3.14" step="0.05" value="0.10" style="width:100%;">
         </div>
         <button id="dev-copy-weapon-btn" type="button" style="margin-top:6px; padding:5px 8px; background:#00f0ff; color:#060c16; font-weight:700; border:none; border-radius:3px; cursor:pointer; font-size:10px;">Copy Calibrated Values</button>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         CHEATER DEMONSTRATION CONTROL PANEL (Phase 7)
+         Visible ONLY to authenticated cheater_demo in demo mode
+         ========================================================= -->
+    <div id="demo-cheater-panel" style="display: none; position: absolute; top: 18px; left: 18px; width: 310px; z-index: 9999; background: rgba(11, 15, 25, 0.94); border: 1.5px solid #ef4444; border-radius: 8px; padding: 12px 14px; box-shadow: 0 8px 32px rgba(239, 68, 68, 0.25); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace; color: #f8fafc; pointer-events: auto;">
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(239, 68, 68, 0.35); padding-bottom: 6px; margin-bottom: 8px;">
+        <div>
+          <div style="font-size: 10px; font-weight: 800; color: #ef4444; letter-spacing: 0.05em; text-transform: uppercase;">ANTI-CHEAT DEMONSTRATION — ISOLATED TEST MODE</div>
+          <div style="font-size: 11px; color: #94a3b8;">Server-Verified Security Anomaly Simulation</div>
+        </div>
+        <span class="badge badge-rose" style="font-size: 9px; padding: 2px 5px; background: #ef4444; color: #fff; border-radius: 4px; font-weight: 700;">DEMO</span>
+      </div>
+
+      <!-- Anomaly Action Toggles -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px;">
+        <button id="btn-demo-impossible-hit" type="button" style="padding: 6px 8px; font-size: 11px; font-weight: 600; background: rgba(239, 68, 68, 0.25); border: 1px solid #ef4444; color: #cbd5e1; border-radius: 4px; cursor: pointer; text-align: left; transition: all 0.2s;">
+          💥 Impossible Hit: <b id="status-demo-impossible-hit" style="color: #ef4444;">ACTIVE</b>
+        </button>
+        <button id="btn-demo-speed" type="button" style="padding: 6px 8px; font-size: 11px; font-weight: 600; background: rgba(239, 68, 68, 0.25); border: 1px solid #ef4444; color: #cbd5e1; border-radius: 4px; cursor: pointer; text-align: left; transition: all 0.2s;">
+          ⚡ 4× Speed: <b id="status-demo-speed" style="color: #ef4444;">4× ACTIVE</b>
+        </button>
+        <button id="btn-demo-firerate" type="button" style="padding: 6px 8px; font-size: 11px; font-weight: 600; background: rgba(239, 68, 68, 0.25); border: 1px solid #ef4444; color: #cbd5e1; border-radius: 4px; cursor: pointer; text-align: left; transition: all 0.2s;">
+          🔥 3× Fire Rate: <b id="status-demo-firerate" style="color: #ef4444;">3× ACTIVE</b>
+        </button>
+        <button id="btn-demo-aim" type="button" style="padding: 6px 8px; font-size: 11px; font-weight: 600; background: rgba(239, 68, 68, 0.25); border: 1px solid #ef4444; color: #cbd5e1; border-radius: 4px; cursor: pointer; text-align: left; transition: all 0.2s;">
+          🎯 High Accuracy: <b id="status-demo-aim" style="color: #ef4444;">ACTIVE</b>
+        </button>
+        <button id="btn-demo-godmode" type="button" style="grid-column: span 2; padding: 6px 8px; font-size: 11px; font-weight: 600; background: rgba(239, 68, 68, 0.25); border: 1px solid #ef4444; color: #cbd5e1; border-radius: 4px; cursor: pointer; text-align: left; transition: all 0.2s;">
+          🛡️ God Mode (Invincible): <b id="status-demo-godmode" style="color: #ef4444;">ACTIVE</b>
+        </button>
+      </div>
+
+      <!-- Reset & Match Management -->
+      <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+        <button id="btn-demo-reset" type="button" style="flex: 1; padding: 5px; font-size: 10px; font-weight: 600; background: rgba(148, 163, 184, 0.15); border: 1px solid #64748b; color: #e2e8f0; border-radius: 4px; cursor: pointer;">
+          Reset Abilities
+        </button>
+        <button id="btn-demo-start-match" type="button" style="flex: 1; padding: 5px; font-size: 10px; font-weight: 600; background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #34d399; border-radius: 4px; cursor: pointer;">
+          Start Demo Match
+        </button>
+        <button id="btn-demo-end-match" type="button" style="flex: 1; padding: 5px; font-size: 10px; font-weight: 600; background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #f87171; border-radius: 4px; cursor: pointer;">
+          End Demo Match
+        </button>
+      </div>
+
+      <!-- Live Telemetry Contract & ML Risk Score -->
+      <div style="background: rgba(0, 0, 0, 0.45); border-radius: 4px; padding: 6px 8px; border: 1px solid rgba(255, 255, 255, 0.08);">
+        <div style="font-size: 9px; font-weight: 700; color: #64748b; letter-spacing: 0.05em; margin-bottom: 4px; text-transform: uppercase;">Live Authoritative Telemetry &amp; ML Risk</div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; font-size: 10px;">
+          <div>Shots: <b id="hud-stat-shots" style="color: #38bdf8;">0</b></div>
+          <div>Hits: <b id="hud-stat-hits" style="color: #38bdf8;">0</b></div>
+          <div>Headshots: <b id="hud-stat-headshots" style="color: #ef4444;">0</b></div>
+          <div>Accuracy: <b id="hud-stat-acc" style="color: #38bdf8;">0%</b></div>
+          <div>Kills: <b id="hud-stat-kills" style="color: #38bdf8;">0</b></div>
+          <div>Deaths: <b id="hud-stat-deaths" style="color: #38bdf8;">0</b></div>
+          <div>KDR: <b id="hud-stat-kdr" style="color: #38bdf8;">0.00</b></div>
+          <div>Fire Rate: <b id="hud-stat-firerate" style="color: #38bdf8;">0.0/s</b></div>
+          <div>Speed: <b id="hud-stat-speed" style="color: #38bdf8;">0.0m/s</b></div>
+          <div>Aim Smooth: <b id="hud-stat-smooth" style="color: #38bdf8;">1.00</b></div>
+        </div>
+        <div style="margin-top: 5px; padding-top: 4px; border-top: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
+          <span style="color: #94a3b8;">ML Risk Score:</span>
+          <b id="hud-stat-risk" style="color: #ef4444; font-weight: 800; font-size: 13px;">—</b>
+        </div>
       </div>
     </div>
 

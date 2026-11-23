@@ -186,98 +186,73 @@ def seed_two_tier_system():
             "updated_at": now
         })
 
-    # 3. Model Versions Catalog
+    # Seed no model-performance claims. The runtime reports actual evaluation
+    # artifacts only; legacy catalog rows retain metadata without fabricated metrics.
     if model_versions.count_documents({}) == 0:
         model_versions.insert_many([
             {
                 "version": "v2.0-rf",
                 "name": "SecureFPS Random Forest Anti-Cheat v2.0",
-                "algorithm": "Random Forest (scikit-learn)",
-                "accuracy": 0.984,
-                "precision": 0.979,
-                "recall": 0.981,
-                "f1_score": 0.980,
-                "false_positive_rate": 0.008,
-                "false_negative_rate": 0.011,
-                "features_count": 8,
+                "algorithm": "Random Forest / Isolation Forest bundle",
+                "features_count": len(FEATURE_NAMES_V2) if "FEATURE_NAMES_V2" in globals() else 21,
                 "is_active": True,
-                "deployed_at": "2026-11-01T00:00:00Z",
-                "approved_by": "superadmin@securefps.io",
-                "changelog": "Model bundle v2.0 with temporal sequence windowing, jitter variance ratio, and angle anomaly metrics."
+                "deployed_at": "2026-11-12T18:04:20Z",
+                "metrics_status": "Unavailable: no verified evaluation report is loaded",
+                "changelog": "Runtime model-v2 artifact metadata.",
             },
             {
                 "version": "v1.5-rf",
-                "name": "SecureFPS Random Forest Anti-Cheat v1.5 (Baseline)",
-                "algorithm": "Random Forest",
-                "accuracy": 0.962,
-                "precision": 0.954,
-                "recall": 0.958,
-                "f1_score": 0.956,
-                "false_positive_rate": 0.019,
-                "false_negative_rate": 0.024,
-                "features_count": 6,
+                "name": "SecureFPS Legacy Anti-Cheat v1.5",
+                "algorithm": "Random Forest + Isolation Forest",
+                "features_count": 5,
                 "is_active": False,
-                "deployed_at": "2026-10-15T00:00:00Z",
-                "approved_by": "superadmin@securefps.io",
-                "changelog": "Initial production anti-cheat classifier trained on baseline human vs bot telemetry."
-            }
-        ])
-
-    # 4. System Backup Records
-    if system_backups.count_documents({}) == 0:
-        system_backups.insert_many([
-            {
-                "backup_id": "bak_20261113_000001",
-                "type": "daily_automated",
-                "status": "verified",
-                "scope": "full_cluster",
-                "database_name": "secure_fps",
-                "size_mb": 42.8,
-                "collections_count": 18,
-                "documents_count": 4820,
-                "checksum": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                "created_at": now,
-                "retention_days": 30,
-                "created_by": "System Scheduled Job"
+                "deployed_at": None,
+                "metrics_status": "Unavailable: no verified evaluation report is loaded",
+                "changelog": "Legacy runtime fallback.",
             },
-            {
-                "backup_id": "bak_20261112_000001",
-                "type": "daily_automated",
-                "status": "verified",
-                "scope": "full_cluster",
-                "database_name": "secure_fps",
-                "size_mb": 41.5,
-                "collections_count": 18,
-                "documents_count": 4610,
-                "checksum": "sha256:ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb",
-                "created_at": now,
-                "retention_days": 30,
-                "created_by": "System Scheduled Job"
-            }
         ])
-
+    model_versions.update_many(
+        {"version": {"$in": ["v2.0-rf", "v1.5-rf"]}},
+        {"$unset": {
+            "accuracy": "",
+            "precision": "",
+            "recall": "",
+            "f1_score": "",
+            "false_positive_rate": "",
+            "false_negative_rate": "",
+        }},
+    )
 
 def init_indexes():
-    try:
-        game_sessions.create_index([("session_id", 1), ("game_token", 1)])
-        game_sessions.create_index("expires_at", expireAfterSeconds=0)
-        sessions_db.create_index("expires_at", expireAfterSeconds=0)
-        sessions_db.create_index([("user_id", 1), ("is_active", 1)])
-        game_telemetry.create_index("created_at", expireAfterSeconds=2592000)
-        game_telemetry.create_index([("session_id", 1), ("timestamp", 1)])
-        game_events.create_index("created_at", expireAfterSeconds=2592000)
-        game_events.create_index([("session_id", 1), ("timestamp", 1)])
-        reward_transactions.create_index([("user_id", 1), ("created_at", 1)])
-        users.create_index("email", unique=True, sparse=True)
-        users.create_index([("role", 1), ("account_status", 1), ("created_at", -1)])
-        mfa_lockouts.create_index([("user_id", 1), ("ip", 1)])
-        ban_appeals.create_index([("user_id", 1), ("status", 1)])
-        ban_appeals.create_index([("created_at", -1)])
-        player_notifications.create_index([("user_id", 1), ("is_read", 1), ("created_at", -1)])
-        admin_audit_log.create_index([("timestamp", -1)])
-        admin_audit_log.create_index([("target_user_id", 1)])
-    except Exception as exc:
-        logger.debug("MongoDB index creation notice: %s", exc)
+    index_specs = (
+        (game_sessions, [("session_id", 1), ("game_token", 1)], {}),
+        (game_sessions, "expires_at", {"expireAfterSeconds": 0}),
+        (sessions_db, "expires_at", {"expireAfterSeconds": 0}),
+        (sessions_db, [("user_id", 1), ("is_active", 1)], {}),
+        (game_telemetry, "created_at", {"expireAfterSeconds": 2592000}),
+        (game_telemetry, [("session_id", 1), ("timestamp", 1)], {}),
+        (game_events, "created_at", {"expireAfterSeconds": 2592000}),
+        (game_events, [("session_id", 1), ("timestamp", 1)], {}),
+        (reward_transactions, [("user_id", 1), ("created_at", 1)], {}),
+        (users, "email", {"unique": True, "sparse": True}),
+        (users, [("role", 1), ("account_status", 1), ("created_at", -1)], {}),
+        (mfa_lockouts, [("user_id", 1), ("ip", 1)], {}),
+        (ban_appeals, [("user_id", 1), ("status", 1)], {}),
+        (ban_appeals, [("created_at", -1)], {}),
+        (player_notifications, [("user_id", 1), ("is_read", 1), ("created_at", -1)], {}),
+        (admin_audit_log, [("timestamp", -1)], {}),
+        (admin_audit_log, [("target_user_id", 1)], {}),
+    )
+    for collection, keys, options in index_specs:
+        try:
+            collection.create_index(keys, **options)
+        except Exception as exc:
+            logger.warning(
+                "MongoDB index creation failed for %s.%s: %s",
+                collection.name,
+                keys,
+                exc,
+            )
 
 
 init_indexes()

@@ -248,9 +248,17 @@ class TacticalOperator {
   set bot(val) {
     this._bot = val;
     if (this.root) this.root.userData.bot = val;
-    if (this.headMesh) this.headMesh.userData.bot = val;
+    if (this.headMesh) {
+      this.headMesh.userData.bot = val;
+      this.headMesh.userData.isHead = true;
+      this.headMesh.userData.isHeadshot = true;
+    }
     if (this.bodyMesh) this.bodyMesh.userData.bot = val;
-    if (this.headGroup) this.headGroup.userData.bot = val;
+    if (this.headGroup) {
+      this.headGroup.userData.bot = val;
+      this.headGroup.userData.isHead = true;
+      this.headGroup.userData.isHeadshot = true;
+    }
     if (this.modelRoot) this.modelRoot.userData.bot = val;
   }
 
@@ -261,9 +269,17 @@ class TacticalOperator {
   set remotePlayer(val) {
     this._remotePlayer = val;
     if (this.root) this.root.userData.remotePlayer = val;
-    if (this.headMesh) this.headMesh.userData.remotePlayer = val;
+    if (this.headMesh) {
+      this.headMesh.userData.remotePlayer = val;
+      this.headMesh.userData.isHead = true;
+      this.headMesh.userData.isHeadshot = true;
+    }
     if (this.bodyMesh) this.bodyMesh.userData.remotePlayer = val;
-    if (this.headGroup) this.headGroup.userData.remotePlayer = val;
+    if (this.headGroup) {
+      this.headGroup.userData.remotePlayer = val;
+      this.headGroup.userData.isHead = true;
+      this.headGroup.userData.isHeadshot = true;
+    }
     if (this.modelRoot) this.modelRoot.userData.remotePlayer = val;
   }
 
@@ -1462,11 +1478,12 @@ class TacticalOperator {
   }
 
   buildHitboxes() {
-    const headHitGeo = new THREE.BoxGeometry(0.38, 0.40, 0.38);
+    const headHitGeo = new THREE.BoxGeometry(0.44, 0.46, 0.44);
     // Transparent material allows Three.js Raycaster to intersect while remaining completely invisible to the player
     const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
 
     this.headMesh = new THREE.Mesh(headHitGeo, hitMat);
+    this.headMesh.name = 'head';
     this.headMesh.userData = {
       isHead: true,
       isHeadshot: true,
@@ -1477,18 +1494,19 @@ class TacticalOperator {
     };
 
     if (this.headBone) {
-      this.headMesh.position.set(0, 0.06, 0);
+      this.headMesh.position.set(0, 0.08, 0);
       this.headBone.add(this.headMesh);
     } else if (this.headGroup) {
-      this.headMesh.position.set(0, 0, 0);
+      this.headMesh.position.set(0, 0.02, 0);
       this.headGroup.add(this.headMesh);
     } else {
       this.headMesh.position.set(0, 1.68, 0);
       this.root.add(this.headMesh);
     }
 
-    const bodyHitGeo = new THREE.CylinderGeometry(0.38, 0.38, 1.45, 10);
+    const bodyHitGeo = new THREE.CylinderGeometry(0.36, 0.36, 1.25, 10);
     this.bodyMesh = new THREE.Mesh(bodyHitGeo, hitMat);
+    this.bodyMesh.name = 'body';
     this.bodyMesh.userData = {
       isHead: false,
       isHeadshot: false,
@@ -1499,13 +1517,13 @@ class TacticalOperator {
     };
 
     if (this.spineBone) {
-      this.bodyMesh.position.set(0, -0.35, 0);
+      this.bodyMesh.position.set(0, -0.42, 0);
       this.spineBone.add(this.bodyMesh);
     } else if (this.pelvisGroup) {
-      this.bodyMesh.position.set(0, -0.12, 0);
+      this.bodyMesh.position.set(0, -0.15, 0);
       this.pelvisGroup.add(this.bodyMesh);
     } else {
-      this.bodyMesh.position.set(0, 0.82, 0);
+      this.bodyMesh.position.set(0, 0.72, 0);
       this.root.add(this.bodyMesh);
     }
   }
@@ -1668,13 +1686,16 @@ class TacticalOperator {
       // Skeletal hitboxes must be updated after bone transforms and before raycasting.
       if (this.headMesh) this.headMesh.position.set(0, 0.06, 0);
       if (this.bodyMesh) this.bodyMesh.position.set(0, -0.35, 0);
-      if (this.root) this.root.updateMatrixWorld(true);
       if (this.isDead) {
         if (this.modelRoot) {
           this.modelRoot.rotation.x = THREE.MathUtils.lerp(this.modelRoot.rotation.x, -Math.PI / 2, effectiveDelta * 8.0);
           this.modelRoot.position.y = THREE.MathUtils.lerp(this.modelRoot.position.y, 0.18, effectiveDelta * 8.0);
         }
       } else {
+        if (this.modelRoot) {
+          this.modelRoot.rotation.x = THREE.MathUtils.lerp(this.modelRoot.rotation.x, 0, effectiveDelta * 12.0);
+          this.modelRoot.position.y = THREE.MathUtils.lerp(this.modelRoot.position.y, this.mixer ? (this.modelGroundOffset || 0) : 0, effectiveDelta * 12.0);
+        }
         // Upper-body aim pitch adjustment
         if (this.spineBone) {
           this.spineBone.rotation.x = THREE.MathUtils.lerp(this.spineBone.rotation.x, (pitch || 0) * 0.4, effectiveDelta * 12.0);
@@ -1701,6 +1722,8 @@ class TacticalOperator {
       // High-Fidelity Procedural Animation Engine
       this.updateProceduralRig(effectiveDelta, speed, isCrouching, pitch);
     }
+
+    if (this.root) this.root.updateMatrixWorld(true);
 
     this.updateWeaponPose(effectiveDelta, pitch || 0);
 
@@ -1729,6 +1752,9 @@ class TacticalOperator {
     // 2. Crouch State (Smooth Pelvis Lowering & Knee Bend)
     const targetPelvisY = isCrouching ? 0.62 : 0.94;
     this.pelvisGroup.position.y = THREE.MathUtils.lerp(this.pelvisGroup.position.y, targetPelvisY, delta * 10.0);
+    // Restore neutral upright rotations when alive (prevents sliding in dead pose)
+    this.pelvisGroup.rotation.x = THREE.MathUtils.lerp(this.pelvisGroup.rotation.x, 0, delta * 12.0);
+    this.pelvisGroup.rotation.z = THREE.MathUtils.lerp(this.pelvisGroup.rotation.z, 0, delta * 12.0);
 
     // Do not offset bone-attached hitboxes: attached local transforms are
     // already expressed relative to the animated head/spine.
@@ -1844,6 +1870,7 @@ class TacticalOperator {
     if (this.headMesh) {
       this.headMesh.visible = true;
       if (!this.headBone && !this.headGroup) this.headMesh.position.set(0, 1.68, 0);
+      else if (this.headBone) this.headMesh.position.set(0, 0.06, 0);
       else this.headMesh.position.set(0, 0, 0);
     }
     if (this.bodyMesh) {
@@ -1857,9 +1884,18 @@ class TacticalOperator {
       this.pelvisGroup.position.set(0, 0.94, 0);
       this.pelvisGroup.rotation.set(0, 0, 0);
     }
+    if (this.rHipGroup) this.rHipGroup.rotation.set(0, 0, 0);
+    if (this.lHipGroup) this.lHipGroup.rotation.set(0, 0, 0);
+    if (this.rKneeGroup) this.rKneeGroup.rotation.set(0, 0, 0);
+    if (this.lKneeGroup) this.lKneeGroup.rotation.set(0, 0, 0);
+    if (this.spineGroup) this.spineGroup.rotation.set(0, 0, 0);
+    if (this.headGroup) this.headGroup.rotation.set(0, 0, 0);
+    if (this.chestGroup) this.chestGroup.scale.set(1, 1, 1);
+    this.walkCycle = 0;
+    this.idleCycle = 0;
     if (this.modelRoot) {
-      this.modelRoot.rotation.set(0, 0, 0);
-      this.modelRoot.position.set(0, 0, 0);
+      this.modelRoot.rotation.set(0, this.mixer ? Math.PI : 0, 0);
+      this.modelRoot.position.set(0, this.mixer ? (this.modelGroundOffset || 0) : 0, 0);
     }
 
     if (this.healthBarFill && this.healthBarFill.scale) {

@@ -15,8 +15,8 @@ A secure, full-stack First-Person Shooter (FPS) gaming platform featuring two di
   - **Session Concurrency Mutex:** Real-time database-backed single-device locking (`active_auth_session_id`) preventing credential sharing and session hijacking.
   - **Account Security Score (0–100):** Real-time composite rating evaluating MFA, email verification, account standing, and sportsmanship.
 - **🤖 Server-Side AI Anti-Cheat Intelligence:**
-  - **Hybrid ML Ensemble:** Supervised **Random Forest** (60%) + Unsupervised **Isolation Forest** (40%).
-  - **Zero False-Positive Protection:** Context-aware damping protects skilled human players against false bans.
+  - **Hybrid ML Ensemble:** The v2 runtime combines supervised Random Forest probability (60%) with normalized Isolation Forest anomaly score (40%) when both are available.
+  - **Evidence Handling:** Model-only predictions are distinguished from confirmed server-validated violations.
   - **Server-Side Kinematic Physics Audit:** Validates physical impossibility (speed > 14.5 m/s, fire rate > 12 rounds/s, instant snap > 3.2 rad) without invasive client kernel drivers.
   - **Standard Operational Risk Scale (0–100):**
     - `0.0 – 39.99`: **Normal** (Green — Verified legitimate human gameplay)
@@ -92,9 +92,7 @@ In a third terminal:
 ```bash
 python scripts/seed_demo.py
 ```
-- **Admin Console:** `admin1@gmail.com` / `Admin@12345` (MFA Secret: `JBSWY3DPEHPK3PXP`)
-- **Clean Player:** `player1@gmail.com` / `Player@12345` (MFA Secret: `JBSWY3DPEHPK3PXP`)
-- **Flagged Cheater:** `cheater_demo@example.com` / `Cheater@12345` (Status: Suspended)
+- Demo credentials are configured through environment variables and must not be copied into application code or documentation.
 
 ### 6. Run Adversarial Cheat Simulator
 ```bash
@@ -126,7 +124,7 @@ python scripts/measure_realtime.py
 # 6. Comprehensive 5-Fold ML Model Benchmark (6 Supervised + 3 Anomaly Detectors)
 python scripts/evaluate_models.py
 ```
-**Status:** **100% Passing** across all test suites with zero failures.
+**Status:** Report only the latest locally executed suite counts; current results may vary as tests are added or the environment changes.
 
 ---
 

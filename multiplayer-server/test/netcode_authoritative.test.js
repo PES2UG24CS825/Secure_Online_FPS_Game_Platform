@@ -65,6 +65,64 @@ after(async () => {
 
 describe('Authoritative Multiplayer Server Netcode', () => {
 
+  it('ends matches at 10 kills or 480 seconds and resets authoritative rematches', async () => {
+    const host = await connectClient('limits-host', 'LimitsHost');
+    const guest = await connectClient('limits-guest', 'LimitsGuest');
+    const created = await new Promise(resolve => {
+      host.once('lobby:created', resolve);
+      host.emit('lobby:create', { name: 'LimitsHost' });
+    });
+    const roomCode = created.roomCode;
+
+    await new Promise(resolve => {
+      guest.once('lobby:joined', resolve);
+      guest.emit('lobby:join', { roomCode, name: 'LimitsGuest' });
+    });
+    guest.emit('lobby:ready', { isReady: true });
+    await new Promise(resolve => setTimeout(resolve, 40));
+
+    const started = new Promise(resolve => host.once('game:start', resolve));
+    host.emit('lobby:start');
+    const firstStart = await started;
+    assert.equal(firstStart.matchDuration, 480);
+    assert.equal(firstStart.scoreLimit, 10);
+
+    const room = rooms.get(roomCode);
+    room.players.get(host.id).kills = 10;
+    const scoreResultPromise = new Promise(resolve => host.once('match:ended', resolve));
+    const scoreResult = await scoreResultPromise;
+    assert.equal(scoreResult.reason, 'score_limit_reached');
+
+    host.emit('lobby:ready', { isReady: true });
+    guest.emit('lobby:ready', { isReady: true });
+    await new Promise(resolve => setTimeout(resolve, 40));
+    const rematchPromise = new Promise(resolve => host.once('game:start', resolve));
+    host.emit('lobby:start');
+    const rematch = await rematchPromise;
+    assert.equal(rematch.matchDuration, 480);
+    assert.equal(rematch.scoreLimit, 10);
+    assert.ok(rematch.players.every(player =>
+      player.kills === 0 &&
+      player.deaths === 0 &&
+      player.totalShots === 0 &&
+      player.totalHits === 0
+    ));
+
+    const timeoutResultPromise = new Promise(resolve => host.once('match:ended', resolve));
+    room.matchStartTime = Date.now() - 481000;
+    const timeoutResult = await timeoutResultPromise;
+    assert.equal(timeoutResult.reason, 'time_expired');
+
+    const hostLeave = new Promise(resolve => host.once('lobby:left', resolve));
+    host.emit('lobby:leave');
+    await hostLeave;
+    const guestLeave = new Promise(resolve => guest.once('lobby:left', resolve));
+    guest.emit('lobby:leave');
+    await guestLeave;
+    host.disconnect();
+    guest.disconnect();
+  });
+
   it('1. Malformed packets do not crash the process', async () => {
     const c1 = await connectClient('mal1', 'MalTester');
     assert.ok(c1.connected);
@@ -333,7 +391,22 @@ describe('Authoritative Multiplayer Server Netcode', () => {
 
     const started = new Promise(res => p1.once('game:start', res));
     p1.emit('lobby:start');
-    await started;
+    const startState = await started;
+    assert.equal(startState.matchDuration, 480);
+    assert.equal(startState.scoreLimit, 10);
+    const room = rooms.get(roomCode);
+    const originalPlayer = room.players.get(p1.id);
+    originalPlayer.x = 7;
+    originalPlayer.y = 1.8;
+    originalPlayer.z = -4;
+    originalPlayer.health = 73;
+    originalPlayer.kills = 3;
+    originalPlayer.deaths = 2;
+    originalPlayer.assists = 1;
+    originalPlayer.totalShots = 9;
+    originalPlayer.totalHits = 4;
+    originalPlayer.headshots = 2;
+    room.matchStartTime = Date.now() - 4000;
 
     // Disconnect p1 during active match
     p1.disconnect();
@@ -352,6 +425,20 @@ describe('Authoritative Multiplayer Server Netcode', () => {
     assert.ok(reconnected, 'Server must emit game:reconnected');
     assert.strictEqual(reconnected.roomCode, roomCode);
     assert.strictEqual(reconnected.isHost, true);
+    assert.strictEqual(reconnected.state, 'in_game');
+    assert.strictEqual(reconnected.matchDuration, 480);
+    assert.strictEqual(reconnected.scoreLimit, 10);
+    assert.ok(reconnected.matchTimeRemaining <= 476);
+    const restoredPlayer = reconnected.players.find(player => player.id === p1Resume.id);
+    assert.ok(restoredPlayer, 'Reconnect snapshot must include the restored operator');
+    assert.deepEqual(
+      [restoredPlayer.x, restoredPlayer.y, restoredPlayer.z, restoredPlayer.health],
+      [7, 1.8, -4, 73],
+    );
+    assert.deepEqual(
+      [restoredPlayer.kills, restoredPlayer.deaths, restoredPlayer.assists, restoredPlayer.totalShots, restoredPlayer.totalHits, restoredPlayer.headshots],
+      [3, 2, 1, 9, 4, 2],
+    );
 
     p1Resume.disconnect();
     p2.disconnect();

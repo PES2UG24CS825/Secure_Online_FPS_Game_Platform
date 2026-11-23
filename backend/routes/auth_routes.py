@@ -373,9 +373,13 @@ def login():
     if not isinstance(email, str) or not isinstance(password, str):
         return jsonify({"message": "Email and password must be valid text strings."}), 400
 
-    email = email.strip().lower()
-
-    user = users.find_one({"email": email})
+    email_norm = email.strip()
+    user = users.find_one({
+        "$or": [
+            {"email": email_norm.lower()},
+            {"username": email_norm}
+        ]
+    })
     password_ok = bool(
         user
         and user.get("password_hash")
@@ -418,7 +422,7 @@ def login():
         return jsonify({"message": "Player sign-in is temporarily unavailable."}), 503
 
     active_record_id = user.get("active_auth_session_id")
-    session_takeover = bool(data.get("takeover") or data.get("replace") or request.remote_addr in ("127.0.0.1", "localhost", "::1", "Unknown") or not is_production())
+    session_takeover = bool(data.get("takeover") or data.get("replace"))
 
     if active_record_id:
         try:
@@ -703,6 +707,7 @@ def complete_login_session(user, auth_method="password+mfa"):
         "user": {
             "id": str(user["_id"]),
             "name": user["name"],
+            "username": user.get("username", ""),
             "email": user["email"],
             "role": user.get("role", "player")
         }

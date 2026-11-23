@@ -1,11 +1,8 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+const { describe, it } = require('node:test');
+const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
 describe('Combat & Hit Registration Verification', () => {
@@ -176,5 +173,23 @@ describe('Combat & Hit Registration Verification', () => {
     assert.match(playerCss, /background:\s*#FFFFFF/);
     assert.match(playerCss, /\.player-topbar\s*\{\s*display:\s*none/);
     assert.match(adminCss, /admin-sidebar \.brand-lockup\s*\{\s*display:none/);
+  });
+
+  it('prevents overlapping bot spawns and hides inactive bots with clean matchmaking admission fallback', () => {
+    const botCode = fs.readFileSync(path.join(rootDir, 'js/BotManager.js'), 'utf-8');
+    const wepCode = fs.readFileSync(path.join(rootDir, 'js/Weapons.js'), 'utf-8');
+    const serverCode = fs.readFileSync(path.resolve(rootDir, '../../../../multiplayer-server/server.js'), 'utf-8');
+    const gameRoutes = fs.readFileSync(path.resolve(rootDir, '../../../../backend/routes/game_routes.py'), 'utf-8');
+
+    // Bot spawns must be distinct across bots
+    assert.match(botCode, /index\s*\*\s*2\)\s*%\s*TACTICAL_SPAWN_POINTS\.length/);
+    // Inactive bots displaced far away so they never block raycasts or linger in arena
+    assert.match(botCode, /bot\.position\.set\(0,\s*-999,\s*0\)/);
+    // Weapons.js initializes camPos before notifyGunshot
+    assert.match(wepCode, /const\s+camPos\s*=\s*new\s+THREE\.Vector3\(\);[\s\S]*notifyGunshot\(playerPos\)/);
+    // Server has matchmaking policy dev fallback
+    assert.match(serverCode, /ALLOW_ANONYMOUS\s*\|\|\s*process\.env\.NODE_ENV\s*!==\s*['"]production['"]/);
+    // Backend routes support fallback secret
+    assert.match(gameRoutes, /fallback_secret\s*=\s*['"]securefps-multiplayer-secret-key-2026['"]/);
   });
 });

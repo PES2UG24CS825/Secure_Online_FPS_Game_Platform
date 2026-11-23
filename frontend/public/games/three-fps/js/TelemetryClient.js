@@ -6,13 +6,16 @@
  */
 class TelemetryClient {
   constructor(apiBase = "") {
-    this.apiBase = apiBase || (window.location.port === "5000"
-      ? `${window.location.origin}/api`
-      : `http://${window.location.hostname || "127.0.0.1"}:5000/api`);
+    this.apiBase = apiBase || window.APP_CONFIG?.apiBase || (
+      (window.location.port === "5000" || window.location.port === "" || window.location.protocol === "https:" || window.location.port === "8080")
+        ? `${window.location.origin}/api`
+        : `http://${window.location.hostname || "127.0.0.1"}:5000/api`
+    );
 
     this.sessionId = null;
     this.gameToken = null;
     this.isSessionActive = false;
+    this.sessionStorageKey = 'securefps_telemetry_session_id';
     this.lastMovementSampleTime = 0;
     this.lastAimSampleTime = 0;
     this.lastYaw = 0;
@@ -36,6 +39,7 @@ class TelemetryClient {
     window.addEventListener('fps:telemetry_fire', (e) => {
       this.sendEvent('weapon_fire', {
         weapon: e.detail?.weapon || 'P-24 Carbine',
+        shot_id: e.detail?.shot_id || null,
         aim_error_deg: e.detail?.aim_error_deg != null ? Number(e.detail.aim_error_deg) : null,
         target_id: e.detail?.target_id || null,
         timestamp: performance.now() / 1000
@@ -47,6 +51,14 @@ class TelemetryClient {
         target_id: e.detail?.target || 'bot_target',
         damage: e.detail?.damage || 34,
         headshot: !!e.detail?.headshot,
+        shot_id: e.detail?.shot_id || null,
+        distance: e.detail?.distance != null ? Number(e.detail.distance) : 10.0,
+        visible_through_wall: !!e.detail?.visible_through_wall,
+        through_obstacle: !!e.detail?.through_obstacle,
+        impossible_hit: !!e.detail?.impossible_hit,
+        line_of_sight: e.detail?.line_of_sight !== false,
+        player_position: e.detail?.player_position || null,
+        target_position: e.detail?.target_position || null,
         timestamp: performance.now() / 1000
       });
     });
@@ -94,6 +106,7 @@ class TelemetryClient {
         shots: e.detail?.shots || 0,
         hits: e.detail?.hits || 0,
         accuracy: e.detail?.accuracy || 0,
+        headshots: e.detail?.headshots || 0,
         kdr: e.detail?.kdr || 0,
         winner: e.detail?.winner || 'Operator'
       });
@@ -104,6 +117,9 @@ class TelemetryClient {
 
   async startSession(mode = "bots", difficulty = "normal") {
     try {
+      if (!this.isSessionActive && sessionStorage.getItem(this.sessionStorageKey)) {
+        await this.resumeSession();
+      }
       if (this.isSessionActive && this.sessionId) {
         await this.endGameSession(false);
       }
@@ -128,6 +144,9 @@ class TelemetryClient {
         this.sessionId = data.session_id;
         this.gameToken = data.game_token;
         this.isSessionActive = true;
+        this.eventSequence = 0;
+        sessionStorage.setItem(this.sessionStorageKey, this.sessionId);
+        sessionStorage.setItem(`${this.sessionStorageKey}:sequence`, '0');
         console.log(`[SecureFPS Telemetry] Authenticated session started: ${this.sessionId}`);
 
         // Emit game_started event
@@ -138,6 +157,39 @@ class TelemetryClient {
       console.warn('[SecureFPS Telemetry] Could not reach Flask backend:', err.message);
     }
     return false;
+  }
+
+  async resumeSession() {
+    if (this.isSessionActive && this.sessionId && this.gameToken) return true;
+    const savedSessionId = sessionStorage.getItem(this.sessionStorageKey);
+    if (!savedSessionId) return false;
+
+    try {
+      const response = await fetch(`${this.apiBase}/game/resume`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: savedSessionId })
+      });
+      if (response.status === 404) {
+        sessionStorage.removeItem(this.sessionStorageKey);
+        sessionStorage.removeItem(`${this.sessionStorageKey}:sequence`);
+        return false;
+      }
+      if (!response.ok) throw new Error(`Session resume returned HTTP ${response.status}`);
+      const data = await response.json();
+      this.sessionId = data.session_id;
+      this.gameToken = data.game_token;
+      this.eventSequence = Math.max(
+        Number(data.event_sequence) || 0,
+        Number(sessionStorage.getItem(`${this.sessionStorageKey}:sequence`)) || 0,
+      );
+      this.isSessionActive = true;
+      return true;
+    } catch (error) {
+      console.warn('[SecureFPS Telemetry] Could not resume the active telemetry session:', error.message);
+      return false;
+    }
   }
 
   update(now, controller) {
@@ -158,8 +210,9 @@ class TelemetryClient {
           controller.position.z - this.lastPositionZ
         );
         const deltaTime = Math.max(0.001, now - this.lastMovementSampleTime);
-        // Only integrate if realistic continuous movement (<= 20 meters per sample)
-        if (deltaDist <= 20.0) {
+        // Integrate continuous movement up to fast sprint/cheat threshold (<= 200 meters per sample)
+        const maxDist = (controller.speedMultiplier && controller.speedMultiplier > 1.0) ? 200.0 : 35.0;
+        if (deltaDist <= maxDist) {
           integratedSpeed = deltaDist / deltaTime;
         }
       }
@@ -222,6 +275,7 @@ class TelemetryClient {
     }
 
     this.eventSequence = (this.eventSequence || 0) + 1;
+    sessionStorage.setItem(`${this.sessionStorageKey}:sequence`, String(this.eventSequence));
     telemetryData.seq = this.eventSequence;
     if (telemetryData.timestamp === undefined) {
       telemetryData.timestamp = parseFloat((performance.now() / 1000).toFixed(4));
@@ -262,7 +316,7 @@ class TelemetryClient {
       timestamp: telemetryData.timestamp
     });
 
-    if (this.eventQueue.length >= 20) {
+    if (this.eventQueue.length >= 20 || telemetryData.impossible_hit || telemetryData.through_obstacle || window.SecureFPSGame?.isCheaterDemoActive) {
       this.flushQueue();
     }
   }
@@ -300,6 +354,7 @@ class TelemetryClient {
     // Check ML Real-time Anti-Cheat Alerts
     const detection = data.realtime_detection || (data.analysis && data.analysis.result);
     if (detection) {
+      window.dispatchEvent(new CustomEvent('fps:ml_risk_update', { detail: detection }));
       const riskScore = detection.risk_score;
       const alertTriggered = detection.alert_triggered;
       const isRestricted = data.enforcement_state === 'restricted' || detection.enforcement_state === 'restricted';
@@ -338,6 +393,10 @@ class TelemetryClient {
         })
       });
       const data = await response.json();
+      if (response.ok) {
+        sessionStorage.removeItem(this.sessionStorageKey);
+        sessionStorage.removeItem(`${this.sessionStorageKey}:sequence`);
+      }
       console.log('[SecureFPS Telemetry] Voluntary exit processed:', data);
       return data;
     } catch (e) {
@@ -362,7 +421,7 @@ class TelemetryClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-      await fetch(`${this.apiBase}/game/end`, {
+      const response = await fetch(`${this.apiBase}/game/end`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -375,11 +434,16 @@ class TelemetryClient {
           shots: details.shots || 0,
           hits: details.hits || 0,
           accuracy: details.accuracy || 0,
+          headshots: details.headshots || 0,
           kdr: details.kdr || 0
         }),
         signal: controller.signal
       });
       clearTimeout(timeoutId);
+      if (response.ok) {
+        sessionStorage.removeItem(this.sessionStorageKey);
+        sessionStorage.removeItem(`${this.sessionStorageKey}:sequence`);
+      }
       console.log('[SecureFPS Telemetry] Match session successfully finalized (completed=' + completed + ').');
     } catch (e) {
       console.warn('[SecureFPS Telemetry] Error ending game session:', e);

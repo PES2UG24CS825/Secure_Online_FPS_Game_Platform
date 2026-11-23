@@ -69,6 +69,13 @@ backend/uploads/banners/*.jpg
 !backend/uploads/avatars/.gitkeep
 !backend/uploads/banners/.gitkeep
 
+# Tools and binaries
+tools/*.exe
+tools/cloudflared*
+
+# Reference materials
+.report_reference/
+
 # Cache and data dumps
 data/sessions_cache.json
 *.cache.json
