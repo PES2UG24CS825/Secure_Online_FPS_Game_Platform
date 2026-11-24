@@ -1,15 +1,15 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <script>if (window.location.port !== "5000" && window.location.port !== "") { window.location.replace(`http://${window.location.hostname}:5000${window.location.pathname.replace(/^\/frontend/, "")}${window.location.search}`); }</script>
+  <script>if (["3000", "5500"].includes(window.location.port)) { window.location.replace(`http://${window.location.hostname}:5000${window.location.pathname.replace(/^\/frontend/, "")}${window.location.search}`); }</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SecureFPS | Player Console</title>
   <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg?v=2">
 
   <link rel="stylesheet" href="css/styles.css?v=20261114_0415">
-  <link rel="stylesheet" href="css/player.css?v=20261114_0415">
-  <link rel="stylesheet" href="css/ui-polish.css?v=20261118_matches">
+  <link rel="stylesheet" href="css/player.css?v=profile_final">
+  <link rel="stylesheet" href="css/ui-polish.css?v=profile_final">
 </head>
 
 <body class="dashboard-page player-page">
@@ -17,8 +17,8 @@
   <aside class="sidebar">
 
     <div class="brand">
-      <div class="sidebar-brand-text" aria-label="SecureFPS Gaming Security"><strong>SECUREFPS</strong><small>GAMING SECURITY</small></div>
-      <button id="collapseSidebarBtn" class="sidebar-collapse-btn" type="button" aria-label="Toggle sidebar collapse" title="Collapse / Expand sidebar">
+      <img class="sidebar-logo sidebar-logo-lockup" src="public/securefps-logo-crop.png?v=1" alt="SecureFPS Gaming Security">
+      <button id="collapseSidebarBtn" class="sidebar-collapse-btn" type="button" aria-label="Collapse sidebar" aria-expanded="true" aria-controls="playerNavigation">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
       </button>
     </div>
@@ -65,6 +65,8 @@
         <span class="nav-label">Help &amp; support</span>
       </a>
 
+      <a href="#notifications" data-section="notifications" id="notificationNavLink" aria-label="Notifications"><span class="nav-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0v5l-2 3h16l-2-3V8m-8 11a2 2 0 0 0 4 0"/></svg></span><span class="nav-label">Notifications</span><span id="notifBadge" class="badge" hidden></span></a>
+
       <a href="#profile" data-section="profile">
         <span class="nav-icon" aria-hidden="true">👤</span>
         <span class="nav-label">Profile</span>
@@ -75,7 +77,7 @@
     <div class="sidebar-bottom">
 
       <div class="mini-profile">
-        <div class="avatar" id="avatar">P</div>
+        <div class="avatar" id="avatar" data-profile-avatar role="img">P</div>
 
         <div>
           <strong id="sideName">Player</strong>
@@ -133,9 +135,9 @@
 
     <section id="overview" class="player-view player-view-active">
 
-      <div class="overview-masthead">
-        <div><p class="eyebrow">PLAYER CONSOLE</p><h1 id="welcome">Welcome back</h1></div>
-      </div>
+      <header class="section-title overview-heading">
+        <h1>Overview</h1>
+      </header>
 
       <section class="overview-glance" aria-label="Platform at a glance">
         <div class="overview-glance-label"><span>PLATFORM AT A GLANCE</span><strong>Fair play community</strong></div>
@@ -143,7 +145,6 @@
         <div class="overview-glance-stat"><strong id="matchesToday">—</strong><small>matches analyzed today</small></div>
         <div class="overview-glance-stat"><strong id="playerRank">—</strong><small>your fair-play rank</small></div>
         <button type="button" class="overview-glance-action" data-detection-info>How detection works</button>
-        <div class="overview-glance-mascot" aria-hidden="true"><span>GG!</span><img id="playerMascotSticker" src="public/avatars/chibi-female-2.png" alt=""></div>
       </section>
 
       <section class="overview-risk-grid" aria-label="Current risk summary">
@@ -164,29 +165,11 @@
           <small>Current account state (hover for IP)</small>
           <div class="hover-stat-popover">
             <span class="popover-title">Last Authentication</span>
-            <strong id="lastLoginIp" class="ip-stat">127.0.0.1 (Localhost)</strong>
+            <strong id="lastLoginIp" class="ip-stat">—</strong>
             <small>Most recent sign-in address</small>
           </div>
         </article>
         <article class="stat-card"><span>Two-factor auth</span><strong id="mfaStatus">Loading</strong><small>Authenticator app</small></article>
-      </section>
-
-      <section class="dashboard-panel overview-combat-panel" style="margin-top: 16px; margin-bottom: 20px;">
-        <div class="dashboard-panel-head">
-          <div>
-            <h2>Combat Career Overview</h2>
-            <span class="dashboard-panel-caption">Lifetime combat metrics, K/D ratio, and weapons accuracy across all matches</span>
-          </div>
-        </div>
-        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-top: 8px;">
-          <article class="stat-card"><span>Total Kills</span><strong id="careerTotalKills">0</strong><small>Enemy eliminations</small></article>
-          <article class="stat-card"><span>Total Deaths</span><strong id="careerTotalDeaths">0</strong><small>Combat casualties</small></article>
-          <article class="stat-card"><span>Career K/D</span><strong id="careerKd">0.00</strong><small>Kill / death ratio</small></article>
-          <article class="stat-card"><span>Total Shots Fired</span><strong id="careerTotalShots">—</strong><small id="careerShotsCoverage">Unavailable</small></article>
-          <article class="stat-card"><span>Successful Hits</span><strong id="careerTotalHits">—</strong><small id="careerHitsCoverage">Unavailable</small></article>
-          <article class="stat-card"><span>Overall Accuracy</span><strong id="careerAccuracy">—</strong><small id="careerShotsSummary">Calculated from confirmed hits / shots</small></article>
-          <article class="stat-card"><span>Total Matches</span><strong id="careerMatches">0</strong><small id="careerWinRate">0 completed</small></article>
-        </div>
       </section>
 
       <div id="dashboardNotice" class="dashboard-notice" role="status" hidden></div>
@@ -205,7 +188,7 @@
       <div class="section-title">
         <div><p class="eyebrow">COMMUNITY</p><h2>Performance leaderboard</h2><p class="page-description">Ranked by match performance: kills, K/D ratio, accuracy, and completed matches.</p></div>
       </div>
-      <div class="leaderboard-hero"><div class="leaderboard-hero-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="28" height="28"><defs><linearGradient id="goldCupGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FDE68A"/><stop offset="50%" stop-color="#F59E0B"/><stop offset="100%" stop-color="#D97706"/></linearGradient></defs><path d="M8 4h8v4a4 4 0 0 1-8 0V4Z" fill="url(#goldCupGrad)" stroke="#B45309" stroke-width="1.2"/><path d="M8 6H5v2a4 4 0 0 0 4 4" fill="none" stroke="url(#goldCupGrad)" stroke-width="2" stroke-linecap="round"/><path d="M16 6h3v2a4 4 0 0 1-4 4" fill="none" stroke="url(#goldCupGrad)" stroke-width="2" stroke-linecap="round"/><path d="M12 12v5m-4 3h8m-7-3h6" stroke="url(#goldCupGrad)" stroke-width="2.2" stroke-linecap="round"/></svg></div><div><strong id="leaderboardRank">—</strong><span>Your current rank</span></div><div><strong id="leaderboardKills">—</strong><span>Total kills</span></div><div><strong id="leaderboardKd">—</strong><span>K/D ratio</span></div><div class="leaderboard-hero-mascot" aria-hidden="true"><span>Good luck!</span><img id="leaderboardMascotSticker" src="public/avatars/chibi-female-2.png" alt=""></div></div>
+      <div class="leaderboard-hero"><div class="leaderboard-hero-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="28" height="28"><defs><linearGradient id="goldCupGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FDE68A"/><stop offset="50%" stop-color="#F59E0B"/><stop offset="100%" stop-color="#D97706"/></linearGradient></defs><path d="M8 4h8v4a4 4 0 0 1-8 0V4Z" fill="url(#goldCupGrad)" stroke="#B45309" stroke-width="1.2"/><path d="M8 6H5v2a4 4 0 0 0 4 4" fill="none" stroke="url(#goldCupGrad)" stroke-width="2" stroke-linecap="round"/><path d="M16 6h3v2a4 4 0 0 1-4 4" fill="none" stroke="url(#goldCupGrad)" stroke-width="2" stroke-linecap="round"/><path d="M12 12v5m-4 3h8m-7-3h6" stroke="url(#goldCupGrad)" stroke-width="2.2" stroke-linecap="round"/></svg></div><div><strong id="leaderboardRank">—</strong><span>Your current rank</span></div><div><strong id="leaderboardKills">—</strong><span>Total kills</span></div><div><strong id="leaderboardKd">—</strong><span>K/D ratio</span></div><div class="leaderboard-hero-mascot" aria-hidden="true"><span>Good luck!</span><img id="leaderboardMascotSticker" data-avatar-sticker hidden alt=""></div></div>
       <section class="leaderboard-card"><div class="dashboard-panel-head"><div><h2>Top performers</h2><span class="dashboard-panel-caption">Kills, K/D, accuracy, completed matches</span></div><button class="play-btn" id="refreshLeaderboard" type="button">Refresh</button></div><div id="leaderboardList" class="leaderboard-list"><div class="empty">Loading leaderboard…</div></div></section>
     </section>
 
@@ -338,7 +321,7 @@
             Monitor the security of your SecureFPS account.
           </p>
         </div>
-        <div class="section-mascot" aria-hidden="true"><span>Stay protected!</span><img id="securityMascotSticker" src="public/avatars/chibi-female-2.png" alt=""></div>
+        <div class="avatar account-profile-avatar" data-profile-avatar role="img"></div>
       </div>
 
 
@@ -445,14 +428,10 @@
           <p>
             Recovery codes allow emergency sign-in when you cannot access your authenticator app. Keep them in a safe password manager.
           </p>
-          <div id="recoveryCodesDisplay" class="recovery-codes-box-theme" style="display: none;">
-            <div id="recoveryCodesGrid" class="recovery-codes-grid-theme"></div>
-            <p style="font-size: 11px; margin-top: 8px; margin-bottom: 0;">Save these now. They will not be shown again.</p>
-          </div>
           <form id="generateRecoveryCodesForm">
             <label for="recoveryCurrentPassword">Current password</label>
             <input id="recoveryCurrentPassword" type="password" autocomplete="current-password" required>
-            <button id="generateRecoveryCodesBtn" type="submit" class="play-btn">Generate 8 Recovery Codes</button>
+            <button id="generateRecoveryCodesBtn" type="submit" class="play-btn">Replace and download recovery codes</button>
           </form>
           <div id="recoveryCodesMsg" hidden></div>
         </article>
@@ -496,16 +475,7 @@
               <span class="dashboard-panel-caption">Zero-download browser execution and GDPR privacy guarantees</span>
             </div>
           </div>
-          <div style="background: rgba(124, 58, 237, 0.06); border: 1px solid #DDD6FE; border-radius: 10px; padding: 12px 16px; margin: 12px 0; display: flex; align-items: flex-start; gap: 12px;">
-            <span style="font-size: 20px;">🛡️</span>
-            <div style="font-size: 12.5px; line-height: 1.5; color: #334155;">
-              <strong style="color: #4C1D95; display: block; margin-bottom: 2px;">Zero Game Downloads Required</strong>
-              All games (CyberStrike 3D and FPS Microgame) run 100% inside your sandboxed browser via WebGL. <strong>No executables, binaries, or game files are ever downloaded or installed to your device.</strong> Your gameplay telemetry is strictly encrypted and used exclusively for real-time anti-cheat validation.
-            </div>
-          </div>
-          <p style="color: #475569; font-size: 13px; line-height: 1.5;">
-            Manage your account data under strict GDPR compliance, download a full export of your personal combat records and transactions, or permanently erase your player profile.
-          </p>
+          <p>Download your account data or request account deletion.</p>
           <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 14px;">
             <button id="downloadMyDataBtn" type="button" class="play-btn" style="background: #F3E8FF; color: #6D28D9; border: 1px solid #DDD6FE;">📥 Download My Data (JSON)</button>
             <button id="selfDeleteAccountBtn" type="button" class="play-btn danger-btn">🗑️ Delete My Account</button>
@@ -552,7 +522,7 @@
     <section id="support" class="player-view">
       <div class="section-title"><div><p class="eyebrow">PLAYER SUPPORT</p><h2>How can we help?</h2><p class="page-description">Browse quick answers or send a message to the SecureFPS admin team.</p></div></div>
       <div class="support-layout">
-        <section class="profile-card support-assistant"><h3>SecureFPS helper</h3><p class="appearance-hint">Choose a common question or ask about account access, matches, security, or rewards.</p><div class="support-faq-list" id="supportFaqList"></div><div class="support-answer" id="supportAnswer" role="status" aria-live="polite">Select a question to see a suggested solution.</div><form id="supportQuestionForm" class="support-form"><label>Ask a question<input id="supportQuestion" maxlength="240" required placeholder="For example: Where are my match rewards?"></label><button class="play-btn" type="submit">Ask the helper</button></form><div class="support-mascot" aria-hidden="true"><span>Need a hand?</span><img id="supportMascotSticker" src="public/avatars/chibi-female-2.png" alt=""></div></section>
+        <section class="profile-card support-assistant"><h3>SecureFPS helper</h3><p class="appearance-hint">Choose a common question or ask about account access, matches, security, or rewards.</p><div class="support-faq-list" id="supportFaqList"></div><div class="support-answer" id="supportAnswer" role="status" aria-live="polite">Select a question to see a suggested solution.</div><form id="supportQuestionForm" class="support-form"><label>Ask a question<input id="supportQuestion" maxlength="240" required placeholder="For example: Where are my match rewards?"></label><button class="play-btn" type="submit">Ask the helper</button></form><div class="support-mascot" aria-hidden="true"><span>Need a hand?</span><img id="supportMascotSticker" data-avatar-sticker hidden alt=""></div></section>
         <section class="profile-card support-contact"><h3>Contact support</h3><form id="supportTicketForm" class="support-form"><label>Topic<select id="supportCategory" required><option value="account">Account or sign-in</option><option value="match">Match or results</option><option value="security">Security review</option><option value="rewards">Rewards or store</option><option value="other">Other</option></select></label><label>Message<textarea id="supportMessage" rows="5" maxlength="3000" required placeholder="Describe what happened and what you need help with."></textarea></label><label>Screenshot or proof (optional)<input id="supportAttachment" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPG, or WebP up to 3 MB.</small></label><button class="play-btn" id="sendSupportTicket" type="submit">Send to admin</button><span id="supportFormStatus" class="appearance-status" role="status"></span></form></section>
       </div>
       <section class="profile-card support-ticket-history"><div class="dashboard-panel-head"><div><h2>Your support messages</h2><span class="dashboard-panel-caption">Replies from admin appear here</span></div><button class="play-btn" id="refreshSupportTickets" type="button">Refresh</button></div><div id="supportTicketList" class="list"><div class="empty">Loading messages…</div></div></section>
@@ -580,85 +550,41 @@
       </div>
 
 
-      <div class="profile-grid">
-
-        <section class="profile-card">
-
-          <div class="profile-banner" id="profileBanner" data-banner="sakura" aria-label="Sakura profile banner preview"></div>
-
+      <div class="profile-layout">
+        <section class="profile-card profile-preview" aria-label="Player identity">
+          <div class="profile-banner" id="profileBanner" data-banner="sakura" aria-label="Selected profile banner"></div>
           <div class="profile-identity">
-            <div class="profile-avatar" id="profileAvatar" aria-label="Selected avatar"></div>
-
-            <div>
-              <h3 id="profileDisplayName">
-                Player
-              </h3>
-
+            <div class="profile-avatar" id="profileAvatar" data-profile-avatar role="img"></div>
+            <div class="profile-identity-details">
+              <h3 id="profileDisplayName">Player</h3>
+              <p id="profileUsername" hidden></p>
+              <p id="profileDisplayEmail"></p>
+              <p id="profileContent" class="muted"></p>
               <span id="equippedRewardBadge" class="equipped-reward-badge" hidden></span>
-
-              <p id="profileDisplayEmail">
-                player@example.com
-              </p>
+              <div class="profile-progression">
+                <div class="profile-xp"><strong id="profileLevel">Level unavailable</strong><span id="profileXp"></span></div>
+                <progress id="profileXpProgress" aria-label="Progress to the next rewards level" max="250" value="0" hidden></progress>
+                <small id="profileXpRemaining"></small>
+              </div>
             </div>
-
           </div>
-
         </section>
 
-
-        <section class="profile-card">
-
+        <section class="profile-card profile-appearance">
+          <h3>Appearance</h3>
           <div class="appearance-group">
-            <h3>Banner background</h3>
-            <div class="appearance-options" id="bannerOptions" role="group" aria-label="Choose banner background">
-              <button class="appearance-option banner-option" type="button" data-banner="sakura" aria-label="Cosmic Sakura banner" title="Cosmic Sakura" aria-pressed="true"></button>
-            </div>
-            <div class="reward-equipped-notice" style="margin: 8px 0 12px; font-size: 12px; color: #4C1D95; font-weight: 600; background: #FAF5FF; border: 1px solid #DDD6FE; border-radius: 8px; padding: 8px 12px;">
-              🌌 <strong>Sakura backgrounds:</strong> Cosmic, Frontline, Dawn, and Neon Sakura are included free.
-            </div>
+            <h4>Banner background</h4>
+            <div class="appearance-options" id="bannerOptions" role="group" aria-label="Choose banner background"></div>
           </div>
-
           <div class="appearance-group">
-            <h3>Avatar</h3>
-            <div class="appearance-options" id="avatarOptions" role="group" aria-label="Choose avatar">
-              <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="chibi-male-1" aria-label="Silver-haired chibi avatar" aria-pressed="false"><img src="public/avatars/chibi-male-1.png" alt="Silver-haired chibi avatar"></button>
-              <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="chibi-male-2" aria-label="Dark-haired chibi avatar" aria-pressed="true"><img src="public/avatars/chibi-male-2.png" alt="Dark-haired chibi avatar"></button>
-            </div>
+            <h4>Avatar</h4>
+            <div class="appearance-options" id="avatarOptions" role="group" aria-label="Choose avatar"></div>
           </div>
-
           <div class="appearance-actions">
             <button class="play-btn" id="saveAppearance" type="button">Save appearance</button>
             <span class="appearance-status" id="appearanceStatus" role="status"></span>
           </div>
-
-          <div
-            id="profileContent"
-            class="profile-details">
-
-            <div class="profile-row">
-              <span>Username</span>
-              <strong>Loading</strong>
-            </div>
-
-            <div class="profile-row">
-              <span>Email</span>
-              <strong>Loading</strong>
-            </div>
-
-            <div class="profile-row">
-              <span>Role</span>
-              <strong>Loading</strong>
-            </div>
-
-            <div class="profile-row">
-              <span>Created</span>
-              <strong>Loading</strong>
-            </div>
-
-          </div>
-
         </section>
-
       </div>
 
     </section>
@@ -666,6 +592,28 @@
     <!-- ============================================================
          FAIR PLAY TAB (Requirement 2)
     ============================================================ -->
+    <section id="notifications" class="player-view" hidden>
+      <div class="section-title"><h2>Notification history</h2></div>
+      <div class="notification-history-grid">
+        <section class="profile-card" aria-label="Notification history">
+          <div class="notification-actions">
+            <label>Category <select id="notificationCategory"><option value="">All categories</option><option value="security">Security</option><option value="account">Account updates</option><option value="matches">Matches</option><option value="rewards">Rewards</option><option value="announcements">Announcements</option></select></label>
+            <label><input id="notificationsUnread" type="checkbox"> Unread only</label>
+            <button class="ghost-btn" type="button" data-notification-all>Mark all as read</button>
+          </div>
+          <p id="notificationError" role="status"></p>
+          <div id="notificationHistory" aria-live="polite"></div>
+          <div class="notification-actions"><button class="ghost-btn" id="notificationsPrevious" type="button" disabled>Previous</button><span id="notificationPage" role="status"></span><button class="ghost-btn" id="notificationsNext" type="button" disabled>Next</button></div>
+        </section>
+        <section class="profile-card">
+          <h3>Notification preferences</h3>
+          <p class="muted">Security and account notices stay enabled.</p>
+          <form id="notificationPreferences"><div id="notificationPreferenceFields"></div><button class="play-btn" type="submit" disabled>Save preferences</button></form>
+          <p id="notificationPreferenceStatus" role="status"></p>
+        </section>
+      </div>
+    </section>
+
     <section id="fairplay" class="player-view" hidden>
       <div class="section-title">
         <div>
@@ -675,7 +623,7 @@
         </div>
         <div class="section-mascot" aria-hidden="true">
           <span>Play fair, win clean!</span>
-          <img id="fairplayMascotSticker" src="public/avatars/chibi-female-2.png" alt="">
+          <img id="fairplayMascotSticker" data-avatar-sticker hidden alt="">
         </div>
       </div>
 
@@ -901,8 +849,10 @@
   <!-- Existing application logic -->
   <script src="js/config.js?v=20261114_0415"></script>
   <script src="js/api.js?v=20261114_0415"></script>
-  <script src="js/player-features.js?v=20261114_0415"></script>
-  <script src="js/player.js?v=20261114_0415"></script>
+  <script src="js/player-features.js?v=profile_avatars_2"></script>
+  <script src="js/profile-avatars.js?v=1"></script>
+  <script src="js/player-notifications.js?v=2"></script>
+  <script src="js/player.js?v=profile_final"></script>
 
 
   <!-- ============================================================
@@ -995,6 +945,7 @@
           );
         }
 
+        document.dispatchEvent(new CustomEvent("securefps:view", { detail: sectionId }));
         window.scrollTo(0, 0);
       }
 

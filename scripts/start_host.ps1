@@ -1,229 +1,163 @@
 <#
 .SYNOPSIS
-    SecureFPS - Complete Remote Hosting Launcher
-    Starts MongoDB verification, Flask (5000), Socket.IO (4001), Reverse Proxy (8080),
-    and Cloudflare Tunnel for genuine cross-network internet multiplayer.
+    Starts SecureFPS on loopback. Use -PublicTunnel to start a production HTTPS tunnel.
 #>
+param(
+    [switch]$PublicTunnel,
+    [ValidateRange(1024, 65535)][int]$FlaskPort = 5000,
+    [ValidateRange(1024, 65535)][int]$SocketPort = 4001
+)
 
-$ErrorActionPreference = "Continue"
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$logsDir = Join-Path $repoRoot "logs"
-$toolsDir = Join-Path $repoRoot "tools"
+$ErrorActionPreference = 'Stop'
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$logsDir = Join-Path $repoRoot 'logs'
+$statePath = Join-Path $logsDir 'host-processes.json'
+New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
 
-if (-not (Test-Path $logsDir)) { New-Item -ItemType Directory -Path $logsDir | Out-Null }
-if (-not (Test-Path $toolsDir)) { New-Item -ItemType Directory -Path $toolsDir | Out-Null }
-
-Write-Host "===============================================================" -ForegroundColor Cyan
-Write-Host "     SECUREFPS - AUTHORITATIVE REMOTE HOST LAUNCHER            " -ForegroundColor Cyan
-Write-Host "===============================================================" -ForegroundColor Cyan
-Write-Host "Working Directory: $repoRoot" -ForegroundColor Gray
-
-# -----------------------------------------------------------------
-# 1. PRE-FLIGHT ENVIRONMENT CHECKS
-# -----------------------------------------------------------------
-Write-Host "`n[STEP 1/5] Checking Runtimes..." -ForegroundColor Yellow
-
-$nodeCmd = Get-Command "node" -ErrorAction SilentlyContinue
-if (-not $nodeCmd) {
-    Write-Host "[ERROR] Node.js is not found in PATH. Install Node.js v18+ from https://nodejs.org" -ForegroundColor Red
-    exit 1
+if (Test-Path -LiteralPath $statePath) {
+    throw 'A launcher state file already exists. Run scripts/stop_all.ps1 first.'
 }
-Write-Host "  [OK] Node.js: $(& node -v)" -ForegroundColor Green
 
-$venvPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
-$pythonExe = "python"
-if (Test-Path $venvPython) {
-    $pythonExe = $venvPython
-    Write-Host "  [OK] Python (virtualenv): $(& $pythonExe --version)" -ForegroundColor Green
+$pythonExe = Join-Path $repoRoot '.venv\Scripts\python.exe'
+if (Test-Path -LiteralPath $pythonExe) {
+    # Windows venv executables launch a second Python process. Use the base
+    # interpreter with the environment's packages so the recorded PID owns Flask.
+    $pythonInfo = & $pythonExe -c "import json, sys, sysconfig; print(json.dumps([sys._base_executable, sysconfig.get_path('purelib')]))" | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0 -or -not $pythonInfo) { throw 'Could not resolve the Python virtual environment.' }
+    $pythonExe = $pythonInfo[0]
+    $pythonPackages = $pythonInfo[1]
 } else {
-    $pythonCmd = Get-Command "python" -ErrorAction SilentlyContinue
-    if (-not $pythonCmd) {
-        Write-Host "[ERROR] Python is not found in PATH. Install Python 3.10+ from https://python.org" -ForegroundColor Red
-        exit 1
-    }
-    Write-Host "  [OK] Python: $(& python --version)" -ForegroundColor Green
+    $pythonExe = (Get-Command python -CommandType Application).Source
 }
-
-# Check MongoDB
-$mongoConn = Test-NetConnection -ComputerName "127.0.0.1" -Port 27017 -WarningAction SilentlyContinue
-if (-not $mongoConn.TcpTestSucceeded) {
-    Write-Host "  [WARN] MongoDB is not responding on port 27017." -ForegroundColor Yellow
-    Write-Host "  Attempting to start MongoDB Windows service..." -ForegroundColor Yellow
-    try {
-        Start-Service MongoDB -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
-    } catch {}
-    $mongoRetry = Test-NetConnection -ComputerName "127.0.0.1" -Port 27017 -WarningAction SilentlyContinue
-    if (-not $mongoRetry.TcpTestSucceeded) {
-        Write-Host "  [ERROR] MongoDB must be running on localhost:27017." -ForegroundColor Red
-        Write-Host "  Please start MongoDB service: net start MongoDB" -ForegroundColor Red
-        exit 1
+$nodeExe = (Get-Command node -CommandType Application).Source
+$cloudflared = $null
+if ($PublicTunnel) {
+    $command = Get-Command cloudflared -CommandType Application -ErrorAction SilentlyContinue
+    $cloudflared = if ($command) { $command.Source } else { Join-Path $repoRoot 'tools\cloudflared.exe' }
+    if (-not (Test-Path -LiteralPath $cloudflared)) {
+        throw 'Cloudflared is missing. Run scripts/setup_tunnel.ps1 first.'
     }
 }
-Write-Host "  [OK] MongoDB is active on 127.0.0.1:27017." -ForegroundColor Green
 
-# -----------------------------------------------------------------
-# 2. CONFIGURE ENVIRONMENT VARIABLES
-# -----------------------------------------------------------------
-$env:APP_ENV = "development"
-$env:SECUREFPS_ENABLE_DEMO = "1"
-$env:NUM_PROXIES = "1"
-$env:MATCH_SCORE_LIMIT = "10"
-$env:FLASK_PORT = "5000"
-$env:SOCKET_PORT = "4001"
-$env:PROXY_PORT = "8080"
-$env:GAME_SERVER_SECRET = "securefps-multiplayer-secret-key-2026"
-
-# -----------------------------------------------------------------
-# 3. LAUNCH LOCAL SERVICES (FLASK, MULTIPLAYER, PROXY)
-# -----------------------------------------------------------------
-Write-Host "`n[STEP 2/5] Starting Backend Services..." -ForegroundColor Yellow
-
-# A. Flask on port 5000
-$flaskOut = Join-Path $logsDir "flask.out.log"
-$flaskErr = Join-Path $logsDir "flask.err.log"
-$flaskRunning = Test-NetConnection -ComputerName "127.0.0.1" -Port 5000 -WarningAction SilentlyContinue
-if (-not $flaskRunning.TcpTestSucceeded) {
-    Write-Host "  Starting Flask Web Application on port 5000..." -ForegroundColor Gray
-    Start-Process -FilePath $pythonExe -ArgumentList "backend/app.py" -WorkingDirectory $repoRoot `
-        -RedirectStandardOutput $flaskOut -RedirectStandardError $flaskErr -WindowStyle Hidden
-} else {
-    Write-Host "  Flask is already running on port 5000." -ForegroundColor Gray
-}
-
-# B. Multiplayer Server on port 4001
-$mpOut = Join-Path $logsDir "multiplayer.out.log"
-$mpErr = Join-Path $logsDir "multiplayer.err.log"
-$mpRunning = Test-NetConnection -ComputerName "127.0.0.1" -Port 4001 -WarningAction SilentlyContinue
-if (-not $mpRunning.TcpTestSucceeded) {
-    Write-Host "  Starting Authoritative Multiplayer Server on port 4001..." -ForegroundColor Gray
-    Start-Process -FilePath "node" -ArgumentList "multiplayer-server/server.js" -WorkingDirectory $repoRoot `
-        -RedirectStandardOutput $mpOut -RedirectStandardError $mpErr -WindowStyle Hidden
-} else {
-    Write-Host "  Multiplayer server is already running on port 4001." -ForegroundColor Gray
-}
-
-# C. Reverse Proxy on port 8080
-$proxyOut = Join-Path $logsDir "proxy.out.log"
-$proxyErr = Join-Path $logsDir "proxy.err.log"
-$proxyRunning = Test-NetConnection -ComputerName "127.0.0.1" -Port 8080 -WarningAction SilentlyContinue
-if (-not $proxyRunning.TcpTestSucceeded) {
-    Write-Host "  Starting Reverse Proxy (Unified Port 8080)..." -ForegroundColor Gray
-    Start-Process -FilePath "node" -ArgumentList "reverse-proxy/proxy.js" -WorkingDirectory $repoRoot `
-        -RedirectStandardOutput $proxyOut -RedirectStandardError $proxyErr -WindowStyle Hidden
-} else {
-    Write-Host "  Reverse Proxy is already running on port 8080." -ForegroundColor Gray
-}
-
-# Wait for proxy ready
-Start-Sleep -Seconds 2
-$proxyCheck = Test-NetConnection -ComputerName "127.0.0.1" -Port 8080 -WarningAction SilentlyContinue
-if ($proxyCheck.TcpTestSucceeded) {
-    Write-Host "  [OK] Local Services running: Flask (5000), Socket.IO (4001), Reverse Proxy (8080)" -ForegroundColor Green
-} else {
-    Write-Host "  [WARN] Reverse proxy did not respond immediately. Check $proxyErr" -ForegroundColor Yellow
-}
-
-# -----------------------------------------------------------------
-# 4. VERIFY / DOWNLOAD CLOUDFLARE TUNNEL (cloudflared)
-# -----------------------------------------------------------------
-Write-Host "`n[STEP 3/5] Verifying Cloudflare Tunnel..." -ForegroundColor Yellow
-
-$localCloudflared = Join-Path $toolsDir "cloudflared.exe"
-$cfCmd = Get-Command "cloudflared" -ErrorAction SilentlyContinue
-$cfExe = $null
-
-if ($cfCmd) {
-    $cfExe = $cfCmd.Source
-} elseif (Test-Path $localCloudflared) {
-    $cfExe = $localCloudflared
-} else {
-    Write-Host "  Downloading official cloudflared binary to ./tools/..." -ForegroundColor Gray
-    $downloadUrl = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
+if ($FlaskPort -eq $SocketPort -or 8080 -in @($FlaskPort, $SocketPort)) { throw 'Each service requires a distinct port.' }
+foreach ($port in @($FlaskPort, $SocketPort, 8080)) {
+    $connection = [Net.Sockets.TcpClient]::new()
     try {
-        curl.exe -L -f --output $localCloudflared $downloadUrl
-        if (Test-Path $localCloudflared) {
-            $cfExe = $localCloudflared
-        }
+        $connection.Connect('127.0.0.1', $port)
+        throw "Required port $port is already serving connections."
+    } catch [Net.Sockets.SocketException] {
+        if ($_.Exception.SocketErrorCode -ne [Net.Sockets.SocketError]::ConnectionRefused) { throw }
+    } finally {
+        $connection.Dispose()
+    }
+    $probe = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $port)
+    try {
+        $probe.Server.ExclusiveAddressUse = $true
+        $probe.Start()
     } catch {
-        Write-Host "  [ERROR] Failed to download cloudflared: $_" -ForegroundColor Red
+        throw "Required port $port is unavailable. Free it before launching SecureFPS."
+    } finally {
+        $probe.Stop()
     }
 }
 
-if (-not $cfExe) {
-    Write-Host "  [WARN] cloudflared is not ready. You can test locally via:" -ForegroundColor Yellow
-    Write-Host "    http://localhost:8080" -ForegroundColor White
-    Write-Host "  To run the tunnel manually, download cloudflared.exe into ./tools/ and run:" -ForegroundColor Yellow
-    Write-Host "    .\tools\cloudflared.exe tunnel --url http://localhost:8080" -ForegroundColor White
-    exit 0
+$settings = @{
+    APP_ENV = $(if ($PublicTunnel) { 'production' } else { 'development' })
+    FLASK_ENV = $(if ($PublicTunnel) { 'production' } else { 'development' })
+    NODE_ENV = $(if ($PublicTunnel) { 'production' } else { 'development' })
+    SECUREFPS_LOCAL_DEV = '0'
+    SECUREFPS_ENABLE_DEMO = '0'
+    FLASK_DEBUG = '0'
+    ALLOW_ANONYMOUS = 'false'
+    NUM_PROXIES = '1'
+    FLASK_HOST = '127.0.0.1'
+    FLASK_PORT = [string]$FlaskPort
+    HOST = '127.0.0.1'
+    PORT = [string]$SocketPort
+    SOCKET_HOST = '127.0.0.1'
+    SOCKET_PORT = [string]$SocketPort
+    PROXY_HOST = '127.0.0.1'
+    PROXY_PORT = '8080'
+    TRUST_CLOUDFLARE_TUNNEL = $(if ($PublicTunnel) { '1' } else { '0' })
+    FLASK_INTERNAL_URL = "http://127.0.0.1:$FlaskPort"
+    GAME_SERVER_URL = "http://127.0.0.1:$SocketPort"
+}
+if ($pythonPackages) {
+    $settings.PYTHONPATH = (@($pythonPackages, $env:PYTHONPATH) | Where-Object { $_ }) -join [IO.Path]::PathSeparator
+}
+$previous = @{}
+$processes = @()
+$records = @()
+
+function Start-SecureFPSProcess($name, $executable, $arguments) {
+    Start-Process -FilePath $executable -ArgumentList $arguments -WorkingDirectory $repoRoot `
+        -RedirectStandardOutput (Join-Path $logsDir "$name.out.log") `
+        -RedirectStandardError (Join-Path $logsDir "$name.err.log") -WindowStyle Hidden -PassThru
 }
 
-# -----------------------------------------------------------------
-# 5. START TUNNEL AND EXTRACT PUBLIC HTTPS URL
-# -----------------------------------------------------------------
-Write-Host "`n[STEP 4/5] Launching Cloudflare Tunnel (Target: http://localhost:8080)..." -ForegroundColor Yellow
+function Save-ProcessState {
+    ConvertTo-Json -InputObject $records | Set-Content -LiteralPath $statePath -Encoding UTF8
+}
 
-$tunnelOut = Join-Path $logsDir "tunnel.out.log"
-$tunnelErr = Join-Path $logsDir "tunnel.err.log"
-# Stop previous tunnel instance if running
-Get-Process -Name "cloudflared" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+try {
+    foreach ($key in $settings.Keys) {
+        $previous[$key] = [Environment]::GetEnvironmentVariable($key, 'Process')
+        [Environment]::SetEnvironmentVariable($key, $settings[$key], 'Process')
+    }
+    foreach ($service in @(
+        @{ Name = 'flask'; Executable = $pythonExe; Arguments = 'backend/app.py' }
+        @{ Name = 'multiplayer'; Executable = $nodeExe; Arguments = 'multiplayer-server/server.js' }
+        @{ Name = 'proxy'; Executable = $nodeExe; Arguments = 'reverse-proxy/proxy.js' }
+    )) {
+        $process = Start-SecureFPSProcess $service.Name $service.Executable $service.Arguments
+        $processes += $process
+        $records += @{ Name = $service.Name; Id = $process.Id; Started = $process.StartTime.ToUniversalTime().Ticks.ToString() }
+        Save-ProcessState
+    }
 
-Start-Process -FilePath $cfExe -ArgumentList "tunnel", "--url", "http://localhost:8080" `
-    -RedirectStandardOutput $tunnelOut -RedirectStandardError $tunnelErr -WindowStyle Hidden
+    $check = Join-Path $PSScriptRoot 'test_remote_setup.ps1'
+    $ready = $false
+    foreach ($attempt in 1..12) {
+        if (@($processes | Where-Object HasExited).Count) {
+            throw "A SecureFPS service exited during startup. Inspect $logsDir."
+        }
+        $ready = & $check -Quiet -FlaskPort $FlaskPort -SocketPort $SocketPort
+        if ($ready) { break }
+        Start-Sleep -Seconds 1
+    }
+    if (-not $ready) {
+        & $check -AsResult -FlaskPort $FlaskPort -SocketPort $SocketPort | Out-Null
+        throw "Required health checks failed. Inspect $logsDir."
+    }
 
-Write-Host "  Acquiring public HTTPS URL (waiting up to 10s)..." -ForegroundColor Gray
+    if (-not $PublicTunnel) {
+        Write-Host 'SecureFPS is ready at http://127.0.0.1:8080'
+        return
+    }
 
-$publicUrl = $null
-for ($i = 0; $i -lt 25; $i++) {
-    Start-Sleep -Milliseconds 500
-    foreach ($logFile in @($tunnelErr, $tunnelOut)) {
-        if (Test-Path $logFile) {
-            $logContent = Get-Content $logFile -Raw -ErrorAction SilentlyContinue
-            if ($logContent -match "(https://[a-zA-Z0-9-]+\.trycloudflare\.com)") {
-                $publicUrl = $matches[1]
-                break
+    $tunnel = Start-SecureFPSProcess 'tunnel' $cloudflared @('tunnel', '--url', 'http://127.0.0.1:8080')
+    $processes += $tunnel
+    $records += @{ Name = 'tunnel'; Id = $tunnel.Id; Started = $tunnel.StartTime.ToUniversalTime().Ticks.ToString() }
+    Save-ProcessState
+
+    foreach ($attempt in 1..24) {
+        if ($tunnel.HasExited) { break }
+        $logs = Get-Content -LiteralPath (Join-Path $logsDir 'tunnel.err.log') -Raw -ErrorAction SilentlyContinue
+        if ($logs -match 'https://[a-zA-Z0-9-]+\.trycloudflare\.com') {
+            $publicUrl = $Matches[0]
+            if (& $check -Quiet -PublicUrl $publicUrl) {
+                Write-Host "SecureFPS is ready at $publicUrl"
+                return
             }
         }
+        Start-Sleep -Seconds 1
     }
-    if ($publicUrl) { break }
+    throw "The public tunnel failed its health checks. Inspect $logsDir."
+} catch {
+    & (Join-Path $PSScriptRoot 'stop_all.ps1')
+    throw
+} finally {
+    foreach ($key in $previous.Keys) {
+        [Environment]::SetEnvironmentVariable($key, $previous[$key], 'Process')
+    }
 }
-
-Write-Host "`n===============================================================" -ForegroundColor Green
-if ($publicUrl) {
-    Write-Host "  PUBLIC HTTPS MULTIPLAYER URL ACQUIRED:" -ForegroundColor Green
-    Write-Host "  $publicUrl" -ForegroundColor Cyan
-} else {
-    Write-Host "  Tunnel launched in background. Check log for public URL:" -ForegroundColor Yellow
-    Write-Host "  Get-Content logs/tunnel.err.log | Select-String 'trycloudflare.com'" -ForegroundColor White
-}
-Write-Host "===============================================================" -ForegroundColor Green
-
-$displayUrl = if ($publicUrl) { $publicUrl } else { "http://localhost:8080" }
-$joinerUrl = if ($publicUrl) { $publicUrl } else { "http://localhost:8080 (or public URL)" }
-
-Write-Host @"
-
-  INSTRUCTIONS FOR HOST (Player 1):
-  1. Open the URL in your browser:
-     $displayUrl
-  2. Log in with your player account.
-  3. Go to Game Hub -> CyberStrike 3D -> MULTIPLAYER ARENA.
-  4. Click 'CREATE NEW LOBBY'.
-  5. Note the 6-character room code (e.g. RJAM5V).
-
-  INSTRUCTIONS FOR JOINER (Player 2 on different network/location):
-  1. Open the public HTTPS URL:
-     $joinerUrl
-  2. Log into their own account (MFA works automatically).
-  3. Go to MULTIPLAYER ARENA.
-  4. Enter the host's 6-character room code and click 'JOIN'.
-  5. Click 'SET READY'.
-
-  MATCH COMMENCEMENT:
-  - When both operators are READY, Host clicks 'START MATCH (HOST)'.
-  - Server arbitrates 30Hz physics, hit detection, 10 kills limit, and 8:00 timer.
-  - To stop all hosting services, run:
-    powershell scripts/stop_all.ps1
-
-===============================================================
-"@ -ForegroundColor White

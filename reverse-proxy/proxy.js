@@ -9,6 +9,29 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { isIP } = require('net');
+
+function requestPath(req) {
+  return req.url.split('?', 1)[0];
+}
+
+function forwardingHeaders(req, config, targetHost, targetPort) {
+  const remote = req.socket.remoteAddress;
+  const trustedTunnel = process.env.TRUST_CLOUDFLARE_TUNNEL === '1' &&
+    ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remote);
+  const edgeIp = req.headers['cf-connecting-ip'];
+  const clientIp = trustedTunnel && typeof edgeIp === 'string' && isIP(edgeIp) ? edgeIp : remote;
+  const forwardedProto = req.headers['x-forwarded-proto'] === 'https' || req.socket.encrypted ? 'https' : 'http';
+  const host = req.headers.host || `${targetHost}:${targetPort}`;
+  return {
+    ...req.headers,
+    'x-forwarded-for': clientIp,
+    'x-forwarded-proto': forwardedProto,
+    'x-forwarded-host': trustedTunnel ? host : req.headers['x-forwarded-host'] || host,
+    'x-forwarded-port': forwardedProto === 'https' ? '443' : String(config.proxyPort),
+    host
+  };
+}
 
 // Simple native .env loader without external dependencies
 function loadEnvFile(envPath) {
@@ -54,7 +77,8 @@ const server = http.createServer((req, res) => {
   const config = getTargetConfig();
 
   // Built-in Health Endpoint
-  if (req.url === '/proxy-health') {
+  const pathname = requestPath(req);
+  if (pathname === '/proxy-health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: 'healthy',
@@ -67,41 +91,23 @@ const server = http.createServer((req, res) => {
   }
 
   // Determine target backend service
-  const isSocketIo = req.url.startsWith('/socket.io/');
+  const isSocketIo = pathname === '/status' || pathname.startsWith('/socket.io/');
   const targetHost = isSocketIo ? config.socketHost : config.flaskHost;
   const targetPort = isSocketIo ? config.socketPort : config.flaskPort;
-
-  // Determine forwarding headers
-  const clientIp = req.headers['x-forwarded-for']
-    ? `${req.headers['x-forwarded-for']}, ${req.socket.remoteAddress}`
-    : req.socket.remoteAddress;
-
-  const forwardedProto = req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https' : 'http');
-  const forwardedHost = req.headers['x-forwarded-host'] || req.headers['host'];
-  const forwardedPort = req.headers['x-forwarded-port'] || (forwardedProto === 'https' ? '443' : String(config.proxyPort));
-
-  const proxyHeaders = {
-    ...req.headers,
-    'x-forwarded-for': clientIp,
-    'x-forwarded-proto': forwardedProto,
-    'x-forwarded-host': forwardedHost,
-    'x-forwarded-port': forwardedPort,
-    host: req.headers['host'] || `${targetHost}:${targetPort}`
-  };
 
   const proxyReq = http.request({
     hostname: targetHost,
     port: targetPort,
     path: req.url,
     method: req.method,
-    headers: proxyHeaders
+    headers: forwardingHeaders(req, config, targetHost, targetPort)
   }, (proxyRes) => {
     res.writeHead(proxyRes.statusCode, proxyRes.headers);
     proxyRes.pipe(res);
   });
 
   proxyReq.on('error', (err) => {
-    console.warn(`[Proxy Error] Unable to route ${req.method} ${req.url} -> ${targetHost}:${targetPort} (${err.code || err.message})`);
+    console.warn(`[Proxy Error] Unable to route ${req.method} ${pathname} -> ${targetHost}:${targetPort} (${err.code || err.message})`);
     if (!res.headersSent) {
       res.writeHead(502, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -118,34 +124,23 @@ const server = http.createServer((req, res) => {
 // Handle WebSocket Upgrades (for Socket.IO real-time gameplay synchronization)
 server.on('upgrade', (req, socket, head) => {
   const config = getTargetConfig();
-  const isSocketIo = req.url.startsWith('/socket.io/');
+  const isSocketIo = requestPath(req).startsWith('/socket.io/');
   const targetHost = isSocketIo ? config.socketHost : config.flaskHost;
   const targetPort = isSocketIo ? config.socketPort : config.flaskPort;
-
-  const clientIp = req.headers['x-forwarded-for']
-    ? `${req.headers['x-forwarded-for']}, ${req.socket.remoteAddress}`
-    : req.socket.remoteAddress;
-
-  const forwardedProto = req.headers['x-forwarded-proto'] || 'https';
-  const forwardedHost = req.headers['x-forwarded-host'] || req.headers['host'];
-
-  const proxyHeaders = {
-    ...req.headers,
-    'x-forwarded-for': clientIp,
-    'x-forwarded-proto': forwardedProto,
-    'x-forwarded-host': forwardedHost,
-    host: req.headers['host'] || `${targetHost}:${targetPort}`
-  };
 
   const proxyReq = http.request({
     hostname: targetHost,
     port: targetPort,
     path: req.url,
     method: req.method,
-    headers: proxyHeaders
+    headers: forwardingHeaders(req, config, targetHost, targetPort)
   });
 
   proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+    socket.on('close', () => proxySocket.destroy());
+    proxySocket.on('close', () => socket.destroy());
+    socket.on('end', () => socket.destroy());
+    proxySocket.on('end', () => proxySocket.destroy());
     proxySocket.on('error', () => {
       socket.destroy();
     });
@@ -171,8 +166,13 @@ server.on('upgrade', (req, socket, head) => {
     socket.pipe(proxySocket);
   });
 
+  proxyReq.on('response', (response) => {
+    response.resume();
+    socket.end(`HTTP/1.1 ${response.statusCode} ${response.statusMessage}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+  });
+
   proxyReq.on('error', (err) => {
-    console.warn(`[Proxy Upgrade Error] WebSocket upgrade failed for ${req.url}:`, err.message);
+    console.warn(`[Proxy Upgrade Error] WebSocket upgrade failed for ${requestPath(req)}:`, err.message);
     socket.destroy();
   });
 
@@ -184,7 +184,7 @@ if (require.main === module) {
   server.listen(initialConfig.proxyPort, initialConfig.proxyHost, () => {
     console.log('===============================================================');
     console.log(`[SecureFPS Reverse Proxy] Listening on http://${initialConfig.proxyHost}:${initialConfig.proxyPort}`);
-    console.log(`  -> Forwarding /socket.io/* (HTTP/WSS) to http://${initialConfig.socketHost}:${initialConfig.socketPort}`);
+    console.log(`  -> Forwarding /status and /socket.io/* (HTTP/WSS) to http://${initialConfig.socketHost}:${initialConfig.socketPort}`);
     console.log(`  -> Forwarding all other requests      to http://${initialConfig.flaskHost}:${initialConfig.flaskPort}`);
     console.log('===============================================================');
   });

@@ -15,6 +15,7 @@ const assert = require('node:assert');
 const http = require('http');
 const ioClient = require('socket.io-client');
 const jwt = require('jsonwebtoken');
+const crypto = require('node:crypto');
 
 process.env.RESPAWN_DELAY_MS = '200';
 const { app, server, io, rooms, getTacticalSpawn, tickTimer } = require('../server');
@@ -70,7 +71,7 @@ describe('Authoritative Multiplayer Server Netcode', () => {
     const guest = await connectClient('limits-guest', 'LimitsGuest');
     const created = await new Promise(resolve => {
       host.once('lobby:created', resolve);
-      host.emit('lobby:create', { name: 'LimitsHost' });
+      host.emit('lobby:create', { name: 'LimitsHost', operator: 'valkyrie' });
     });
     const roomCode = created.roomCode;
 
@@ -86,12 +87,20 @@ describe('Authoritative Multiplayer Server Netcode', () => {
     const firstStart = await started;
     assert.equal(firstStart.matchDuration, 480);
     assert.equal(firstStart.scoreLimit, 10);
+    assert.equal(firstStart.players.find(player => player.id === host.id).isFemale, true);
+    assert.equal(firstStart.players.find(player => player.id === guest.id).isFemale, false);
 
     const room = rooms.get(roomCode);
     room.players.get(host.id).kills = 10;
     const scoreResultPromise = new Promise(resolve => host.once('match:ended', resolve));
     const scoreResult = await scoreResultPromise;
     assert.equal(scoreResult.reason, 'score_limit_reached');
+    const receiptKey = crypto.createHmac('sha256', TEST_SECRET).update('securefps:match-result:v1').digest();
+    const receipt = jwt.verify(scoreResult.completionToken, receiptKey, {
+      algorithms: ['HS256'], audience: 'securefps-match-result', subject: 'limits-host',
+    });
+    assert.equal(receipt.kills, 10);
+    assert.equal(receipt.result, 'win');
 
     host.emit('lobby:ready', { isReady: true });
     guest.emit('lobby:ready', { isReady: true });

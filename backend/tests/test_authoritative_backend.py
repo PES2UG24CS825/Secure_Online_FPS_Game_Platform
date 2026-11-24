@@ -9,10 +9,12 @@ Tests:
 """
 
 import os
+import hmac
 import sys
 import uuid
 from pathlib import Path
 import pytest
+import jwt
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 
@@ -22,7 +24,7 @@ if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
 from app import app, network_server_settings
-from database.db import users, game_sessions, reward_transactions, mfa_lockouts, sessions_db
+from database.db import db, users, game_sessions, reward_transactions, mfa_lockouts, sessions_db
 from extensions import limiter
 
 
@@ -132,7 +134,52 @@ def test_reward_integrity_rejects_sub_30s_match(client):
     assert sess_record.get("kills", 0) == 0, "Server must discard client-supplied kill count"
 
 
-def test_reward_integrity_enforces_daily_cap(client):
+def test_multiplayer_receipt_credits_once_and_preserves_signed_statistics(client, monkeypatch):
+    secret = uuid.uuid4().hex + uuid.uuid4().hex
+    monkeypatch.setenv("GAME_SERVER_SECRET", secret)
+    user_id = ObjectId()
+    record_id = _create_authenticated_session(user_id)
+    with client.session_transaction() as sess:
+        sess["user_id"] = str(user_id)
+        sess["auth_session_record_id"] = record_id
+    now = datetime.now(timezone.utc)
+    started = now - timedelta(seconds=45)
+    match_id = str(uuid.uuid4())
+    session_id, other_session_id = str(uuid.uuid4()), str(uuid.uuid4())
+    game_sessions.insert_many([
+        {"session_id": sid, "user_id": user_id, "mode": "multiplayer", "status": "active", "started_at": started}
+        for sid in (session_id, other_session_id)
+    ])
+    try:
+        key = hmac.digest(secret.encode(), b"securefps:match-result:v1", "sha256")
+        receipt = jwt.encode({
+            "sub": str(user_id), "aud": "securefps-match-result", "iat": now,
+            "exp": now + timedelta(minutes=10), "match_id": match_id,
+            "started_at": int(started.timestamp() * 1000), "duration": 45,
+            "kills": 10, "deaths": 4, "assists": 2, "headshots": 3,
+            "shots_fired": 20, "shots_hit": 10, "result": "win",
+        }, key, algorithm="HS256")
+        request = {"session_id": session_id, "completed": True}
+        assert client.post("/api/game/end", json=request).status_code == 409
+        request.update(completion_token=receipt, kills=999)
+        assert client.post("/api/game/end", json=request).status_code == 200
+        assert client.post("/api/game/end", json=request).status_code == 200
+        assert client.post("/api/game/end", json={**request, "session_id": other_session_id}).status_code == 409
+        result = game_sessions.find_one({"session_id": session_id})
+        assert (result["kills"], result["accuracy"], result["stats_source"]) == (10, 0.5, "multiplayer_server")
+        assert reward_transactions.count_documents({"session_id": session_id}) == 1
+        assert users.find_one({"_id": user_id})["rewards"]["xp"] == 50
+    finally:
+        db["multiplayer_match_receipts"].delete_one({"_id": f"{match_id}:{user_id}"})
+        db["game_events"].delete_many({"session_id": session_id})
+        db["honour_history"].delete_many({"session_id": session_id})
+        reward_transactions.delete_many({"user_id": user_id})
+        game_sessions.delete_many({"user_id": user_id})
+        sessions_db.delete_many({"user_id": user_id})
+        users.delete_one({"_id": user_id})
+
+
+def test_unsigned_matches_do_not_issue_match_coins(client):
     test_user_id = ObjectId()
     session_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)

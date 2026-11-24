@@ -375,10 +375,11 @@ function handleUnban(id, name) {
   });
 }
 
-export async function openPlayerMatchesModal(id, name, email) {
+export async function openPlayerMatchesModal(id, name, email, view = 'player') {
   window.openPlayerMatchesModal = openPlayerMatchesModal;
   const modal = document.getElementById('playerMatchesModal');
   if (!modal) return;
+  modal.dataset.view = view === 'violations' ? 'violations' : 'player';
 
   activePlayerModalId = id;
 

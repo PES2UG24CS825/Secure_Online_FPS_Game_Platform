@@ -13,6 +13,7 @@ from pymongo.errors import DuplicateKeyError
 
 from database.db import login_history, sessions_db, users, mfa_lockouts
 from extensions import limiter
+from services.player_notifications import notify_player
 from services.auth import PASSWORD_RULES_MESSAGE, hash_password, validate_password, verify_password
 from services.csrf import verify_csrf_and_origin
 from services.auth_security import (
@@ -512,7 +513,6 @@ def verify_mfa():
         return jsonify({"message": blocked_message}), 403
 
     client_ip = request.remote_addr or "Unknown"
-    is_local = client_ip in {"127.0.0.1", "::1", "localhost", "Unknown"} or not is_production()
     now = utcnow()
 
     mfa_secret = user.get("mfa_secret")
@@ -523,13 +523,7 @@ def verify_mfa():
         mfa_lockouts.delete_many({"user_id": user["_id"]})
         return complete_login_session(user)
 
-    # In local development or testing, do not lockout developers or testers
-    if is_local or not is_production():
-        return jsonify({
-            "message": "Invalid authenticator code. Check your device clock or use a recovery code."
-        }), 401
-
-    # 2. If code is invalid on production remote IP, check and enforce temporary lockout
+    # Check for an active lock before counting another failed attempt.
     lockout = mfa_lockouts.find_one({"user_id": user["_id"], "ip": client_ip})
     if lockout and lockout.get("locked_until"):
         locked_until = lockout["locked_until"]
@@ -540,6 +534,7 @@ def verify_mfa():
             return jsonify({
                 "message": f"Account temporarily locked due to repeated failed MFA attempts. Please try again in {mins} minutes."
             }), 429
+        lockout = None
 
     attempts = (lockout.get("attempts", 0) if lockout else 0) + 1
     update_doc = {"attempts": attempts, "updated_at": now}
@@ -548,7 +543,7 @@ def verify_mfa():
 
     mfa_lockouts.update_one(
         {"user_id": user["_id"], "ip": client_ip},
-        {"$set": update_doc},
+        {"$set": update_doc, **({"$unset": {"locked_until": ""}} if attempts < 5 else {})},
         upsert=True
     )
 
@@ -565,6 +560,7 @@ def verify_mfa():
     })
 
     if attempts >= 5:
+        notify_player(user["_id"], "suspicious_login", int(now.timestamp()) // 900)
         return jsonify({"message": "Too many failed MFA attempts. Account locked for 15 minutes."}), 429
     rem = 5 - attempts
     return jsonify({"message": f"Invalid MFA code. {rem} attempt{'s' if rem != 1 else ''} remaining before temporary lockout."}), 401
@@ -739,6 +735,7 @@ def me():
         "user": {
             "id": str(user["_id"]),
             "name": user.get("name"),
+            "username": user.get("username", ""),
             "email": user.get("email"),
             "role": user.get("role", "player"),
             "honour_score": user.get("honour_score", 100),
@@ -802,6 +799,7 @@ def change_password():
     sessions_db.update_many(
         other_sessions, {"$set": {"is_active": False, "revoked_at": utcnow()}}
     )
+    notify_player(user["_id"], "password_changed", datetime.now(timezone.utc).isoformat())
     return jsonify({"message": "Password changed."})
 
 
@@ -817,6 +815,7 @@ def rotate_recovery_codes():
     codes = generate_backup_recovery_codes(user["_id"], password_hash=user["password_hash"])
     if codes is None:
         return jsonify({"message": "Your password changed. Please try again."}), 409
+    notify_player(user["_id"], "recovery_codes_rotated", datetime.now(timezone.utc).isoformat())
     response = jsonify({"recovery_codes": codes})
     response.headers["Cache-Control"] = "no-store"
     return response

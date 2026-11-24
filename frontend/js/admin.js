@@ -10,7 +10,7 @@ import { initSecuritySection, loadBanAppeals, loadAntiCheatDecisions, loadAuditL
 import { initSupportSection, loadSupportTickets } from './admin/admin_support.js';
 import {
   initSuperAdminModules, loadSuperAdmins, loadRolesPermissions, loadMlModelsCatalog,
-  loadRiskConfig, loadSecurityCommand, loadSystemControlMetrics, loadSystemBackups,
+  loadRiskConfig, loadSecurityCommand, loadSystemControlMetrics,
   loadPlatformConfig, loadThreatMonitoring, loadReportsAnalytics, loadApprovalsQueue
 } from './admin/admin_super.js';
 
@@ -29,6 +29,9 @@ async function initAdminApp() {
   initSecuritySection();
   initSupportSection();
   initSuperAdminModules();
+  const savedSection = sessionStorage.getItem('securefps_admin_section');
+  const savedTab = [...document.querySelectorAll('.admin-nav-btn')].find(tab => tab.dataset.adminSection === savedSection);
+  if (savedTab && !savedTab.closest('[hidden]')) savedTab.click();
 
   // Connect Primary Real-Time SSE Stream with Fallback Polling
   connectAdminLiveEvents();
@@ -57,6 +60,7 @@ function setupNavigation() {
       });
 
       activeSection = target;
+      sessionStorage.setItem('securefps_admin_section', target);
       updatePageTitle(target);
       refreshCurrentSection();
     });
@@ -86,15 +90,15 @@ function updatePageTitle(section) {
       if (sub) sub.textContent = 'Review player ban appeals, audit enforcement logs, and logins.';
       break;
     case 'threats':
-      title.textContent = 'Threat Monitoring';
-      if (sub) sub.textContent = 'Active threats, suspicious logins, and repeated player violations.';
+      title.textContent = 'Violations';
+      if (sub) sub.textContent = 'Recorded repeat security violations and anti-cheat infractions.';
       break;
     case 'analytics':
       title.textContent = 'Reports & Platform Analytics';
       if (sub) sub.textContent = 'Sanction trends, detection accuracy, and false-positive statistics.';
       break;
     case 'gameplay':
-      title.textContent = 'Game & ML Anti-Cheat';
+      title.textContent = 'Match Monitoring';
       if (sub) sub.textContent = 'Model inference performance, top telemetry features, and match logs.';
       break;
     case 'support':
@@ -102,35 +106,31 @@ function updatePageTitle(section) {
       if (sub) sub.textContent = 'Answer player tickets, view attachments, and use reply macros.';
       break;
     case 'super_admins':
-      title.textContent = '👑 Administrator Management';
+      title.textContent = 'Administrator Management';
       if (sub) sub.textContent = 'Provision Normal Admins, edit profiles, revoke sessions, and manage credentials.';
       break;
     case 'super_roles':
-      title.textContent = '👑 Role & Permission Management';
+      title.textContent = 'Role & Permission Management';
       if (sub) sub.textContent = 'Centralized permission matrix and route-level authorization control.';
       break;
     case 'super_ml':
-      title.textContent = '👑 AI & ML Detection Management';
+      title.textContent = 'AI & ML Detection Management';
       if (sub) sub.textContent = 'Model accuracy, precision, recall, threshold tuning, and instant rollback.';
       break;
     case 'super_risk':
-      title.textContent = '👑 Risk Engine Configuration';
+      title.textContent = 'Risk Engine Configuration';
       if (sub) sub.textContent = 'Category boundaries, automated enforcement rules, and Interactive Simulator.';
       break;
     case 'super_command':
-      title.textContent = '👑 Global Security Command';
+      title.textContent = 'Global Security Command';
       if (sub) sub.textContent = 'Real-time platform threat overview and Emergency Lockdown controls.';
       break;
     case 'super_control':
-      title.textContent = '👑 System Control Center';
+      title.textContent = 'System Control Center';
       if (sub) sub.textContent = 'Runtime metrics, database cluster health, API throughput, and latency.';
       break;
-    case 'super_backups':
-      title.textContent = '👑 Backup & Disaster Recovery';
-      if (sub) sub.textContent = 'Verified recovery points, rolling retention, and on-demand snapshots.';
-      break;
     case 'super_config':
-      title.textContent = '👑 Platform Configuration';
+      title.textContent = 'Platform Configuration';
       if (sub) sub.textContent = 'Authentication limits, session timeouts, and platform maintenance mode.';
       break;
   }
@@ -195,7 +195,7 @@ async function refreshCurrentSection(force = false) {
       await loadReportsAnalytics();
       break;
     case 'gameplay':
-      await loadAntiCheatDecisions();
+      await Promise.all([loadAdminOverview(force), loadAntiCheatDecisions()]);
       break;
     case 'support':
       await loadSupportTickets();
@@ -220,9 +220,6 @@ async function refreshCurrentSection(force = false) {
       break;
     case 'super_control':
       await loadSystemControlMetrics();
-      break;
-    case 'super_backups':
-      await loadSystemBackups();
       break;
     case 'super_config':
       await loadPlatformConfig();

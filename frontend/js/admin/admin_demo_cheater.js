@@ -19,6 +19,7 @@ export async function loadCheaterDemoState() {
     if (!resp.ok) return;
 
     const data = await resp.json();
+    container.hidden = !(data.account?.exists || data.active_session || data.alerts?.length);
     renderCheaterDemoData(data);
   } catch (err) {
     console.warn('[AdminDemo] Error loading demo state:', err);
@@ -59,14 +60,20 @@ export function renderCheaterDemoData(data) {
 
   if (analysis) {
     if (riskVal) {
-      const score = Math.round(analysis.risk_score || 0);
-      riskVal.textContent = score;
+      const score = Number.isFinite(analysis.risk_score) ? Math.round(analysis.risk_score) : null;
+      riskVal.textContent = score ?? 'Unavailable';
       riskVal.style.color = score >= 75 ? '#ef4444' : score >= 50 ? '#f59e0b' : '#10b981';
     }
     if (riskCat) {
       riskCat.textContent = analysis.alert_severity
         ? `Severity: ${analysis.alert_severity.toUpperCase()} • Session: ${analysis.session_id || '—'}`
-        : `Risk Classification: Active Telemetry`;
+        : 'Severity unavailable';
+      const reasons = [];
+      if (Number.isFinite(analysis.model_risk_score)) reasons.push(`Raw model score ${analysis.model_risk_score.toFixed(1)}/100`);
+      if (analysis.risk_calibration) reasons.push(`Calibration: ${analysis.risk_calibration.replaceAll('_', ' ')}`);
+      if (analysis.risk_explanation) reasons.push(analysis.risk_explanation);
+      if (analysis.created_at) reasons.push(new Date(analysis.created_at).toLocaleString());
+      riskCat.textContent += reasons.length ? ` · ${reasons.join(' · ')}` : '';
     }
     if (rfDec) {
       rfDec.textContent = (analysis.random_forest || 'monitoring').toUpperCase();

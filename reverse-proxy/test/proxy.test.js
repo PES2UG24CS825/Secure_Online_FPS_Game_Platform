@@ -11,6 +11,7 @@ describe('SecureFPS Reverse Proxy Verification', () => {
   let proxyPort;
   let flaskPort;
   let socketPort;
+  const upgradedSockets = new Set();
 
   before(async () => {
     // 1. Start mock Flask backend
@@ -38,6 +39,8 @@ describe('SecureFPS Reverse Proxy Verification', () => {
 
     // Mock WebSocket upgrade handler
     mockSocketServer.on('upgrade', (req, socket, head) => {
+      upgradedSockets.add(socket);
+      socket.on('close', () => upgradedSockets.delete(socket));
       socket.write(
         'HTTP/1.1 101 Switching Protocols\r\n' +
         'Upgrade: websocket\r\n' +
@@ -60,6 +63,7 @@ describe('SecureFPS Reverse Proxy Verification', () => {
   });
 
   after(async () => {
+    for (const socket of upgradedSockets) socket.destroy();
     await new Promise(r => server.close(r));
     await new Promise(r => mockFlaskServer.close(r));
     await new Promise(r => mockSocketServer.close(r));
@@ -99,6 +103,13 @@ describe('SecureFPS Reverse Proxy Verification', () => {
     assert.equal(res.headers.get('x-received-proto'), 'https');
     const body = await res.json();
     assert.equal(body.backend, 'socket_io');
+  });
+
+  it('routes multiplayer status without changing Flask API health routing', async () => {
+    const status = await fetch(`http://127.0.0.1:${proxyPort}/status?probe=1`);
+    const health = await fetch(`http://127.0.0.1:${proxyPort}/api/health`);
+    assert.deepEqual(await status.json(), { backend: 'socket_io', path: '/status?probe=1' });
+    assert.deepEqual(await health.json(), { backend: 'flask', path: '/api/health' });
   });
 
   it('routes WebSocket upgrade handshakes on /socket.io/ to the Socket.IO backend with 101 Switching Protocols', async () => {

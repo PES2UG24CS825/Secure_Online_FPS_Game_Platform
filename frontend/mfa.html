@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <script>if (window.location.port !== "5000" && window.location.port !== "") { window.location.replace("http://127.0.0.1:5000/login.html"); }</script>
+  <script>if (["3000", "5500"].includes(window.location.port)) { window.location.replace("http://127.0.0.1:5000/login.html"); }</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>SecureFPS | MFA Verification</title>
@@ -13,7 +13,7 @@
   <main class="auth-shell single">
     <section class="auth-card mfa-card">
       <div class="auth-logo-lockup">
-        <img class="brand-lockup" src="public/securefps-logo-crop.png?v=1" alt="SecureFPS Gaming Security">
+        <img class="brand-lockup securefps-auth-mark" src="public/securefps-mark.svg?v=2" alt="SecureFPS">
       </div>
       <p class="eyebrow">SECOND FACTOR</p>
       <h2>Verify your identity</h2>

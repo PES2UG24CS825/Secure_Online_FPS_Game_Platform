@@ -49,7 +49,13 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip()
 ADMIN_MFA_SECRET = os.getenv("ADMIN_MFA_SECRET", "").strip()
 
 if not IS_LOCAL_DEV:
-    if not FLASK_SECRET_KEY or FLASK_SECRET_KEY in {"dev-only-change-this-secret", "secret", "change-me"}:
+    game_server_secret = os.getenv("GAME_SERVER_SECRET", "")
+    if len(game_server_secret.strip()) < 32 or game_server_secret.strip() in {
+        "securefps-multiplayer-secret-key-2026",
+        "generate-a-strong-random-shared-game-server-secret",
+    }:
+        raise RuntimeError("Startup refused: configure a unique GAME_SERVER_SECRET of at least 32 characters.")
+    if len(FLASK_SECRET_KEY) < 32 or FLASK_SECRET_KEY == "generate-a-strong-random-secret-key-min-32-chars":
         raise RuntimeError(
             "Startup refused: FLASK_SECRET_KEY is missing or using an insecure default. "
             "Set FLASK_SECRET_KEY in environment or enable SECUREFPS_LOCAL_DEV=true for local dev."

@@ -100,7 +100,7 @@ class TelemetryClient {
       // Immediately stop streaming further kinematic/aim samples
       this.isSessionActive = false;
       // Send final match completion event with verified combat metrics
-      await this.sendEvent('game_completed', {
+      if (!e.detail?.completionToken) await this.sendEvent('game_completed', {
         kills: e.detail?.kills || 0,
         deaths: e.detail?.deaths || 0,
         shots: e.detail?.shots || 0,
@@ -417,30 +417,41 @@ class TelemetryClient {
 
     this.sessionId = null;
     this.gameToken = null;
-    try {
+    const body = JSON.stringify({
+      session_id: sessId,
+      completed,
+      completion_token: details.completionToken,
+      reason: completed ? 'match_completed' : 'player_exit',
+      kills: details.kills || 0,
+      deaths: details.deaths || 0,
+      shots: details.shots || 0,
+      hits: details.hits || 0,
+      headshots: details.headshots || 0,
+      winner: details.winner,
+    });
+    const submit = async () => {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-      const response = await fetch(`${this.apiBase}/game/end`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessId,
-          completed: completed,
-          reason: completed ? 'match_completed' : 'player_exit',
-          kills: details.kills || 0,
-          deaths: details.deaths || 0,
-          shots: details.shots || 0,
-          hits: details.hits || 0,
-          accuracy: details.accuracy || 0,
-          headshots: details.headshots || 0,
-          kdr: details.kdr || 0
-        }),
-        signal: controller.signal
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      try {
+        return await fetch(`${this.apiBase}/game/end`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    };
+    try {
+      let response = await submit().catch(error => {
+        if (!details.completionToken) throw error;
+        return null;
       });
-      clearTimeout(timeoutId);
-      if (response.ok) {
+      if (!response || (details.completionToken && response.status >= 500)) response = await submit();
+      if (!response.ok) throw new Error(`Match submission returned HTTP ${response.status}`);
+      if (sessionStorage.getItem(this.sessionStorageKey) === sessId) {
         sessionStorage.removeItem(this.sessionStorageKey);
         sessionStorage.removeItem(`${this.sessionStorageKey}:sequence`);
       }

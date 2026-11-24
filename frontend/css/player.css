@@ -35,22 +35,8 @@
     body.player-page {
       min-height: 100vh;
       overflow-x: hidden;
-      --player-scene-image: url("../public/backgrounds/cosmic-cherry-blossom.jpg");
-      background:
-        linear-gradient(rgba(247, 247, 252, 0.78), rgba(247, 247, 252, 0.88)),
-        var(--player-scene-image) center center / cover fixed,
-        #F7F7FC;
+      background-color: #F3EFFA;
     }
-    body.player-page[data-player-banner="default-banner"] { --player-scene-image:url("../public/backgrounds/default-banner.jpg"); }
-    body.player-page[data-player-banner="sakura"] { --player-scene-image:url("../public/backgrounds/cosmic-cherry-blossom.jpg"); }
-    body.player-page[data-player-banner="frontline"] { --player-scene-image:url("../public/backgrounds/sakura-frontline.jpg"); }
-    body.player-page[data-player-banner="dawn"] { --player-scene-image:url("../public/backgrounds/sakura-dawn.jpg"); }
-    body.player-page[data-player-banner="neon"] { --player-scene-image:url("../public/backgrounds/sakura-neon.jpg"); }
-    body.player-page[data-player-banner="battlefield"] { --player-scene-image:url("../public/backgrounds/battlefield.jpg"); }
-    body.player-page[data-player-banner="command-center"] { --player-scene-image:url("../public/backgrounds/command-center.jpg"); }
-    body.player-page[data-player-banner="cyber-metropolis"] { --player-scene-image:url("../public/backgrounds/cyber-metropolis.jpg"); }
-    body.player-page[data-player-banner="orbital-bastion"] { --player-scene-image:url("../public/backgrounds/orbital-bastion.jpg"); }
-    body.player-page[data-player-banner="nebula-eternity"] { --player-scene-image:url("../public/backgrounds/nebula-eternity.jpg"); }
 
     /* ---------- Sidebar ---------- */
 
@@ -803,18 +789,18 @@
       border-radius: 16px;
       background-size: cover;
       background-position: center;
-      box-shadow: inset 0 -30px 40px -15px rgba(237, 233, 254, 0.95);
+      box-shadow: none;
     }
-    .profile-banner[data-banner="default-banner"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/default-banner.jpg"); background-position:center 50%; }
-    .profile-banner[data-banner="sakura"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/cosmic-cherry-blossom.jpg"); background-position:center 48%; }
-    .profile-banner[data-banner="frontline"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/sakura-frontline.jpg"); background-position:center 52%; }
-    .profile-banner[data-banner="dawn"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/sakura-dawn.jpg"); background-position:center 55%; }
-    .profile-banner[data-banner="neon"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/sakura-neon.jpg"); background-position:center 50%; }
-    .profile-banner[data-banner="command-center"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/command-center.jpg"); background-position:center 50%; }
-    .profile-banner[data-banner="battlefield"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/battlefield.jpg"); background-position:center 50%; }
-    .profile-banner[data-banner="cyber-metropolis"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/cyber-metropolis.jpg"); background-position:center 50%; }
-    .profile-banner[data-banner="orbital-bastion"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/orbital-bastion.jpg"); background-position:center 50%; }
-    .profile-banner[data-banner="nebula-eternity"] { background-image:linear-gradient(180deg,rgba(245,243,255,0.1),rgba(237,233,254,0.85)),url("../public/backgrounds/nebula-eternity.jpg"); background-position:center 50%; }
+    .profile-banner[data-banner="default-banner"] { background-image:url("../public/backgrounds/default-banner.jpg"); background-position:center 50%; }
+    .profile-banner[data-banner="sakura"] { background-image:url("../public/backgrounds/cosmic-cherry-blossom.jpg"); background-position:center 48%; }
+    .profile-banner[data-banner="frontline"] { background-image:url("../public/backgrounds/sakura-frontline.jpg"); background-position:center 52%; }
+    .profile-banner[data-banner="dawn"] { background-image:url("../public/backgrounds/sakura-dawn.jpg"); background-position:center 55%; }
+    .profile-banner[data-banner="neon"] { background-image:url("../public/backgrounds/sakura-neon.jpg"); background-position:center 50%; }
+    .profile-banner[data-banner="command-center"] { background-image:url("../public/backgrounds/command-center.jpg"); background-position:center 50%; }
+    .profile-banner[data-banner="battlefield"] { background-image:url("../public/backgrounds/battlefield.jpg"); background-position:center 50%; }
+    .profile-banner[data-banner="cyber-metropolis"] { background-image:url("../public/backgrounds/cyber-metropolis.jpg"); background-position:center 50%; }
+    .profile-banner[data-banner="orbital-bastion"] { background-image:url("../public/backgrounds/orbital-bastion.jpg"); background-position:center 50%; }
+    .profile-banner[data-banner="nebula-eternity"] { background-image:url("../public/backgrounds/nebula-eternity.jpg"); background-position:center 50%; }
     .profile-banner-mascot { position:absolute; right:22px; bottom:-14px; width:116px; height:128px; object-fit:contain; object-position:center bottom; filter:drop-shadow(0 5px 8px rgba(109,40,217,0.25)); }
     .profile-avatar { position:relative; margin-top:-38px; border:4px solid #FFFFFF; border-radius:18px; box-shadow:0 4px 16px rgba(109,40,217,0.18); overflow:hidden; }
     .appearance-group { margin-top:18px; }
@@ -834,8 +820,11 @@
     .banner-option[data-banner="orbital-bastion"] { --banner-swatch:linear-gradient(105deg,rgba(39,23,74,.22),rgba(75,35,89,.04)),url("../public/backgrounds/orbital-bastion.jpg"); background-position:center; background-size:cover; }
     .banner-option[data-banner="nebula-eternity"] { --banner-swatch:linear-gradient(105deg,rgba(39,23,74,.3),rgba(75,35,89,.08)),url("../public/backgrounds/nebula-eternity.jpg"); background-position:center; background-size:cover; }
     .avatar-option { min-width:58px; min-height:48px; font-size:16px; font-weight:800; }
-    .avatar-portrait-option { width:76px; height:76px; padding:3px; overflow:hidden; background:#FAF5FF; border-radius:12px; }
-    .avatar-portrait-option img { display:block; width:100%; height:100%; object-fit:cover; object-position:center 38%; border-radius:8px; }
+    .avatar-portrait-option { display:grid; grid-template-rows:4rem auto; gap:.35rem; width:6.75rem; min-height:6.7rem; padding:.4rem; background:#FAF5FF; border-radius:12px; font-size:.75rem; text-align:center; }
+    .avatar-portrait-option img { display:block; width:100%; height:4rem; object-fit:contain; object-position:center; }
+    .avatar-portrait-option[aria-pressed="true"] { outline:2px solid #7C3AED; outline-offset:2px; }
+    .player-page [data-profile-avatar].has-profile-image { background-size:contain; background-repeat:no-repeat; background-position:center; }
+    .account-profile-avatar { width:3rem; height:3rem; flex:none; }
     .appearance-actions { display:flex; align-items:center; gap:12px; margin-top:18px; }
     .appearance-status { color:#6B7280; font-size:11px; }
     .appearance-upload { display:inline-flex; align-items:center; justify-content:center; min-height:40px; margin-top:8px; padding:0 14px; border:1.5px dashed #A78BFA; border-radius:10px; color:#5B21B6; background:#FAF5FF; font-size:12px; font-weight:700; cursor:pointer; transition:border-color .18s ease,background .18s ease,box-shadow .18s ease; }
@@ -1304,6 +1293,8 @@
     .leaderboard-row:hover { border-color:#A78BFA; box-shadow:0 2px 10px rgba(109,40,217,0.08); }
     .leaderboard-row.current { border-color:#A78BFA; background:#FAF5FF; box-shadow:0 0 0 1px #A78BFA, 0 3px 10px rgba(139,92,246,0.15); }
     .leaderboard-rank { color:#7C3AED; font-size:15px; font-weight:900; text-align:center; }
+    .leaderboard-player { display:flex; align-items:center; gap:.55rem; min-width:0; overflow-wrap:anywhere; }
+    .leaderboard-avatar { flex:none; border-radius:8px; background:#EDE9FE; object-fit:contain; }
     .leaderboard-player strong { display:block; color: #1E1B4B; font-size:14px; font-weight:700; }
     .leaderboard-player small { display:block; margin-top:3px; color:#4B5563; font-size:11px; font-weight:500; }
     .leaderboard-metric { text-align:right; }
@@ -1982,11 +1973,13 @@
       width: 72px;
     }
 
-    body.sidebar-collapsed .brand-lockup,
-    body.sidebar-collapsed .nav-label,
-    body.sidebar-collapsed .mini-profile div,
-    body.sidebar-collapsed #logoutBtn {
-      display: none;
+    @media (min-width: 901px) {
+      body.sidebar-collapsed .brand-lockup,
+      body.sidebar-collapsed .nav-label,
+      body.sidebar-collapsed .mini-profile > div:not(.avatar),
+      body.sidebar-collapsed #logoutBtn {
+        display: none;
+      }
     }
 
     body.sidebar-collapsed .player-page .sidebar nav a {
@@ -2609,4 +2602,62 @@
     max-height: none; overflow: visible; padding: 1rem;
   }
   #rewards .reward-summary { grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); }
+}
+/* Profile and account tools use the existing Sakura console tokens. */
+.player-page .profile-layout { display:grid; gap:.9rem; }
+.player-page .profile-layout .profile-card { padding:clamp(.75rem, 1.5vw, 1.1rem); }
+.profile-layout .profile-banner { width:100%; height:clamp(8rem, 23vw, 17rem); }
+.profile-layout .profile-identity { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:start; gap:clamp(.6rem, 2vw, 1.25rem); padding:0 .35rem; margin:.55rem 0 0; }
+.profile-layout .profile-avatar { width:clamp(4.25rem, 9vw, 6.25rem); height:clamp(4.25rem, 9vw, 6.25rem); margin-top:-2.2rem; background-color:var(--ui-soft); }
+.profile-identity-details { min-width:0; overflow-wrap:anywhere; }
+.profile-layout .profile-identity h3 { font-size:clamp(1.3rem, 3vw, 2rem); margin:0 0 .2rem; }
+.profile-layout .profile-identity p { margin:.15rem 0; }
+#profileUsername { font-weight:750; color:var(--ui-action); }
+#profileContent { font-size:.83rem; }
+.profile-progression { max-width:23rem; margin-top:.55rem; }
+.profile-xp { display:flex; justify-content:space-between; gap:.4rem; flex-wrap:wrap; }
+#profileXpProgress { width:100%; height:.6rem; accent-color:var(--ui-action); }
+#profileXpRemaining { color:var(--ui-muted); }
+.overview-heading { margin:0 0 .65rem; }
+.overview-heading .play-btn { padding-inline:.75rem; }
+.player-page .notification-history-grid { display:grid; gap:.9rem; align-items:start; grid-template-columns:minmax(0,2fr) minmax(0,1fr); }
+.player-page :is(.notification-history-grid,.security-actions-container) .profile-card { padding:clamp(.8rem, 1.5vw, 1.15rem); }
+.notification-history-grid h3 { margin:0 0 .6rem; }
+.profile-appearance .appearance-group { margin:.8rem 0 0; }
+.profile-appearance .appearance-group h4 { margin:0 0 .5rem; }
+.profile-appearance .appearance-options { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.5rem; }
+.profile-appearance .banner-option { width:100%; min-width:0; height:clamp(2.5rem, 5vw, 3.8rem); }
+.profile-appearance .avatar-portrait-option {
+  width:100%; min-width:0; min-height:0; grid-template-rows:clamp(2.4rem, 6vw, 4rem) auto; gap:.25rem; padding:.35rem;
+}
+.profile-appearance .avatar-portrait-option img { height:100%; min-height:0; }
+.profile-appearance .avatar-portrait-option[data-avatar^="chibi-"] { order:-1; }
+.profile-appearance .avatar-portrait-option span { overflow-wrap:anywhere; }
+.profile-appearance .appearance-actions { margin-top:.9rem; }
+
+.player-page #securityStatus { display:grid; grid-template-columns:minmax(0,1fr); gap:.65rem; margin-bottom:.8rem; }
+.account-security-facts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.65rem; }
+.player-page .account-security-facts .security-card { min-height:0; padding:.65rem .75rem; background:var(--ui-surface); overflow-wrap:anywhere; }
+.player-page #playerLoginHistory { margin:0; padding:.65rem .8rem; }
+#playerLoginHistory summary { cursor:pointer; font-weight:700; padding:.3rem 0; }
+#playerLoginHistory .overview-table-wrap { max-height:19rem; overflow:auto; }
+.player-page .security-actions-container { gap:.75rem; }
+.player-page .security-actions-container h3 { margin:.2rem 0; }
+
+#notificationError:empty { display:none; }
+.notification-actions { display:flex; align-items:center; flex-wrap:wrap; justify-content:space-between; gap:.4rem; }
+.notification-actions :is(h3,p), .notification-item p { margin:.15rem 0; }
+.notification-actions :is(.ghost-btn, .play-btn) { padding-inline:.55rem; }
+.notification-item { display:grid; gap:.35rem; margin:.45rem 0; padding:.6rem .7rem; border:1px solid var(--ui-border); border-radius:.55rem; background:var(--ui-surface); }
+.notification-unread { border-inline-start:3px solid var(--ui-action); background:var(--ui-soft); }
+.notification-item time { font-size:.8rem; color:var(--ui-muted); }
+#notificationPreferenceFields { display:grid; gap:.55rem; margin:.85rem 0; }
+#notificationPreferences button { padding-inline:.65rem; }
+
+@media (max-width: 790px) {
+  .player-page .notification-history-grid { grid-template-columns:minmax(0,1fr); }
+  .account-security-facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 440px) {
+  .profile-appearance .avatar-portrait-option { font-size:.68rem; }
 }

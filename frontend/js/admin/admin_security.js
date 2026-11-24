@@ -2,14 +2,34 @@
  * SecureFPS Admin Security Module
  * Ban appeals queue, anti-cheat decisions review panel, and audit log viewer.
  */
-import { escapeHtml, formatTimeAgo, promptAdminAction } from './admin_core.js';
+import { escapeHtml, formatTimeAgo, incidentLabel, promptAdminAction } from './admin_core.js';
 import { initCheaterDemoControls, loadCheaterDemoState } from './admin_demo_cheater.js';
 
 let appealsFilter = 'pending';
 let auditPage = 0;
+let auditRequest = 0;
+let auditFilters = new URLSearchParams();
+let currentAuditLogins = [];
+let currentAuditAccounts = [];
+let activeAuditAccount = null;
 const AUDIT_PAGE_SIZE = 20;
 
 export async function initSecuritySection() {
+  const auditForm = document.getElementById('auditFilters');
+  auditForm?.addEventListener('submit', event => {
+    event.preventDefault();
+    auditFilters = new URLSearchParams(new FormData(auditForm));
+    auditPage = 0;
+    loadAuditLogTable();
+  });
+  document.getElementById('auditPrevious')?.addEventListener('click', () => {
+    auditPage = Math.max(0, auditPage - 1);
+    loadAuditLogTable();
+  });
+  document.getElementById('auditNext')?.addEventListener('click', () => {
+    auditPage += 1;
+    loadAuditLogTable();
+  });
   const appealsFilterSelect = document.getElementById('appealsStatusFilter');
   if (appealsFilterSelect) {
     appealsFilterSelect.addEventListener('change', (e) => {
@@ -125,7 +145,7 @@ function openAppealReviewModal(appealId, playerName) {
     <form method="dialog" class="admin-modal-card" novalidate>
       <h3>Review Ban Appeal: ${escapeHtml(playerName)}</h3>
       <p class="muted">Approving will restore player account to active status and send a notification. Rejecting maintains the ban.</p>
-      
+
       <div class="modal-form-group">
         <label for="appealDecision">Decision <span class="required-star">*</span></label>
         <select id="appealDecision" class="admin-modal-input">
@@ -201,23 +221,24 @@ export async function loadAntiCheatDecisions() {
       <div class="anticheat-meta-card">
         <div class="meta-row">
           <div>
-            <strong>Inference Model:</strong> <span class="badge badge-cyan">${escapeHtml(meta.version || 'v2.0-rf')}</span>
-            <small class="muted" style="margin-left:8px;">Trained: ${escapeHtml(meta.trained_at || 'Recent')}</small>
+            <strong>Inference Model:</strong> <span class="badge badge-cyan">${escapeHtml(meta.version || 'Unavailable')}</span>
+            <small class="muted" style="margin-left:8px;">Trained: ${escapeHtml(meta.trained_at ? formatTimeAgo(meta.trained_at) : 'Unavailable')}</small>
           </div>
           <div>
-            <strong>Test Accuracy:</strong> <span>${Math.round((meta.accuracy || 0.98) * 100)}%</span>
+            <strong>Evaluation accuracy</strong> <span>${Number.isFinite(meta.accuracy) ? (meta.accuracy * 100).toFixed(1) + "%" : "Unavailable"}</span><small class="muted"> ${escapeHtml(meta.evaluation_basis || "")}</small>
           </div>
         </div>
         <div class="top-features-wrap">
-          <strong>Top Contributing Features to Anomaly Detection:</strong>
+          <strong>Random Forest impurity-based feature importance</strong>
           <div class="feature-bar-list">
-            ${topFeats.map(f => `
+            ${topFeats.slice(0, 8).map(f => `
               <div class="feature-bar-item">
                 <div class="feat-name">${escapeHtml(f.name)}</div>
                 <div class="feat-track"><div class="feat-fill" style="width:${Math.round(f.importance * 100)}%"></div></div>
                 <div class="feat-val">${Math.round(f.importance * 100)}%</div>
               </div>
-            `).join('')}
+            `).join('') || '<p>Feature importance unavailable.</p>'}
+            <details><summary>Deployed features</summary>${escapeHtml(meta.feature_names?.join(', ') || 'Unavailable')}</details>
           </div>
         </div>
       </div>
@@ -239,23 +260,24 @@ export async function loadAntiCheatDecisions() {
             <tbody>
               ${flagged.map(s => `
                 <tr>
-                  <td><code>${escapeHtml(s.session_id.substring(0, 8))}</code></td>
+                  <td><details><summary>${escapeHtml(s.session_id.substring(0, 8))}</summary>${escapeHtml(s.session_id)}</details></td>
                   <td>${escapeHtml(s.player_name)}</td>
                   <td>
                     <span class="risk-pill risk-high">${escapeHtml(s.risk_score)} (${escapeHtml(s.risk_category)})</span>
-                    <br><small class="badge badge-cyan" style="font-size:10px; margin-top:4px; display:inline-block;">${s.detected_in ? 'detected in ' + escapeHtml(s.detected_in) : (s.detection_latency_ms ? 'detected in ' + (s.detection_latency_ms / 1000).toFixed(2) + 's' : 'detected in 1.52s')}</small>
+                    <br><small class="badge badge-cyan">${s.detected_at ? formatTimeAgo(s.detected_at) : 'Detection time unavailable'}</small>
                   </td>
                   <td>
-                    <small>
-                      Aim: ${escapeHtml(s.features?.accuracy ? Math.round(s.features.accuracy * 100) + '%' : '—')} | 
-                      Flick: ${escapeHtml(s.features?.flick_rate ?? '—')}/s | 
-                      React: ${escapeHtml(s.features?.reaction_time_median ? s.features.reaction_time_median + 's' : '—')}
-                    </small>
+                    ${s.has_telemetry ? `<details><summary>Recorded telemetry</summary><dl>${Object.entries(s.features || {})
+                      .filter(([, value]) => Number.isFinite(value))
+                      .map(([label, value]) => `<dt>${escapeHtml(incidentLabel(label))}</dt><dd>${escapeHtml(value)}</dd>`).join('') || '<dd>Selected telemetry unavailable</dd>'}</dl></details>` : 'Telemetry unavailable'}
                   </td>
                   <td><span class="badge ${s.review_status === 'confirm_cheat' ? 'badge-danger' : (s.review_status === 'false_positive' ? 'badge-success' : 'badge-warning')}">${escapeHtml(s.review_status)}</span></td>
                   <td>
-                    <button class="action-btn danger-btn verify-cheat-btn" data-id="${escapeHtml(s.session_id)}">Confirm Cheat</button>
-                    <button class="action-btn ghost-btn fp-btn" data-id="${escapeHtml(s.session_id)}">False Positive</button>
+                    ${data.can_finalize_review ? `
+                      <button class="action-btn danger-btn verify-cheat-btn" data-id="${escapeHtml(s.session_id)}" ${s.has_hard_evidence && s.review_status === "pending_review" ? "" : "disabled"}>Confirm Cheat</button>
+                      <button class="action-btn ghost-btn fp-btn" data-id="${escapeHtml(s.session_id)}" ${s.review_status === "pending_review" ? "" : "disabled"}>False Positive</button>
+                      ${s.review_status === 'pending_review' && !s.has_hard_evidence ? '<small class="muted">Hard evidence unavailable</small>' : ''}
+                    ` : '<small class="muted">Final verdicts require Super Admin</small>'}
                   </td>
                 </tr>
               `).join('')}
@@ -280,7 +302,7 @@ async function submitAnticheatReview(sessionId, verdict) {
   const note = await window.showAppPrompt(`Record this verdict as ${verdict}.`, { label: 'Review note' });
   if (note === null || !note.trim()) return;
   try {
-    const resp = await fetch(`/api/admin/anticheat/review/${sessionId}`, {
+    const resp = await fetch(`/api/admin/anticheat/review/${encodeURIComponent(sessionId)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': 'securefps-csrf' },
       body: JSON.stringify({ verdict, note })
@@ -295,58 +317,63 @@ async function submitAnticheatReview(sessionId, verdict) {
 
 export async function loadAuditLogTable() {
   const tbody = document.getElementById('auditLogTableBody');
-  if (!tbody) return;
+  const form = document.getElementById('auditFilters');
+  if (!tbody || !form) return;
+
+  const request = ++auditRequest;
+  const offset = auditPage * AUDIT_PAGE_SIZE;
+  const query = new URLSearchParams(auditFilters);
+  query.set('limit', AUDIT_PAGE_SIZE);
+  query.set('offset', offset);
+  const previous = document.getElementById('auditPrevious');
+  const next = document.getElementById('auditNext');
+  const status = document.getElementById('auditPageStatus');
+  previous.disabled = true;
+  next.disabled = true;
 
   try {
-    const resp = await fetch(`/api/admin/audit-log?limit=${AUDIT_PAGE_SIZE}&offset=${auditPage * AUDIT_PAGE_SIZE}`, {
-      credentials: 'include',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    });
-    if (!resp.ok) return;
-
-    const data = await resp.json();
-    const logs = data.audit_logs || [];
-
-    if (logs.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty">No audit records logged yet.</td></tr>';
-      return;
+    const response = await fetch(`/api/admin/audit-log?${query}`, { credentials: 'include' });
+    const data = await response.json();
+    if (request !== auditRequest) return;
+    if (!response.ok) throw new Error(data.message || 'Audit history unavailable.');
+    if (data.total > 0 && offset >= data.total) {
+      auditPage = Math.floor((data.total - 1) / AUDIT_PAGE_SIZE);
+      return loadAuditLogTable();
     }
 
-    tbody.innerHTML = logs.map(l => {
-      let detailsHtml = '—';
-      if (l.details) {
-        let d = l.details;
-        if (typeof d === 'string') {
-          try { d = JSON.parse(d); } catch (e) {}
-        }
-        if (typeof d === 'object' && d !== null) {
-          const reason = d.reason || d.note || d.ban_reason || '';
-          const ip = d.ip ? `<code style="background:#EDE9FE; color:#5B21B6; padding:2px 6px; border-radius:4px; font-size:11px;">${escapeHtml(d.ip)}</code>` : '';
-          const anon = d.anonymized_email ? `<span class="badge" style="background:#F1F5F9; color:#475569; font-size:10px;">GDPR Purged</span>` : '';
-          const noteText = reason ? `<span style="font-weight:600; color:#1E1B4B;">${escapeHtml(reason)}</span>` : '';
-          detailsHtml = `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">${noteText} ${ip} ${anon}</div>`;
-        } else {
-          detailsHtml = escapeHtml(String(d));
-        }
-      }
+    const selected = form.elements.action.value;
+    const actions = [...new Set([...(data.actions || []), selected].filter(Boolean))];
+    form.elements.action.replaceChildren(new Option('All actions', ''), ...actions.map(action => new Option(incidentLabel(action), action)));
+    form.elements.action.value = selected;
+
+    const logs = data.audit_logs || [];
+    tbody.innerHTML = logs.map(entry => {
+      const details = entry.details || {};
+      const reason = details.reason ?? details.note ?? details.ban_reason ?? '—';
+      const result = details.result ?? details.status ?? details.verdict ?? '—';
       return `
         <tr>
-          <td><span style="color:#64748B; font-size:12px;">${formatTimeAgo(l.timestamp)}</span></td>
-          <td><strong>${escapeHtml(l.admin_email || 'System')}</strong></td>
-          <td><span class="badge ${l.action.includes('ban') ? 'badge-danger' : l.action.includes('delete') ? 'badge-deleted' : 'badge-cyan'}">${escapeHtml(l.action.replaceAll('_', ' '))}</span></td>
-          <td><code>${escapeHtml(l.target_user_id ? l.target_user_id.substring(0, 8) : '—')}</code></td>
-          <td>${detailsHtml}</td>
-        </tr>
-      `;
-    }).join('');
+          <td>${formatTimeAgo(entry.timestamp)}</td>
+          <td>${escapeHtml(entry.admin_email || 'System')}</td>
+          <td>${escapeHtml(incidentLabel(entry.action))}</td>
+          <td><code>${escapeHtml(entry.target_user_id || '—')}</code></td>
+          <td>${escapeHtml(reason)}</td>
+          <td>${escapeHtml(result)}</td>
+          <td><details><summary>View event</summary><code>${escapeHtml(entry.action || '—')}</code><dl>${Object.entries(details).map(([key, value]) =>
+            `<dt>${escapeHtml(incidentLabel(key))}</dt><dd>${escapeHtml(value)}</dd>`
+          ).join('')}</dl></details></td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="7" class="empty">No matching audit records.</td></tr>';
+    previous.disabled = auditPage === 0;
+    next.disabled = offset + logs.length >= data.total;
+    status.textContent = logs.length ? `${offset + 1}–${offset + logs.length} of ${data.total}` : '0 records';
   } catch (err) {
-    console.error('[AdminSecurity] Audit log load failed:', err);
+    if (request !== auditRequest) return;
+    tbody.innerHTML = '<tr><td colspan="7"></td></tr>';
+    tbody.firstElementChild.firstElementChild.textContent = err.message;
+    status.textContent = 'Audit history unavailable';
   }
 }
-
-let currentAuditAccounts = [];
-let currentAuditLogins = [];
-let activeAuditAccount = null;
 
 export async function loadRecentLoginsTable() {
   const tbody = document.getElementById('recentLogins');
@@ -495,18 +522,15 @@ function renderLoginsTable(logins) {
     const isSuccess = item.status === 'success';
     const statusBadge = isSuccess
       ? `<span class="status-chip-success">✓ Success</span>`
-      : `<span class="status-chip-failed">✕ ${escapeHtml(item.reason || 'Failed')}</span>`;
-    const riskBadge = item.risk === 'Low'
-      ? `<span class="risk-badge low">Low Risk</span>`
-      : `<span class="risk-badge high">High Risk</span>`;
+      : item.status === 'failed' ? `<span class="status-chip-failed">${escapeHtml(item.reason || 'Failed')}</span>` : 'Unknown';
 
     return `
       <tr>
         <td>${statusBadge}</td>
         <td><span class="device-badge-slate">${escapeHtml(item.device || 'Desktop / Browser')}</span></td>
-        <td><span class="ip-badge-purple">${escapeHtml(item.ip || '127.0.0.1')}</span></td>
-        <td><span style="font-weight:600; color:#4C1D95;">${escapeHtml(item.location || 'Local')}</span></td>
-        <td>${riskBadge}</td>
+        <td><span class="ip-badge-purple">${escapeHtml(item.ip || 'Unknown')}</span></td>
+        <td><span style="font-weight:600; color:#4C1D95;">${escapeHtml(item.location || 'Unknown')}</span></td>
+        <td>${escapeHtml(item.risk || '—')}</td>
         <td><span style="color:#64748B; font-size:12px;">${formatTimeAgo(item.time)}</span></td>
       </tr>
     `;

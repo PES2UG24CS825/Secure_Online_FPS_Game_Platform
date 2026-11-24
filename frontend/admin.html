@@ -1,39 +1,42 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <script>if (window.location.port !== "5000" && window.location.port !== "") { window.location.replace(`http://${window.location.hostname}:5000${window.location.pathname.replace(/^\/frontend/, "")}${window.location.search}`); }</script>
+  <script>if (["3000", "5500"].includes(window.location.port)) { window.location.replace(`http://${window.location.hostname}:5000${window.location.pathname.replace(/^\/frontend/, "")}${window.location.search}`); }</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>SecureFPS | Admin Control Center</title>
   <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg?v=2">
   <link rel="stylesheet" href="css/styles.css?v=20261114_0415">
   <link rel="stylesheet" href="css/admin.css?v=20261114_0415">
-  <link rel="stylesheet" href="css/ui-polish.css?v=20261114_0415">
+  <link rel="stylesheet" href="css/ui-polish.css?v=profile_final">
 </head>
 <body class="dashboard-page admin-page">
   <aside class="admin-sidebar">
-    <div class="brand"><div class="sidebar-brand-text" aria-label="SecureFPS Gaming Security"><strong>SECUREFPS</strong><small>GAMING SECURITY</small></div></div>
+    <div class="brand"><img class="sidebar-logo sidebar-logo-lockup" src="public/securefps-logo-crop.png?v=1" alt="SecureFPS Gaming Security"></div>
     <nav id="adminNavigation" aria-label="Admin sections" role="tablist">
       <!-- Normal Admin Tier 1 (Exactly 6 primary operational sections) -->
       <button class="admin-nav-btn active" type="button" data-admin-section="overview" role="tab" aria-selected="true"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg></span>Overview</button>
       <button class="admin-nav-btn" type="button" data-admin-section="players" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3.5 20v-1.5a5.5 5.5 0 0 1 11 0V20M16 5.2a3.5 3.5 0 0 1 0 6.6M17 14a4.8 4.8 0 0 1 3.5 4.6V20"/></svg></span>Players</button>
-      <button class="admin-nav-btn" type="button" data-admin-section="threats" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m10.29 3.86-8.6 14.9A2 2 0 0 0 3.42 22h17.16a2 2 0 0 0 1.73-3.24l-8.6-14.9a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>Threat Monitoring</button>
+      <button class="admin-nav-btn" type="button" data-admin-section="threats" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m10.29 3.86-8.6 14.9A2 2 0 0 0 3.42 22h17.16a2 2 0 0 0 1.73-3.24l-8.6-14.9a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>Violations</button>
       <button class="admin-nav-btn" type="button" data-admin-section="security" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 19 6v5.2c0 4.5-2.8 7.8-7 9.8-4.2-2-7-5.3-7-9.8V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>Security &amp; Appeals</button>
       <button class="admin-nav-btn" type="button" data-admin-section="analytics" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>Reports &amp; Analytics</button>
       <button class="admin-nav-btn" type="button" data-admin-section="support" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="m4.5 7 7.5 5.5L19.5 7"/></svg></span>Customer Support</button>
 
       <!-- Super Admin Command Center Category (Exclusive to Super Admin Tier 2) -->
-      <button class="admin-nav-btn" type="button" data-admin-section="rewards" role="tab" aria-selected="false">Rewards operations</button>
+      <button class="admin-nav-btn" type="button" data-admin-section="rewards" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 8h18v4H3z M5 12v9h14v-9 M12 8v13 M12 8H8a2.5 2.5 0 1 1 2.3-3.5L12 8Zm0 0h4a2.5 2.5 0 1 0-2.3-3.5L12 8Z"/></svg></span>Rewards Operations</button>
+      <button class="admin-nav-btn" type="button" data-admin-section="gameplay" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 7h10a4 4 0 0 1 4 3.5l1 5a2.5 2.5 0 0 1-4 2.4L15.5 16h-7L6 17.9a2.5 2.5 0 0 1-4-2.4l1-5A4 4 0 0 1 7 7Zm0 3v4m-2-2h4m7-1h.01m3 2h.01"/></svg></span>Match Monitoring</button>
       <div id="superAdminNavCategory" class="admin-nav-category" hidden>
         <div class="admin-nav-divider">
-          <span>👑 COMMAND CENTER</span>
+          <span>COMMAND CENTER</span>
         </div>
-        <button class="admin-nav-btn super-btn" type="button" data-admin-section="approvals" role="tab" aria-selected="false"><span class="admin-nav-icon">⚖️</span>Approvals Queue <span id="navApprovalBadge" class="nav-badge" style="display:none; margin-left:auto; background:#EF4444; color:#fff; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">0</span></button>
-        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_admins" role="tab" aria-selected="false"><span class="admin-nav-icon">👥</span>Admin Management</button>
-        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_risk" role="tab" aria-selected="false"><span class="admin-nav-icon">⚙️</span>Risk Engine Config</button>
-        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_ml" role="tab" aria-selected="false"><span class="admin-nav-icon">🧠</span>AI &amp; ML Models</button>
-        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_command" role="tab" aria-selected="false"><span class="admin-nav-icon">🚨</span>Audit &amp; Security</button>
-        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_control" role="tab" aria-selected="false"><span class="admin-nav-icon">🖥️</span>System Control</button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="approvals" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 4H5v17h14V4h-4m-6-1h6v4H9z m0 10 2 2 4-4"/></svg></span>Approvals Queue <span id="navApprovalBadge" class="nav-badge" style="display:none; margin-left:auto; background:#EF4444; color:#fff; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">0</span></button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_admins" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2m9-12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 1v6m-3-3h6"/></svg></span>Admin Management</button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_risk" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2 12h5l3-7 4 14 3-7h5"/></svg></span>Risk Engine Config</button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_ml" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5a3 3 0 0 0-5-2 4 4 0 0 0-3 5 4 4 0 0 0 0 7 4 4 0 0 0 5 5 3 3 0 0 0 3-3Zm0 0a3 3 0 0 1 5-2 4 4 0 0 1 3 5 4 4 0 0 1 0 7 4 4 0 0 1-5 5 3 3 0 0 1-3-3ZM8 7v3m8-3v3m-8 4v3m8-3v3"/></svg></span>AI &amp; ML Models</button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_command" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 1 3 6.7M3 12V6m0 6h6m3-4v5l3 2"/></svg></span>Audit &amp; Security</button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_control" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H4z m8 11v4m-4 0h8"/></svg></span>System Control</button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_roles" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z m3 4h4m-4 4h2m5 1 2 2 3-4"/></svg></span>Role Permissions</button>
+        <button class="admin-nav-btn super-btn" type="button" data-admin-section="super_config" role="tab" aria-selected="false"><span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16m-9-14v4m5 2v4m-7 2v4"/></svg></span>Platform Configuration</button>
       </div>
     </nav>
   </aside>
@@ -48,10 +51,10 @@
       <div class="admin-header-actions">
         <div class="admin-header-card">
           <div class="avatar">SA</div>
-          <div><strong id="adminName">Security Admin</strong><small id="adminEmail">Signed-in administrator</small></div>
+          <div><strong id="adminName">Security Admin</strong><small id="adminEmail">Signed-in administrator</small><span id="adminRoleBadge" class="admin-role-badge">Administrator</span></div>
         </div>
-        <span class="status-pill" id="adminLiveStatus"><span class="status-dot live"></span>Live connected</span>
-        <span id="lastUpdatedIndicator" class="muted" style="font-size:0.8rem; margin:0 8px;">Updated just now</span>
+        <span class="status-pill" id="adminLiveStatus">Connecting</span>
+        <span id="lastUpdatedIndicator" class="muted"></span>
         <button id="manualRefreshBtn" class="ghost-btn" type="button" title="Manual refresh">↻ Refresh</button>
         <button id="playerViewBtn" class="play-btn admin-player-view" type="button">Player view</button>
         <button id="logoutBtn" class="ghost-btn admin-logout" type="button">Sign out</button>
@@ -114,29 +117,15 @@
         <article class="stat-card"><span>Players</span><strong id="playerCount">—</strong><small>Registered accounts</small></article>
         <article class="stat-card"><span>Recorded matches</span><strong id="matchCount">—</strong><small>FPS Microgame sessions</small></article>
         <article class="stat-card"><span>Security events</span><strong id="eventCount">—</strong><small>Audit trail</small></article>
-        <article class="stat-card"><span>High severity</span><strong id="highCount">—</strong><small>Needs review</small></article>
+        <article class="stat-card"><span>High severity</span><strong id="highCount">—</strong><small>High or critical events</small></article>
+        <article class="stat-card"><span>Active accounts</span><strong id="activePlayerCount">—</strong></article>
+        <article class="stat-card"><span>Active sessions</span><strong id="activeSessionCount">—</strong></article>
+        <article class="stat-card"><span>Pending appeals</span><strong id="pendingAppealCount">—</strong></article>
       </section>
 
       <section class="panel admin-table-panel">
-        <div class="section-title">
-          <div><p class="eyebrow">MODEL REVIEW QUEUE</p><h2>Gameplay security alerts</h2></div>
-          <div class="admin-support-actions">
-            <a id="exportDatasetBtn" href="/api/admin/dataset/export" class="ghost-btn" download="dataset_v2.csv" style="display:inline-flex; align-items:center; gap:6px; text-decoration:none; font-weight:700;">📥 Export Dataset v2</a>
-            <button id="retryAnalysesBtn" class="ghost-btn" type="button">Retry analyses</button>
-            <button id="refreshAdminBtn" class="play-btn" type="button">Refresh</button>
-          </div>
-        </div>
-        <div id="gameplayAlertBanner" class="gameplay-alert-banner clear" role="status" aria-live="polite">No suspicious gameplay alerts at this time.</div>
-        <div id="analysisIncompleteNotice"></div>
-        <div id="gameplayAlerts" class="gameplay-alert-list"></div>
-      </section>
-
-      <section class="panel admin-table-panel">
-        <div class="section-title">
-          <div><p class="eyebrow">ACCOUNT ENFORCEMENT</p><h2>Banned and suspended accounts</h2></div>
-          <span id="bannedAccountCount" class="muted">0 accounts</span>
-        </div>
-        <div id="bannedAccountsList" class="list"><div class="empty">No banned or suspended accounts.</div></div>
+        <div class="section-title"><h2>Recent security events</h2><span id="unresolvedCritical" class="badge"></span><button id="refreshAdminBtn" class="ghost-btn" type="button">Refresh</button></div>
+        <div id="events" class="admin-event-list"><div class="empty">Loading security events…</div></div>
       </section>
     </section>
 
@@ -145,7 +134,7 @@
       <div class="admin-section-heading">
         <div><h2>Player accounts</h2><p>Review player status, server-side paginated, sortable, with soft delete.</p></div>
         <div style="display:flex; gap:10px;">
-          <button id="exportPlayersCsvBtn" class="ghost-btn" type="button">📥 Export Players CSV</button>
+          <button id="exportPlayersCsvBtn" class="ghost-btn" type="button">Export Players CSV</button>
           <button id="refreshPlayersBtn" class="play-btn" type="button">Refresh</button>
         </div>
       </div>
@@ -212,8 +201,17 @@
       <section class="panel admin-table-panel">
         <div class="section-title">
           <div><p class="eyebrow">ADMINISTRATIVE AUDIT LOG</p><h2>Enforcement Action History</h2></div>
-          <button id="exportAuditLogBtn" class="ghost-btn" type="button">📥 Export Audit CSV</button>
+          <button id="exportAuditLogBtn" class="ghost-btn" type="button">Export Audit CSV</button>
         </div>
+        <form id="auditFilters" class="admin-filter-row">
+          <label>Search <input type="search" name="q" maxlength="160" placeholder="Action, reason or target ID"></label>
+          <label>Administrator <input type="search" name="admin" maxlength="160" placeholder="Email"></label>
+          <label>Action <select name="action"><option value="">All actions</option></select></label>
+          <label>Severity <select name="severity"><option value="">All severities</option><option>low</option><option>medium</option><option>high</option><option>critical</option></select></label>
+          <label>From (UTC) <input type="date" name="from"></label>
+          <label>To (UTC) <input type="date" name="to"></label>
+          <button type="submit" class="play-btn">Apply filters</button>
+        </form>
         <div class="admin-table-wrap">
           <table>
             <thead>
@@ -222,11 +220,18 @@
                 <th>Admin</th>
                 <th>Action</th>
                 <th>Target ID</th>
-                <th>Details / Reason</th>
+                <th>Reason</th>
+                <th>Result</th>
+                <th>Details</th>
               </tr>
             </thead>
-            <tbody id="auditLogTableBody"><tr><td colspan="5">Loading audit log…</td></tr></tbody>
+            <tbody id="auditLogTableBody"><tr><td colspan="7">Loading audit log…</td></tr></tbody>
           </table>
+        </div>
+        <div class="admin-filter-row audit-pagination">
+          <button id="auditPrevious" class="ghost-btn" type="button" disabled>Previous</button>
+          <span id="auditPageStatus" role="status"></span>
+          <button id="auditNext" class="ghost-btn" type="button" disabled>Next</button>
         </div>
       </section>
 
@@ -297,64 +302,64 @@
       <section class="panel admin-table-panel">
         <div class="section-title">
           <div><p class="eyebrow">MACHINE LEARNING</p><h2>Anti-Cheat Model &amp; Decisions Review</h2></div>
+          <a id="exportDatasetBtn" href="/api/admin/dataset/export" class="ghost-btn" download="dataset_v2.csv">Export dataset</a>
         </div>
         <div id="antiCheatDecisionsPanel"><div class="empty">Loading anti-cheat decisions…</div></div>
       </section>
 
       <!-- CHEATER DEMONSTRATION & REAL-TIME DETECTION (Academic Review Mode) -->
-      <section class="panel admin-table-panel" id="cheaterDemoSection">
+      <section class="panel admin-table-panel" id="cheaterDemoSection" hidden>
         <div class="section-title">
           <div>
             <p class="eyebrow" style="color: #ef4444; font-weight: 700; letter-spacing: 0.05em;">ANTI-CHEAT LAB • ISOLATED DEMO ENVIRONMENT</p>
             <h2>Cheater Demonstration &amp; Real-Time Detection Feed</h2>
           </div>
           <div style="display: flex; gap: 8px; align-items: center;">
-            <span id="demoAccountBadge" class="badge badge-purple" style="font-size: 11px;">cheater_demo: READY</span>
+            <span id="demoAccountBadge" class="badge badge-purple" style="font-size: 11px;">Demo status unavailable</span>
             <button id="resetDemoAlertsBtn" class="ghost-btn" type="button" style="padding: 6px 12px; font-size: 12px; color: #f87171;">Clear Alert History</button>
             <button id="refreshDemoFeedBtn" class="ghost-btn" type="button" style="padding: 6px 12px; font-size: 12px;">Refresh</button>
           </div>
         </div>
 
         <!-- Real-Time Metrics & Model Analysis Cards -->
-        <div class="demo-stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 20px;">
-          <div class="stat-card" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 14px;">
-            <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase;">Combined ML Risk Score</div>
-            <div id="demoRiskScoreVal" style="font-size: 28px; font-weight: 800; color: #ef4444; margin-top: 4px;">—</div>
-            <small id="demoRiskCategory" style="color: #cbd5e1;">Awaiting telemetry session</small>
+        <div class="demo-stats-grid">
+          <div class="stat-card">
+            <div>Combined ML Risk Score</div>
+            <div id="demoRiskScoreVal">—</div>
+            <small id="demoRiskCategory">Awaiting telemetry session</small>
           </div>
-          <div class="stat-card" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 8px; padding: 14px;">
-            <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase;">Random Forest Model</div>
-            <div id="demoRfDecisionVal" style="font-size: 20px; font-weight: 700; color: #38bdf8; margin-top: 6px;">—</div>
-            <small id="demoRfProbVal" style="color: #cbd5e1;">Cheater Probability: —</small>
+          <div class="stat-card">
+            <div>Random Forest Model</div>
+            <div id="demoRfDecisionVal">—</div>
+            <small id="demoRfProbVal">Cheater Probability: —</small>
           </div>
-          <div class="stat-card" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 8px; padding: 14px;">
-            <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase;">Isolation Forest Model</div>
-            <div id="demoIfDecisionVal" style="font-size: 20px; font-weight: 700; color: #c084fc; margin-top: 6px;">—</div>
-            <small id="demoIfAnomalyVal" style="color: #cbd5e1;">Anomaly Score: —</small>
+          <div class="stat-card">
+            <div>Isolation Forest Model</div>
+            <div id="demoIfDecisionVal">—</div>
+            <small id="demoIfAnomalyVal">Anomaly Score: —</small>
           </div>
-          <div class="stat-card" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 14px;">
-            <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase;">Server Hard-Rule Violations</div>
-            <div id="demoViolationCountVal" style="font-size: 28px; font-weight: 800; color: #f59e0b; margin-top: 4px;">0</div>
-            <small id="demoViolationSummary" style="color: #cbd5e1;">Impossible hits &amp; speed anomalies</small>
+          <div class="stat-card">
+            <div>Server Hard-Rule Violations</div>
+            <div id="demoViolationCountVal">—</div>
+            <small id="demoViolationSummary">Impossible hits &amp; speed anomalies</small>
           </div>
         </div>
 
         <!-- 5-Feature Telemetry Breakdown -->
-        <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;">
-          <div style="font-size: 11px; font-weight: 600; color: #94a3b8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">Authoritative Five-Feature Telemetry Contract</div>
-          <div style="display: flex; flex-wrap: wrap; gap: 20px; font-size: 13px;">
-            <div>Accuracy: <strong id="demoFeatAccuracy" style="color: #38bdf8;">—</strong></div>
-            <div>Fire Rate: <strong id="demoFeatFireRate" style="color: #38bdf8;">—</strong></div>
-            <div>Movement Speed: <strong id="demoFeatSpeed" style="color: #38bdf8;">—</strong></div>
-            <div>Aim Smoothness: <strong id="demoFeatSmoothness" style="color: #38bdf8;">—</strong></div>
-            <div>KDR: <strong id="demoFeatKdr" style="color: #38bdf8;">—</strong></div>
+        <div class="demo-telemetry-summary">
+          <div>Tracked telemetry summary</div>
+          <div>
+            <div>Accuracy: <strong id="demoFeatAccuracy">—</strong></div>
+            <div>Fire Rate: <strong id="demoFeatFireRate">—</strong></div>
+            <div>Movement Speed: <strong id="demoFeatSpeed">—</strong></div>
+            <div>Aim Smoothness: <strong id="demoFeatSmoothness">—</strong></div>
+            <div>KDR: <strong id="demoFeatKdr">—</strong></div>
           </div>
         </div>
 
         <!-- Live Real-Time Security Alert Stream -->
         <div class="section-subtitle" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-          <span>Live Real-Time Security Alert Feed (SSE Active)</span>
-          <span class="badge badge-emerald" style="font-size: 10px; font-weight: 600;">● STREAMING</span>
+          <span>Demo security events</span>
         </div>
         <div id="demoAlertsFeed" style="display: flex; flex-direction: column; gap: 8px; max-height: 380px; overflow-y: auto; padding-right: 4px;">
           <div class="empty" id="demoAlertsEmpty">No simulated cheat violations recorded yet. Launch CyberStrike 3D with cheater_demo to trigger real-time detection.</div>
@@ -377,7 +382,7 @@
       <section class="panel admin-table-panel">
         <div class="section-title">
           <div><p class="eyebrow">GAME HISTORY</p><h2>All player game sessions</h2></div>
-          <a href="/api/admin/export/sessions" class="ghost-btn" download="sessions.csv">📥 Export Sessions CSV</a>
+          <a href="/api/admin/export/sessions" class="ghost-btn" download="sessions.csv">Export Sessions CSV</a>
         </div>
         <div class="admin-table-wrap">
           <table>
@@ -418,55 +423,7 @@
 
     <!-- SECTION 6: THREAT MONITORING (Normal Admin & Super Admin) -->
     <section class="admin-section" id="admin-threats" data-admin-view="threats" role="tabpanel">
-      <div class="admin-section-heading">
-        <div>
-          <h2>Threat Monitoring</h2>
-          <p>Real-time detection of high-risk player behavior, repeat violations, and suspicious sign-in activities.</p>
-        </div>
-        <button id="refreshThreatsBtn" class="play-btn" type="button">Refresh Threats</button>
-      </div>
-
-      <div class="stats-grid" style="margin-bottom: 20px;">
-        <article class="stat-card">
-          <span>Active Threat Flags</span>
-          <strong id="threatActiveCount" style="color: #DC2626;">0</strong>
-          <small>Suspicious accounts under watch</small>
-        </article>
-        <article class="stat-card">
-          <span>High-Risk Accounts</span>
-          <strong id="threatHighRiskCount" style="color: #EA580C;">0</strong>
-          <small>Risk score &ge; 65 / 100</small>
-        </article>
-        <article class="stat-card">
-          <span>Repeat Violators</span>
-          <strong id="threatRepeatViolatorsCount" style="color: #7C3AED;">0</strong>
-          <small>Multiple security infractions</small>
-        </article>
-        <article class="stat-card">
-          <span>Suspicious Sign-ins</span>
-          <strong id="threatFailedLoginsCount" style="color: #4B5563;">0</strong>
-          <small>Failed or flagged logins</small>
-        </article>
-      </div>
-
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
-        <!-- High Risk Accounts Table -->
-        <section class="panel admin-table-panel">
-          <div class="section-title">
-            <div><p class="eyebrow">PRIORITY INTERVENTION</p><h2>High-Risk Players</h2></div>
-          </div>
-          <div class="admin-table-wrap threat-table-wrap">
-            <table class="threat-table">
-              <thead>
-                <tr><th style="width:40%;">Player</th><th style="width:22%;">Risk Score</th><th style="width:20%;">Status</th><th style="width:18%;">Action</th></tr>
-              </thead>
-              <tbody id="threatHighRiskTableBody">
-                <tr><td colspan="4" class="empty">Loading high-risk players…</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
+      <div class="violations-layout">
         <!-- Repeat Violators Table -->
         <section class="panel admin-table-panel">
           <div class="section-title">
@@ -485,22 +442,6 @@
         </section>
       </div>
 
-      <!-- Suspicious Sign-in Activity -->
-      <section class="panel admin-table-panel" style="margin-top: 20px;">
-        <div class="section-title">
-          <div><p class="eyebrow">AUTH INTEGRITY</p><h2>Suspicious Login Attempts</h2></div>
-        </div>
-        <div class="admin-table-wrap">
-          <table>
-            <thead>
-              <tr><th>Identifier</th><th>Player</th><th>IP Address</th><th>Device</th><th>Reason</th><th>Time</th></tr>
-            </thead>
-            <tbody id="threatSuspiciousLoginsTableBody">
-              <tr><td colspan="6" class="empty">Loading suspicious logins…</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
     </section>
 
     <!-- SECTION 7: REPORTS & ANALYTICS (Normal Admin & Super Admin) -->
@@ -653,7 +594,7 @@
           </div>
           <p class="command-center-subtitle">Provision Normal Admin accounts, edit profiles, monitor active sessions, and revoke credentials.</p>
         </div>
-        <button id="openCreateAdminModalBtn" class="play-btn" type="button" style="background: #F59E0B; color: #000; font-weight: 700;">+ Provision Normal Admin</button>
+        <button id="openCreateAdminModalBtn" class="play-btn" type="button">+ Provision Normal Admin</button>
       </div>
 
       <section class="panel admin-table-panel">
@@ -732,7 +673,6 @@
               <li>AI / ML Detection Model Tuning &amp; Instant Rollback</li>
               <li>Risk Engine Boundary Configuration &amp; Rule Automation</li>
               <li>Emergency Platform Lockdown &amp; Policy Control</li>
-              <li>Database Exports, Backups &amp; Disaster Recovery</li>
             </ul>
           </div>
         </section>
@@ -755,7 +695,7 @@
       <!-- Active Model Hero -->
       <section class="panel admin-table-panel">
         <div class="section-title">
-          <div><p class="eyebrow">ACTIVE INFERENCE ENGINE</p><h2 id="superMlModelName">SecureFPS Random Forest Anti-Cheat v2.0</h2></div>
+          <div><p class="eyebrow">ACTIVE INFERENCE ENGINE</p><h2 id="superMlModelName">SecureFPS Random Forest Anti-Cheat v2.0</h2><p id="superMlEvaluationBasis" class="muted"></p></div>
           <span class="badge badge-cyan" id="superMlActiveVersionBadge" style="font-size: 12px; padding: 6px 12px;">v2.0-rf Active</span>
         </div>
         <div class="stats-grid" style="margin-top: 10px;">
@@ -956,36 +896,6 @@
       </div>
     </section>
 
-    <!-- SUPER SECTION G: BACKUP & RECOVERY -->
-    <section class="admin-section" id="admin-super-backups" data-admin-view="super_backups" role="tabpanel">
-      <div class="command-center-header">
-        <div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="admin-tier-badge level-2">EXECUTIVE ROOT</span>
-            <h2 class="command-center-title">Backup &amp; Disaster Recovery</h2>
-          </div>
-          <p class="command-center-subtitle">Manage immutable recovery points, retention schedules, and create on-demand cluster snapshots.</p>
-        </div>
-        <button id="createBackupSnapshotBtn" class="play-btn" type="button" style="background: #10B981;">+ Create On-Demand Snapshot</button>
-      </div>
-
-      <section class="panel admin-table-panel">
-        <div class="section-title">
-          <div><p class="eyebrow">RECOVERY CATALOG</p><h2>Verified System Snapshots</h2></div>
-        </div>
-        <div class="admin-table-wrap">
-          <table>
-            <thead>
-              <tr><th>Snapshot ID</th><th>Scope</th><th>Size</th><th>Documents</th><th>Checksum</th><th>Status</th><th>Created</th></tr>
-            </thead>
-            <tbody id="superBackupsTableBody">
-              <tr><td colspan="7" class="loading-cell">Loading system backups…</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </section>
-
     <!-- SUPER SECTION H: PLATFORM CONFIGURATION -->
     <section class="admin-section" id="admin-super-config" data-admin-view="super_config" role="tabpanel">
       <div class="command-center-header">
@@ -1050,6 +960,14 @@
         <div class="modal-form-group">
           <label for="newAdminPassword">Initial Password <span class="required-star">*</span> (min 8 chars)</label>
           <input type="password" id="newAdminPassword" autocomplete="new-password" class="admin-modal-input" placeholder="Strong password" required>
+        </div>
+        <div class="modal-form-group">
+          <label for="newAdminEnrollment">Verified authenticator enrollment key</label>
+          <input id="newAdminEnrollment" type="password" class="admin-modal-input" autocomplete="off" required>
+        </div>
+        <div class="modal-form-group">
+          <label for="newAdminVerification">Current authenticator code</label>
+          <input id="newAdminVerification" inputmode="numeric" pattern="[0-9]{6}" class="admin-modal-input" autocomplete="off" required>
         </div>
         <div id="createAdminFeedback" class="modal-err-msg" style="margin-top: 8px;" hidden></div>
         <div class="modal-actions" style="margin-top: 18px;">
@@ -1179,7 +1097,7 @@
       </div>
 
       <!-- Player Match History Table -->
-      <div style="margin-top:20px;">
+      <div class="modal-matches-section" style="margin-top:20px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
           <h4 style="margin:0; font-size:14px; text-transform:uppercase; letter-spacing:0.05em; color:#4C1D95;">Completed Game Sessions</h4>
           <span id="modalMatchCountBadge" class="badge" style="background:#EDE9FE; color:#6D28D9; font-weight:700;">0 Sessions</span>
@@ -1209,7 +1127,7 @@
       </div>
 
       <!-- Player Anti-Cheat Infractions & Security Violations Table -->
-      <div style="margin-top:24px;">
+      <div class="modal-violations-section" style="margin-top:24px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="font-size:16px;">⚠️</span>
@@ -1322,6 +1240,6 @@
 
   <script src="js/config.js?v=20261114_0415"></script>
   <script src="js/api.js?v=20261114_0415"></script>
-  <script type="module" src="js/admin.js?v=20261114_0415"></script>
+  <script type="module" src="js/admin.js?v=anime_dashboard"></script>
 </body>
 </html>

@@ -1,3 +1,4 @@
+from services.player_notifications import notify_player
 import os
 import smtplib
 import secrets
@@ -173,6 +174,7 @@ def reset_password_with_token(token, new_password_hash):
          "$unset": {"active_auth_session_id": ""}}
     )
     sessions_db.update_many({"user_id": user_id, "is_active": True}, {"$set": {"is_active": False}})
+    notify_player(user_id, "password_changed", record["_id"])
     return True, "Password reset successfully. Please log in with your new password."
 
 def player_login_paused(user):

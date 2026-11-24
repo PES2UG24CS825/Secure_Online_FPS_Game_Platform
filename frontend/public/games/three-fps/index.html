@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>CyberStrike 3D | SecureFPS Tactical Simulation</title>
   <link rel="icon" type="image/svg+xml" href="../../securefps-mark.svg?v=2">
-  <link rel="stylesheet" href="css/game.css?v=20261031_1005">
+  <link rel="stylesheet" href="css/game.css?v=20261124_settings">
 </head>
 <body>
 
@@ -201,6 +201,11 @@
             <div class="mp-input-group">
               <label for="mp-player-name">OPERATOR CALLSIGN</label>
               <input id="mp-player-name" type="text" maxlength="18" placeholder="Operator_Callsign" spellcheck="false" autocomplete="off" />
+              <label for="mp-operator">OPERATOR</label>
+              <select id="mp-operator" class="hud-select">
+                <option value="vanguard">Vanguard</option>
+                <option value="valkyrie">Valkyrie</option>
+              </select>
             </div>
             <div class="mp-status-pill" id="mp-server-status">
               <span class="status-dot"></span>
@@ -284,14 +289,22 @@
         <div class="menu-view" id="view-settings">
           <div class="view-header">
             <h3>Tactical Simulation Settings</h3>
-            <p>Calibrate mouse sensitivity, audio balance, graphics quality, and network endpoints</p>
+            <p>Configure the arena and save your preferences in this browser.</p>
           </div>
 
-          <div class="settings-form">
-            <!-- Mouse Sensitivity -->
+          <div class="settings-layout">
+            <nav class="settings-navigation" aria-label="Settings categories">
+              <button type="button" class="hud-btn" data-settings-category="match" aria-pressed="true">In-Match</button>
+              <button type="button" class="hud-btn" data-settings-category="display" aria-pressed="false">Display</button>
+              <button type="button" class="hud-btn" data-settings-category="sound" aria-pressed="false">Sound</button>
+              <button type="button" class="hud-btn" data-settings-category="recording" aria-pressed="false">Recording</button>
+              <button type="button" class="hud-btn" data-settings-category="notifications" aria-pressed="false">Notifications</button>
+              <button type="button" class="hud-btn" data-settings-category="account" aria-pressed="false">Account &amp; Basic</button>
+            </nav>
+            <section class="settings-category" data-settings-panel="match">
             <div class="setting-row">
               <div class="setting-info">
-                <strong>Mouse Sensitivity</strong>
+                <label for="setting-sens">Mouse Sensitivity</label>
                 <span>Hip-fire camera look speed</span>
               </div>
               <div class="setting-control">
@@ -299,11 +312,9 @@
                 <span id="setting-sens-val">4.0</span>
               </div>
             </div>
-
-            <!-- Aim (ADS) Sensitivity -->
             <div class="setting-row">
               <div class="setting-info">
-                <strong>Aim / ADS Sensitivity</strong>
+                <label for="setting-aim-sens">Aim / ADS Sensitivity</label>
                 <span>Multiplier when right-click aiming</span>
               </div>
               <div class="setting-control">
@@ -311,47 +322,9 @@
                 <span id="setting-aim-sens-val">0.7x</span>
               </div>
             </div>
-
-            <!-- Master Volume -->
             <div class="setting-row">
               <div class="setting-info">
-                <strong>Master Volume</strong>
-                <span>Overall game sound balance</span>
-              </div>
-              <div class="setting-control">
-                <input id="setting-master-volume" type="range" min="0" max="100" value="90" />
-                <span id="setting-master-val">90%</span>
-              </div>
-            </div>
-
-            <!-- Sound FX Volume -->
-            <div class="setting-row">
-              <div class="setting-info">
-                <strong>Sound FX Volume</strong>
-                <span>Gunfire, hits, reloads, impacts, footsteps</span>
-              </div>
-              <div class="setting-control">
-                <input id="setting-volume" type="range" min="0" max="100" value="85" />
-                <span id="setting-volume-val">85%</span>
-              </div>
-            </div>
-
-            <!-- Music Volume -->
-            <div class="setting-row">
-              <div class="setting-info">
-                <strong>Music Volume</strong>
-                <span>Ambient and menu tactical soundtrack</span>
-              </div>
-              <div class="setting-control">
-                <input id="setting-music-volume" type="range" min="0" max="100" value="70" />
-                <span id="setting-music-val">70%</span>
-              </div>
-            </div>
-
-            <!-- Crosshair Size -->
-            <div class="setting-row">
-              <div class="setting-info">
-                <strong>Crosshair Size &amp; Reticle</strong>
+                <label for="setting-crosshair-size">Crosshair Size &amp; Reticle</label>
                 <span>Dimensions of center targeting reticle</span>
               </div>
               <div class="setting-control">
@@ -362,11 +335,9 @@
                 </select>
               </div>
             </div>
-
-            <!-- Crosshair Colour -->
             <div class="setting-row">
               <div class="setting-info">
-                <strong>Crosshair Colour</strong>
+                <label for="setting-crosshair-color">Crosshair Colour</label>
                 <span>Default non-locked crosshair tone</span>
               </div>
               <div class="setting-control">
@@ -379,33 +350,22 @@
                 </select>
               </div>
             </div>
-
-            <!-- Crosshair Visibility -->
             <div class="setting-row">
               <div class="setting-info">
-                <strong>Show Crosshair</strong>
+                <label for="setting-crosshair-visible">Show Crosshair</label>
                 <span>Enable or disable center targeting reticle</span>
               </div>
               <div class="setting-control">
                 <input id="setting-crosshair-visible" type="checkbox" checked style="transform: scale(1.3); cursor: pointer;" />
               </div>
             </div>
-
-            <!-- Show FPS Display -->
             <div class="setting-row">
-              <div class="setting-info">
-                <strong>Show FPS Counter</strong>
-                <span>Toggle clean in-game frame rate display in top-right corner</span>
-              </div>
-              <div class="setting-control">
-                <input id="setting-show-fps" type="checkbox" style="transform: scale(1.3); cursor: pointer;" />
-              </div>
+              <div class="setting-info"><label for="setting-crosshair-opacity">Crosshair opacity</label></div>
+              <div class="setting-control"><input id="setting-crosshair-opacity" type="range" min="20" max="100" step="5" value="100"><output id="setting-crosshair-opacity-value" for="setting-crosshair-opacity">100%</output></div>
             </div>
-
-            <!-- Field of View (FOV) -->
             <div class="setting-row">
               <div class="setting-info">
-                <strong>Field of View (FOV)</strong>
+                <label for="setting-fov">Field of View (FOV)</label>
                 <span>Camera perspective angle (65° – 105°)</span>
               </div>
               <div class="setting-control">
@@ -413,34 +373,30 @@
                 <span id="setting-fov-val">75°</span>
               </div>
             </div>
-
-            <!-- Graphics Quality -->
             <div class="setting-row">
               <div class="setting-info">
-                <strong>Graphics Quality</strong>
-                <span>Shadow fidelity and WebGL resolution scaling</span>
-              </div>
-              <div class="setting-control">
-                <select id="setting-graphics" class="hud-select">
-                  <option value="high">High (Victus Dedicated GPU)</option>
-                  <option value="medium" selected>Balanced (Standard)</option>
-                  <option value="low">Performance (Maximum FPS)</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- Invert Mouse Y -->
-            <div class="setting-row">
-              <div class="setting-info">
-                <strong>Invert Vertical Look (Y-Axis)</strong>
+                <label for="setting-invert-y">Invert Vertical Look (Y-Axis)</label>
                 <span>Invert pitch controls</span>
               </div>
               <div class="setting-control">
                 <input id="setting-invert-y" type="checkbox" style="transform: scale(1.3); cursor: pointer;" />
               </div>
             </div>
-
-            <!-- Fullscreen -->
+            </section>
+            <section class="settings-category" data-settings-panel="display" hidden>
+            <div class="setting-row">
+              <div class="setting-info">
+                <label for="setting-graphics">Graphics Quality</label>
+                <span>Shadow fidelity and WebGL resolution scaling</span>
+              </div>
+              <div class="setting-control">
+                <select id="setting-graphics" class="hud-select">
+                  <option value="high">High</option>
+                  <option value="medium" selected>Balanced</option>
+                  <option value="low">Performance</option>
+                </select>
+              </div>
+            </div>
             <div class="setting-row">
               <div class="setting-info">
                 <strong>Display Mode</strong>
@@ -450,19 +406,70 @@
                 <button id="btn-toggle-fullscreen" class="hud-btn" type="button">FULLSCREEN</button>
               </div>
             </div>
-
-            <!-- Multiplayer Server URL (Cross-Network WAN Support) -->
             <div class="setting-row">
               <div class="setting-info">
-                <strong>Multiplayer Server URL (WAN/Tunnel)</strong>
+                <label for="setting-show-fps">Show FPS Counter</label>
+                <span>Toggle clean in-game frame rate display in top-right corner</span>
+              </div>
+              <div class="setting-control">
+                <input id="setting-show-fps" type="checkbox" style="transform: scale(1.3); cursor: pointer;" />
+              </div>
+            </div>
+            </section>
+            <section class="settings-category" data-settings-panel="sound" hidden>
+            <div class="setting-row">
+              <div class="setting-info"><label for="setting-mute">Mute game audio</label></div>
+              <div class="setting-control"><input id="setting-mute" type="checkbox"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <label for="setting-master-volume">Master Volume</label>
+                <span>Overall game sound balance</span>
+              </div>
+              <div class="setting-control">
+                <input id="setting-master-volume" type="range" min="0" max="100" value="90" />
+                <span id="setting-master-val">90%</span>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <label for="setting-volume">Sound FX Volume</label>
+                <span>Gunfire, hits, reloads, impacts, footsteps</span>
+              </div>
+              <div class="setting-control">
+                <input id="setting-volume" type="range" min="0" max="100" value="85" />
+                <span id="setting-volume-val">85%</span>
+              </div>
+            </div>
+            </section>
+            <section class="settings-category" data-settings-panel="recording" hidden>
+              <p id="recording-status" role="status">Checking recording support…</p>
+              <div class="settings-actions">
+                <button id="start-recording" type="button" class="hud-btn" disabled>Start recording</button>
+                <button id="stop-recording" type="button" class="hud-btn" disabled>Stop recording</button>
+                <a id="download-recording" class="hud-btn" hidden>Download recording</a>
+              </div>
+            </section>
+            <section class="settings-category" data-settings-panel="notifications" hidden>
+              <p>Account and security notifications remain enabled.</p>
+              <a class="hud-btn" href="/player.html#security">Account security</a>
+            </section>
+            <section class="settings-category" data-settings-panel="account" hidden>
+            <div class="setting-row">
+              <div class="setting-info">
+                <label for="setting-server-url">Multiplayer Server URL (WAN/Tunnel)</label>
                 <span>Custom server address or Cloudflare Tunnel</span>
               </div>
               <div class="setting-control">
-                <input id="setting-server-url" type="text" placeholder="http://127.0.0.1:4001" style="background: rgba(18,26,42,0.9); border: 1px solid rgba(0,240,255,0.3); border-radius: 4px; padding: 4px 8px; color: #5120a4; font-family: var(--font-mono); font-size: 11px; width: 180px;" />
+                <input id="setting-server-url" type="url" placeholder="http://127.0.0.1:4001" />
               </div>
             </div>
+              <a class="hud-btn" href="/player.html#profile">Player profile</a>
+              <a class="hud-btn" href="/player.html#security">Manage account access</a>
+            </section>
           </div>
 
+          <details class="settings-controls-guide"><summary>Control guide</summary>
           <!-- Controls Guide -->
           <div class="loader-controls-grid" style="margin-top: 14px;">
             <div class="control-item"><kbd>W A S D</kbd><span>Move &amp; Strafe</span></div>
@@ -474,9 +481,16 @@
           </div>
           <p class="controls-match-limits">Bot Combat and multiplayer matches end at 10 kills or 08:00, whichever comes first. Multiplayer limits are enforced by the server.</p>
 
-          <button id="btn-save-settings" class="hud-btn primary wide" type="button" style="margin-top: 12px;">
-            SAVE &amp; RETURN
-          </button>
+          </details>
+          <div class="settings-actions">
+          <button id="btn-save-settings" class="hud-btn primary" type="button">Save settings</button>
+          <button id="restore-settings" class="hud-btn" type="button">Restore saved</button>
+          <button id="reset-settings" class="hud-btn" type="button">Reset to defaults</button>
+          <button id="export-settings" class="hud-btn" type="button">Export settings</button>
+          <button id="import-settings" class="hud-btn" type="button">Import settings</button>
+          <input id="settings-file" type="file" accept="application/json,.json" hidden>
+          </div>
+          <p id="settings-status" role="status"></p>
         </div>
 
       </div>
@@ -956,9 +970,9 @@
   <script src="js/TrainingManager.js?v=20261113_2340"></script>
   <script src="js/GameModeManager.js?v=20261113_2340"></script>
   <script src="js/HUD.js?v=20261113_2340"></script>
-  <script src="js/TelemetryClient.js?v=20261113_2340"></script>
-  <script src="js/MultiplayerClient.js?v=20261118_operator_facing"></script>
-  <script src="js/main.js?v=20261118_pause_prompt"></script>
+  <script src="js/TelemetryClient.js?v=20261124_receipts"></script>
+  <script src="js/MultiplayerClient.js?v=20261124_receipts"></script>
+  <script src="js/main.js?v=20261124_settings"></script>
 
   <!-- Screen Edge Damage Vignette -->
   <div id="damage-vignette" class="damage-vignette"></div>
