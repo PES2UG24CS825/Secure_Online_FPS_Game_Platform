@@ -2794,3 +2794,28 @@ html, body {
 #main-menu-hub :is(.difficulty-card.selected,.start-btn,.menu-tab.active) { box-shadow: none; }
 
 #btn-match-menu { background: #f4efff !important; border-color: #c6b3e8 !important; color: #5120a4 !important; }
+/* Arena preferences */
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(9rem, 12rem) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+.settings-navigation { display: grid; gap: .35rem; }
+.settings-navigation button { justify-content: flex-start; text-align: left; }
+.settings-navigation button[aria-pressed="true"] { border-color: #81d1ff; color: #c6ecff; background: #1a3a52; }
+.settings-category { min-width: 0; }
+.settings-category[hidden], .settings-actions [hidden] { display: none; }
+.settings-category .setting-info label { font-weight: 700; }
+.settings-category .setting-control { min-width: 0; }
+.settings-category input[type="url"] { width: min(16rem, 100%); color: #ecf5ff; background: #152338; border: 1px solid #5c7795; border-radius: .35rem; padding: .5rem; }
+.settings-controls-guide { margin-top: 1rem; }
+.settings-controls-guide summary { cursor: pointer; }
+.settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .8rem; }
+.settings-actions a { text-decoration: none; }
+#settings-status { min-height: 1.3rem; margin-top: .5rem; }
+@media (max-width: 680px) {
+  .settings-layout { grid-template-columns: 1fr; }
+  .settings-navigation { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .settings-category .setting-row { flex-wrap: wrap; }
+}

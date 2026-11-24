@@ -28,7 +28,25 @@ A secure, full-stack First-Person Shooter (FPS) gaming platform featuring two di
   - **Player Console:** Match history, K/D ratio, accuracy, Honour score, rewards, and security status.
   - **Admin Control Center:** Live Server-Sent Events (SSE), Account Security ratings, and interactive **Last 5 Match Analysis popover** on cursor hover.
 - **🎖️ Fair Play Honour Score System:**
-  - Starts at 100. Completing matches awards +5 Honour (and coins/XP); abandoning active matches deducts -10 Honour.
+  - Starts at 100. Match completion and abandonment can adjust Honour. Signed multiplayer results can earn match coins and XP.
+
+See the [local platform audit](docs/PLATFORM_AUDIT.md) for hosting checks, match statistics and remaining verification.
+
+## Player profile and account notices
+
+The Sakura profile shows saved appearance, rewards level, and XP. Overview shows recorded match statistics, and Rewards shows earned achievements. Account Security shows authenticator status, the masked verified recovery address, sign-in history, and active devices. Players can change their password, sign out other devices, replace and download recovery codes after verification, and manage their account data.
+
+The Notifications sidebar entry shows the unread count from MongoDB. Notification History supports category filters, unread filtering, pagination, marking notices read or unread, and dismissal. Match, rewards, and announcement preferences are optional. Security and account notices stay enabled. The player console also refreshes stored notices after reconnecting to its existing event stream.
+
+**Authors** · Prajwal K and Sudarshan JN
+
+## Dashboard artwork and administrator review
+
+Player and administrator dashboards share the supplied [Sakura anime PNG](frontend/public/backgrounds/SecureFPS_Sakura_Anime_Background.png). The player's selected banner appears in Profile, separate from the shared dashboard artwork. The four original Sakura banners and all four Chibi portraits use the existing MongoDB appearance settings.
+
+Normal and super administrators use the same monitoring layout. Critical alerts can be acknowledged by authorized reviewers, and the player investigation view lists recorded anti-cheat violations. Final anti-cheat decisions are protected against duplicate submissions. Confirming a cheat requires recorded hard evidence and a review note. Model pages label held-out evaluation separately from the fitted Random Forest feature importances.
+
+The Super Admin roster shows stored roles, MFA status, active sessions, and the last successful sign-in. Provisioning a Normal Admin requires a verified authenticator enrollment key and a current code. Administrator MFA recovery remains a separate workflow pending verified recovery and enrollment delivery. Use the existing local launcher to preview the dashboards.
 
 ---
 

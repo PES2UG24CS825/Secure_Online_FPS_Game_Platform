@@ -7,7 +7,7 @@ import pyotp
 from app import app, ensure_default_admin
 from database.db import (
     users, sessions_db, system_config, admin_permissions, model_versions,
-    system_backups, admin_audit_log, seed_two_tier_system
+    system_backups, admin_audit_log, seed_two_tier_system, game_sessions, security_events
 )
 from services.auth import hash_password
 
@@ -181,11 +181,14 @@ class TwoTierAdminSystemSecurityTests(unittest.TestCase):
         client = self._login_as(self.super_admin_email, self.super_admin_password)
 
         temp_email = f"temp_admin_{uuid.uuid4().hex[:6]}@securefps.io"
+        enrollment = pyotp.random_base32()
         create_payload = {
             "name": "Junior Ops Lead",
             "email": temp_email,
             "password": "SecurePassword@2026!",
-            "role": "admin"
+            "role": "admin",
+            "enrollment_key": enrollment,
+            "verification_code": pyotp.TOTP(enrollment).now(),
         }
 
         # Provision
@@ -205,9 +208,9 @@ class TwoTierAdminSystemSecurityTests(unittest.TestCase):
 
         # Reset MFA
         r_mfa = client.post(f"/api/admin/super/admins/{new_admin_id}/reset-mfa", json={}, headers=SECURE_HEADERS)
-        self.assertEqual(r_mfa.status_code, 200)
-        self.assertTrue(r_mfa.get_json().get("success"))
-        self.assertTrue(r_mfa.get_json().get("new_mfa_seed"))
+        self.assertEqual(r_mfa.status_code, 409)
+        self.assertNotIn("new_mfa_seed", r_mfa.get_json())
+        self.assertNotIn("mfa_seed", created_data["admin"])
 
         # Revoke Sessions
         r_revoke = client.post(f"/api/admin/super/admins/{new_admin_id}/revoke-sessions", json={}, headers=SECURE_HEADERS)
@@ -346,6 +349,30 @@ class TwoTierAdminSystemSecurityTests(unittest.TestCase):
     def tearDown(self):
         if hasattr(self, "player_oid"):
             users.delete_one({"_id": self.player_oid})
+
+    def test_12_event_acknowledgment_and_evidence_review(self):
+        client = self._login_as(self.normal_admin_email, self.normal_admin_password)
+        now = datetime.now(timezone.utc)
+        session_id = uuid.uuid4().hex
+        match = game_sessions.insert_one({"session_id": session_id, "user_id": self.player_oid, "risk_score": 82, "created_at": now})
+        event = security_events.insert_one({"user_id": self.player_oid, "type": "impossible_hit", "severity": "critical", "created_at": now})
+        try:
+            acknowledge = f"/api/admin/security-events/{event.inserted_id}/acknowledge"
+            self.assertEqual(client.post(acknowledge, headers=SECURE_HEADERS).status_code, 200)
+            self.assertEqual(client.post(acknowledge, headers=SECURE_HEADERS).status_code, 409)
+            self.assertTrue(security_events.find_one({"_id": event.inserted_id})["acknowledged_at"])
+            review = f"/api/admin/anticheat/review/{session_id}"
+            self.assertEqual(client.post(review, json={"verdict": "false_positive", "note": "Evidence reviewed"}, headers=SECURE_HEADERS).status_code, 403)
+            client = self._login_as(self.super_admin_email, self.super_admin_password)
+            self.assertEqual(client.post(review, json={"verdict": "confirm_cheat", "note": "Risk score only"}, headers=SECURE_HEADERS).status_code, 409)
+            self.assertEqual(client.post(review, json={"verdict": "false_positive", "note": "Evidence reviewed"}, headers=SECURE_HEADERS).status_code, 200)
+            self.assertEqual(client.post(review, json={"verdict": "false_positive", "note": "Duplicate decision"}, headers=SECURE_HEADERS).status_code, 409)
+            self.assertEqual(game_sessions.find_one({"_id": match.inserted_id})["admin_review_status"], "false_positive")
+        finally:
+            security_events.delete_one({"_id": event.inserted_id})
+            game_sessions.delete_one({"_id": match.inserted_id})
+            admin_audit_log.delete_many({"$or": [{"details.event_id": str(event.inserted_id)}, {"details.session_id": session_id}]})
+
 
 if __name__ == "__main__":
     unittest.main()

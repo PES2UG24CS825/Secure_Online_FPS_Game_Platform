@@ -44,7 +44,8 @@ def resolve_match_combat_stats(summary, telemetry_events):
             (cmpl_telem[key] for key in SUMMARY_FIELDS[metric] if cmpl_telem.get(key) is not None),
             None,
         )
-        candidates = [int(v) for v in (stored, observed, cmpl_val) if v is not None]
+        sources = (stored,) if summary.get("stats_source") == "multiplayer_server" else (stored, observed, cmpl_val)
+        candidates = [int(v) for v in sources if v is not None]
         stats[metric] = max(candidates) if candidates else None
 
     kills = stats["kills"]

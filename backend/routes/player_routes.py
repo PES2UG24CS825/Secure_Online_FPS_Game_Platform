@@ -4,6 +4,7 @@ import binascii
 import io
 import json
 import logging
+import re
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
@@ -33,8 +34,11 @@ from database.db import (
     player_notifications,
     honour_history,
 )
+from services.player_notifications import CATEGORIES, OPTIONAL_CATEGORIES, category_filter, notify_player, serialize_notification
 from services.csrf import verify_csrf_and_origin
 from routes.auth_routes import parse_client_device
+
+REWARDS_XP_PER_LEVEL = 250
 
 
 def format_login_entry(item):
@@ -59,10 +63,10 @@ def format_login_entry(item):
         "ip_address": ip_display,
         "raw_ip": ip_raw,
         "authentication_method": item.get("authentication_method", "password+mfa"),
-        "success": item.get("status", "success") == "success",
-        "browser": browser or "Google Chrome",
+        "success": item.get("status") == "success" or item.get("type") == "login_success",
+        "browser": browser or "Unknown",
         "browser_icon": browser_icon or "🌐",
-        "os": os_name or "Windows",
+        "os": os_name or "Unknown",
         "device": device or f"{browser} ({os_name})",
     }
 
@@ -78,6 +82,37 @@ ACHIEVEMENTS = [
     {"id": "honourable_operator", "name": "Honourable Operator", "desc": "Maintain a perfect 100 Honour Score across 3+ matches", "reward_xp": 200, "reward_coins": 100},
 ]
 
+# Keep the stored keys stable for existing profiles and reward ownership.
+DEFAULT_PROFILE_AVATAR = "default-operator"
+PROFILE_AVATARS = {
+    DEFAULT_PROFILE_AVATAR: {"name": "Tactical Operator"},
+    "chibi-male-1": {"name": "Chibi Version 1", "reward_item": "skin_cyber_ninja", "free": True},
+    "chibi-male-2": {"name": "Chibi Version 2", "reward_item": "skin_tactical_vanguard", "free": True},
+    "chibi-female-1": {"name": "Chibi Version 3", "reward_item": "skin_neon_valkyrie", "free": True},
+    "chibi-female-2": {"name": "Chibi Version 4", "reward_item": "skin_phantom_ghost", "free": True},
+    "valkyrie-void": {"name": "Valkyrie Void", "reward_item": "skin_valkyrie_void"},
+    "ghost-specops": {"name": "Ghost Spec-Ops", "reward_item": "skin_ghost_specops"},
+    "celestial-sovereign": {"name": "Celestial Sovereign", "reward_item": "skin_celestial_sovereign"},
+}
+
+
+def avatar_option(key):
+    return {"key": key, "name": PROFILE_AVATARS[key]["name"], "src": f"/public/avatars/{key}.png"}
+
+
+def profile_avatar(customization, *, include_legacy=False):
+    key = customization.get("avatar")
+    if isinstance(key, str) and key in PROFILE_AVATARS:
+        return avatar_option(key)
+    src = customization.get("avatar_url")
+    if isinstance(src, str) and re.fullmatch(r"/(?:api/media/avatars/[a-zA-Z0-9_-]+\.webp|public/cosmetics/avatar-[0-9]+\.png)", src):
+        return {"key": key if isinstance(key, str) and key else "custom", "name": "Profile avatar", "src": src}
+    legacy = customization.get("avatar_image")
+    if include_legacy and isinstance(legacy, str) and re.fullmatch(r"data:image/(?:jpeg|png|webp);base64,[a-zA-Z0-9+/=]+", legacy):
+        return {"key": "custom", "name": "Custom avatar", "src": legacy}
+    return avatar_option(DEFAULT_PROFILE_AVATAR)
+
+
 REWARD_STORE = {
     # ==========================================
     # ★ 1,000 COIN MYTHIC MASTERPIECES ★
@@ -88,8 +123,6 @@ REWARD_STORE = {
         "price": 1000,
         "icon": "👑",
         "category": "avatar",
-        "avatar_key": "celestial-sovereign",
-        "preview": "public/avatars/celestial-sovereign.png",
         "masterpiece": True,
     },
     "banner_nebula_eternity": {
@@ -112,8 +145,6 @@ REWARD_STORE = {
         "price": 220,
         "icon": "⚡",
         "category": "avatar",
-        "avatar_key": "valkyrie-void",
-        "preview": "public/avatars/valkyrie-void.png",
     },
     "skin_ghost_specops": {
         "name": "Ghost Spec-Ops Avatar",
@@ -121,8 +152,6 @@ REWARD_STORE = {
         "price": 200,
         "icon": "🥷",
         "category": "avatar",
-        "avatar_key": "ghost-specops",
-        "preview": "public/avatars/ghost-specops.png",
     },
     "skin_neon_valkyrie": {
         "name": "Neon Valkyrie Chibi",
@@ -130,8 +159,6 @@ REWARD_STORE = {
         "price": 150,
         "icon": "💜",
         "category": "avatar",
-        "avatar_key": "chibi-female-1",
-        "preview": "public/avatars/chibi-female-1.png",
     },
     "skin_cyber_ninja": {
         "name": "Cyber Infiltrator Chibi",
@@ -139,8 +166,6 @@ REWARD_STORE = {
         "price": 140,
         "icon": "🗡️",
         "category": "avatar",
-        "avatar_key": "chibi-male-1",
-        "preview": "public/avatars/chibi-male-1.png",
     },
     "skin_phantom_ghost": {
         "name": "Phantom Recon Chibi",
@@ -148,8 +173,6 @@ REWARD_STORE = {
         "price": 160,
         "icon": "🔮",
         "category": "avatar",
-        "avatar_key": "chibi-female-2",
-        "preview": "public/avatars/chibi-female-2.png",
     },
     "skin_tactical_vanguard": {
         "name": "Tactical Vanguard Chibi",
@@ -157,8 +180,6 @@ REWARD_STORE = {
         "price": 130,
         "icon": "🛡️",
         "category": "avatar",
-        "avatar_key": "chibi-male-2",
-        "preview": "public/avatars/chibi-male-2.png",
     },
 
     # ==========================================
@@ -247,6 +268,11 @@ REWARD_STORE = {
     "elite_badge": {"name": "Elite sentinel badge", "description": "A premium SecureFPS profile badge.", "price": 300, "icon": "✦", "category": "badge", "hidden": True},
     "stealth_camo": {"name": "Night-Stalker Operator Camo", "description": "Matte-black stealth tactical uniform.", "price": 250, "icon": "🥷", "category": "perk", "hidden": True},
 }
+
+for avatar_key, entry in PROFILE_AVATARS.items():
+    if reward_item := entry.get("reward_item"):
+        REWARD_STORE[reward_item].update(avatar_key=avatar_key, preview=avatar_option(avatar_key)["src"])
+
 
 UPLOADS_DIR = Path(__file__).resolve().parents[1] / "uploads"
 AVATARS_DIR = UPLOADS_DIR / "avatars"
@@ -369,6 +395,16 @@ def get_profile():
         except Exception:
             pass
 
+    customization = user.get("profile_customization") or {"avatar": DEFAULT_PROFILE_AVATAR, "banner": "default-banner"}
+    selected_avatar = profile_avatar(customization, include_legacy=True)
+    owned = set((user.get("rewards") or {}).get("owned_items") or [])
+    avatars = [
+        avatar_option(key) for key, entry in PROFILE_AVATARS.items()
+        if key in (DEFAULT_PROFILE_AVATAR, selected_avatar["key"]) or entry.get("free") or entry.get("reward_item") in owned
+    ]
+    if selected_avatar["key"] not in PROFILE_AVATARS:
+        avatars.append(selected_avatar)
+
     return jsonify({
         "id": str(user["_id"]),
         "name": user["name"],
@@ -381,10 +417,9 @@ def get_profile():
         "has_pending_appeal": bool(pending_appeal),
         "honour_score": user.get("honour_score", 100),
         "created_at": created_at_val.isoformat() if created_at_val and hasattr(created_at_val, "isoformat") else (str(created_at_val) if created_at_val else None),
-        "profile_customization": user.get("profile_customization", {
-            "avatar": "default-operator",
-            "banner": "default-banner",
-        }),
+        "profile_customization": {**customization, "avatar": selected_avatar["key"]},
+        "avatar": selected_avatar,
+        "avatar_options": avatars,
     })
 
 
@@ -399,7 +434,7 @@ def update_profile_customization():
     banner = data.get("banner")
     avatar_image = data.get("avatar_image") or None
     banner_image = data.get("banner_image") or None
-    allowed_avatars = {"default-operator", "chibi-male-1", "chibi-female-1", "chibi-male-2", "chibi-female-2", "valkyrie-void", "ghost-specops", "celestial-sovereign", "custom"}
+    allowed_avatars = PROFILE_AVATARS.keys() | {"custom"}
     allowed_banners = {"default-banner", "sakura", "frontline", "dawn", "neon", "battlefield", "command-center", "cyber-metropolis", "orbital-bastion", "nebula-eternity", "custom"}
 
     if avatar_image:
@@ -468,7 +503,7 @@ def update_profile_customization():
     )
     if not result.matched_count:
         return jsonify({"message": "Player account not found."}), 404
-    return jsonify({"message": "Profile appearance saved.", "profile_customization": customization})
+    return jsonify({"message": "Profile appearance saved.", "profile_customization": customization, "avatar": profile_avatar(customization)})
 
 @player_bp.get("/stats")
 def get_player_stats():
@@ -542,14 +577,20 @@ def get_player_stats():
     overall_accuracy = totals["accuracy"]
 
     total_matches = len(completed_sessions) + len(completed_legacy)
-    wins = sum(1 for s in completed_sessions if s.get("winner") in {"Operator", "player", player.get("name")}) + sum(1 for m in completed_legacy if m.get("result") in {"victory", "win"})
-    losses = max(0, total_matches - wins)
+    verified = [match for match in completed_sessions if match.get("stats_source") == "multiplayer_server"]
+    wins = sum(match.get("result") == "win" for match in verified)
+    losses = sum(match.get("result") == "loss" for match in verified)
+    draws = sum(match.get("result") == "draw" for match in verified)
+    verified_hits = sum(match.get("shots_hit", 0) for match in verified)
+    verified_headshots = sum(match.get("headshots", 0) for match in verified)
 
     total_seconds = 0
     for s in completed_sessions:
         st = s.get("started_at")
         en = s.get("ended_at")
-        if st and en:
+        if s.get("stats_source") == "multiplayer_server":
+            total_seconds += s.get("duration_seconds", 0)
+        elif st and en:
             try:
                 diff = int((en - st).total_seconds())
                 total_seconds += max(0, diff)
@@ -559,8 +600,8 @@ def get_player_stats():
     rewards = player.get("rewards") or {}
     coins = int(rewards.get("coins", 0))
     xp = int(rewards.get("xp", 0))
-    level = 1 + int(xp // 100)
-    xp_progress = int(xp % 100)
+    level = 1 + xp // REWARDS_XP_PER_LEVEL
+    xp_progress = xp % REWARDS_XP_PER_LEVEL
 
     latest_analysis = game_events.find_one(
         {"user_id": user_oid, "analysis_type": "game_session", "status": "success"},
@@ -573,6 +614,12 @@ def get_player_stats():
         "total_matches": total_matches,
         "wins": wins,
         "losses": losses,
+        "draws": draws,
+        "verified_matches": len(verified),
+        "win_rate": round(100 * wins / len(verified), 1) if verified else None,
+        "assists": sum(match.get("assists", 0) for match in verified) if verified else None,
+        "headshots": verified_headshots if verified else None,
+        "headshot_percentage": round(100 * verified_headshots / verified_hits, 1) if verified_hits else None,
         "kills": total_kills,
         "deaths": total_deaths,
         "kdr": kdr,
@@ -726,7 +773,9 @@ def get_matches():
             "kd": combat["kdr"],
             "honour_awarded": game_session.get("honour_awarded"),
             "accuracy": combat["accuracy"],
-            "headshot_ratio": raw.get("headshot_ratio"),
+            "headshot_ratio": (
+                game_session["headshots"] / combat["shots_hit"] if combat["shots_hit"] else None
+            ) if game_session.get("stats_source") == "multiplayer_server" else raw.get("headshot_ratio"),
             "risk_score": clamped_score,
             "risk_category": classification["category"],
             "risk_meaning": classification["meaning"],
@@ -783,7 +832,7 @@ def get_leaderboard():
             ],
             "account_status": {"$nin": ["suspended", "banned", "deleted"]}
         },
-        {"name": 1, "email": 1, "role": 1, "account_status": 1, "is_demo": 1},
+        {"name": 1, "email": 1, "role": 1, "account_status": 1, "is_demo": 1, "profile_customization.avatar": 1, "profile_customization.avatar_url": 1},
     )
 
     for user in user_cursor:
@@ -901,6 +950,7 @@ def get_leaderboard():
         players.append({
             "id": str(user["_id"]),
             "name": user.get("name", "Player"),
+            "avatar": profile_avatar(user.get("profile_customization") or {}),
             "matches": matches_played,
             "kills": total_kills,
             "deaths": total_deaths,
@@ -958,10 +1008,19 @@ def get_rewards():
             or (item.get(f"{category}_key") and item[f"{category}_key"] == appearance.get(category))
         ):
             slots[category] = key
+    unlocked = rewards.get("unlocked_achievements") or [
+        "first_blood" if total_kills > 0 else None,
+        "consistent_player" if int(rewards.get("daily_streak", 0)) >= 3 else None,
+        "honourable_operator" if int(user.get("honour_score", 100)) == 100 and total_matches >= 3 else None,
+    ]
+    for achievement in ACHIEVEMENTS:
+        if achievement["id"] in unlocked:
+            notify_player(user_oid, "achievement_earned", achievement["id"])
     return jsonify({
         "coins": int(rewards.get("coins", 0)),
         "xp": int(rewards.get("xp", 0)),
-        "level": int(rewards.get("xp", 0)) // 250 + 1,
+        "level": int(rewards.get("xp", 0)) // REWARDS_XP_PER_LEVEL + 1,
+        "xp_per_level": REWARDS_XP_PER_LEVEL,
         "daily_streak": int(rewards.get("daily_streak", 0)),
         "last_daily_login": rewards.get("last_daily_login"),
         "owned_items": rewards.get("owned_items", []),
@@ -988,11 +1047,7 @@ def get_rewards():
                 "desc": a["desc"],
                 "reward_xp": a["reward_xp"],
                 "reward_coins": a["reward_coins"],
-                "unlocked": a["id"] in (rewards.get("unlocked_achievements") or [
-                    "first_blood" if total_kills > 0 else None,
-                    "consistent_player" if int(rewards.get("daily_streak", 0)) >= 3 else None,
-                    "honourable_operator" if int(user.get("honour_score", 100)) == 100 and total_matches >= 3 else None,
-                ])
+                "unlocked": a["id"] in unlocked
             }
             for a in ACHIEVEMENTS
         ],
@@ -1028,6 +1083,7 @@ def claim_daily_reward():
             {"$setOnInsert": {**claim, "_id": claim_id, "user_id": user_oid}},
             upsert=True,
         )
+        notify_player(user_oid, "daily_reward", claim_id)
 
     if previous_key == today_key:
         prior_claim = next(
@@ -1180,6 +1236,7 @@ def equip_reward_item():
         "message": "Equipment updated successfully.",
         "equipped_item": item_id,
         "avatar": applied_avatar,
+        "avatar_portrait": profile_avatar({"avatar": applied_avatar, "avatar_url": artwork}) if applied_avatar else None,
         "artwork": artwork,
         "banner": applied_banner
     })
@@ -1281,11 +1338,9 @@ def get_security_summary():
         {"user_id": user_oid, "type": "login_success"},
         sort=[("created_at", -1)],
     )
-    logins = list(login_history.find(
-        {"user_id": user_oid, "type": "login_success"}
-    ).sort("created_at", -1).limit(50))
+    logins = list(login_history.find({"user_id": user_oid}).sort("created_at", -1).limit(50))
     warnings = list(security_events.find(
-        {"user_id": user_oid, "type": "gameplay_alert_review", "action": "warn"}
+        {"user_id": user_oid, "$or": [{"type": "gameplay_alert_review", "action": "warn"}, {"type": "moderator_warning"}]}
     ).sort("created_at", -1).limit(10))
     active_sessions = list(sessions_db.find(
         {"user_id": user_oid, "is_active": True}
@@ -1297,15 +1352,17 @@ def get_security_summary():
     latest_result = latest_analysis.get("result") or {}
     risk_score = latest_analysis.get("risk_score", latest_result.get("risk_score"))
 
+    email_name, _, email_domain = (user.get("email") or "").partition("@")
     return jsonify({
         "mfa_status": "enabled" if user.get("mfa_enabled") else "disabled",
+        "recovery_email": f"{email_name[:1]}•••@{email_domain}" if user.get("email_verified") and email_domain else None,
         "account_status": user.get("account_status") or ("suspended" if user.get("revoked") else "active"),
         "honour_score": user.get("honour_score", 100),
         "play_restricted_until": play_restricted_until.isoformat()
             if play_restricted_until else None,
         "security_warnings": [
             {
-                "note": item.get("note", "A gameplay security warning was recorded."),
+                "note": item.get("note") or item.get("description") or "A security warning was recorded.",
                 "created_at": item["created_at"].isoformat() if item.get("created_at") else None,
             }
             for item in warnings
@@ -1316,6 +1373,8 @@ def get_security_summary():
             {
                 "ip_address": item.get("ip_address", item.get("ip", "Unknown")),
                 "device": item.get("device", "Unknown device"),
+                "id": str(item["_id"]),
+                "is_current": str(item["_id"]) == session.get("auth_session_record_id"),
                 "created_at": item["created_at"].isoformat() if item.get("created_at") else None,
                 "last_activity": item.get("last_activity", item.get("created_at")).isoformat()
                     if item.get("last_activity", item.get("created_at")) else None,
@@ -1537,54 +1596,67 @@ def submit_appeal():
 
 @player_bp.get("/notifications")
 def get_notifications():
-    user_id = current_user()
-    if not user_id:
-        return jsonify({"message": "Authentication required."}), 401
-
-    user_oid = ObjectId(user_id)
+    user_oid = ObjectId(current_user())
     limit = max(1, min(request.args.get("limit", 20, type=int), 50))
+    page = max(1, min(request.args.get("page", 1, type=int), 10000))
+    category = request.args.get("category", "")
+    status = request.args.get("status", "")
+    if category not in ("", *CATEGORIES) or status not in ("", "unread"):
+        return jsonify({"message": "Invalid notification filter."}), 400
 
-    notes = list(player_notifications.find({"user_id": user_oid}).sort("created_at", -1).limit(limit))
-    unread_count = player_notifications.count_documents({"user_id": user_oid, "read": False})
+    visible = {"user_id": user_oid, "dismissed_at": None}
+    unread = {"$or": [{"read": False}, {"read": {"$exists": False}, "is_read": {"$ne": True}}]}
+    filters = [visible]
+    if category:
+        filters.append(category_filter(category))
+    if status == "unread":
+        filters.append(unread)
+    query = {"$and": filters}
+    notes = list(player_notifications.find(query).sort([("created_at", -1), ("_id", -1)]).skip((page - 1) * limit).limit(limit))
     return jsonify({
-        "notifications": [
-            {
-                "id": str(n["_id"]),
-                "type": n.get("type", "info"),
-                "title": n.get("title", "Notification"),
-                "message": n.get("message", ""),
-                "read": n.get("read", False),
-                "created_at": n["created_at"].isoformat() if n.get("created_at") else None,
-            }
-            for n in notes
-        ],
-        "unread_count": unread_count
+        "notifications": [serialize_notification(note) for note in notes],
+        "unread_count": player_notifications.count_documents({"$and": [visible, unread]}),
+        "total": player_notifications.count_documents(query),
+        "page": page,
+        "limit": limit,
     })
 
 
 @player_bp.post("/notifications/read")
 def mark_notifications_read():
-    user_id = current_user()
-    if not user_id:
-        return jsonify({"message": "Authentication required."}), 401
-
-    user_oid = ObjectId(user_id)
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"message": "A notification action is required."}), 400
+    action = data.get("action", "read")
+    ids = data.get("notification_ids", [])
     mark_all = data.get("mark_all", False)
-    ids = data.get("notification_ids") or []
+    if action not in ("read", "unread", "dismiss") or type(mark_all) is not bool or (
+        mark_all and action != "read"
+    ) or (not mark_all and (not isinstance(ids, list) or not 1 <= len(ids) <= 50 or any(
+        not isinstance(item, str) or not ObjectId.is_valid(item) for item in ids
+    ))):
+        return jsonify({"message": "Invalid notification action or IDs."}), 400
 
-    if mark_all:
-        player_notifications.update_many({"user_id": user_oid, "read": False}, {"$set": {"read": True}})
-    elif ids:
-        valid_oids = []
-        for i in ids:
-            try:
-                valid_oids.append(ObjectId(i))
-            except Exception:
-                pass
-        player_notifications.update_many({"user_id": user_oid, "_id": {"$in": valid_oids}}, {"$set": {"read": True}})
+    query = {"user_id": ObjectId(current_user()), "dismissed_at": None}
+    if not mark_all:
+        query["_id"] = {"$in": [ObjectId(item) for item in ids]}
+    changes = {"dismissed_at": datetime.now(timezone.utc)} if action == "dismiss" else {"read": action == "read"}
+    player_notifications.update_many(query, {"$set": changes})
+    return jsonify({"success": True})
 
-    return jsonify({"success": True, "message": "Notifications updated."})
+
+@player_bp.route("/notifications/preferences", methods=["GET", "PUT"])
+def notification_preferences():
+    user_oid = ObjectId(current_user())
+    if request.method == "PUT":
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict) or not data or any(
+            key not in OPTIONAL_CATEGORIES or type(value) is not bool for key, value in data.items()
+        ):
+            return jsonify({"message": "Only optional notification categories can be changed."}), 400
+        users.update_one({"_id": user_oid}, {"$set": {f"notification_preferences.{key}": value for key, value in data.items()}})
+    stored = (users.find_one({"_id": user_oid}, {"notification_preferences": 1}) or {}).get("notification_preferences") or {}
+    return jsonify({"preferences": {key: stored.get(key) is not False for key in OPTIONAL_CATEGORIES}, "labels": OPTIONAL_CATEGORIES})
 
 
 # =========================================================================

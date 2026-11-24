@@ -1,3 +1,4 @@
+from services.player_notifications import notify_player
 from datetime import datetime, timezone
 
 from database.db import game_sessions, reward_transactions, users
@@ -32,6 +33,8 @@ def apply_match_credit(match):
             {"$set": {"reward_credit.status": "failed"}},
         )
         raise
+    if entry["xp"] or entry["coins"]:
+        notify_player(user_id, "match_reward", session_id)
     game_sessions.update_one(
         {"_id": match["_id"]},
         {"$set": {"reward_credit.status": "credited", "reward_credit.credited_at": datetime.now(timezone.utc)}},

@@ -20,13 +20,13 @@ Write-Host "===============================================================" -Fo
 if ($globalCloudflared) {
     Write-Host "[OK] Global cloudflared found in PATH: $($globalCloudflared.Source)" -ForegroundColor Green
     & cloudflared --version
-    exit 0
+    exit $LASTEXITCODE
 }
 
 if (Test-Path $localCloudflared) {
     Write-Host "[OK] Local cloudflared found at: $localCloudflared" -ForegroundColor Green
     & $localCloudflared --version
-    exit 0
+    exit $LASTEXITCODE
 }
 
 Write-Host "[INFO] cloudflared is not installed. Downloading official release..." -ForegroundColor Yellow
@@ -34,17 +34,19 @@ $downloadUrl = "https://github.com/cloudflare/cloudflared/releases/latest/downlo
 
 try {
     Write-Host "Downloading from: $downloadUrl" -ForegroundColor Gray
-    curl.exe -L -f --output $localCloudflared $downloadUrl
-    if (Test-Path $localCloudflared) {
-        Write-Host "[SUCCESS] Downloaded cloudflared to: $localCloudflared" -ForegroundColor Green
-        & $localCloudflared --version
-    } else {
-        throw "Download failed or output binary not found."
-    }
+    $partial = Join-Path $toolsDir 'cloudflared-download.exe'
+    curl.exe -L -f --output $partial $downloadUrl
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $partial)) { throw 'Download failed.' }
+    & $partial --version
+    if ($LASTEXITCODE -ne 0) { throw 'Downloaded cloudflared failed its version check.' }
+    Move-Item -LiteralPath $partial -Destination $localCloudflared
+    Write-Host "[SUCCESS] Downloaded cloudflared to: $localCloudflared" -ForegroundColor Green
 } catch {
     Write-Host "[ERROR] Could not automatically download cloudflared: $_" -ForegroundColor Red
     Write-Host "Please manually download cloudflared.exe from:" -ForegroundColor Yellow
     Write-Host "  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -ForegroundColor White
     Write-Host "And place it inside: $localCloudflared" -ForegroundColor White
     exit 1
+} finally {
+    if ($partial -and (Test-Path -LiteralPath $partial)) { Remove-Item -LiteralPath $partial }
 }

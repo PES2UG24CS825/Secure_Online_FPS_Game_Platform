@@ -741,6 +741,7 @@ class MultiplayerClient {
         kills: local?.kills ?? gameMode.kills,
         deaths: local?.deaths ?? gameMode.deaths,
         assists: local?.assists ?? gameMode.assists,
+        completionToken: data.completionToken,
         shots: local?.shotsFired ?? gameMode.shotsFired,
         hits: local?.shotsHit ?? gameMode.shotsHit,
         accuracy: local?.accuracy ? (local.accuracy / 100) : (gameMode.shotsFired > 0 ? (gameMode.shotsHit / gameMode.shotsFired) : 0),
@@ -770,13 +771,13 @@ class MultiplayerClient {
     }
   }
 
-  async createRoom(playerName, honourScore = 100) {
+  async createRoom(playerName, honourScore = 100, operator = 'vanguard') {
     playerName = (playerName || 'Operator_Host').trim();
     try {
       await this.connect();
       if (this.socket && this.socket.connected) {
         this.localPlayerId = this.socket.id;
-        this.socket.emit('lobby:create', { name: playerName, honour_score: honourScore });
+        this.socket.emit('lobby:create', { name: playerName, honour_score: honourScore, operator });
       }
     } catch (err) {
       window.dispatchEvent(new CustomEvent('fps:lobby_error', {
@@ -785,13 +786,13 @@ class MultiplayerClient {
     }
   }
 
-  async joinRoom(roomCode, playerName, honourScore = 100) {
+  async joinRoom(roomCode, playerName, honourScore = 100, operator = 'vanguard') {
     playerName = (playerName || 'Operator').trim();
     roomCode = (roomCode || '').toUpperCase().trim();
     try {
       await this.connect();
       if (this.socket && this.socket.connected) {
-        this.socket.emit('lobby:join', { roomCode, name: playerName, honour_score: honourScore });
+        this.socket.emit('lobby:join', { roomCode, name: playerName, honour_score: honourScore, operator });
       }
     } catch (err) {
       window.dispatchEvent(new CustomEvent('fps:lobby_error', {

@@ -273,11 +273,16 @@ async function loadLeaderboard() {
     const renderPlayer = (player) => `
       <div class="leaderboard-row ${current?.id === player.id ? "current" : ""}">
         <div class="leaderboard-rank rank-${Number(player.rank)}">#${Number(player.rank)}</div>
-        <div class="leaderboard-player"><strong>${featureEscape(player.name)}</strong><small>${Number(player.accuracy).toFixed(1)}% accuracy · ${Number(player.matches)} matches</small></div>
+        <div class="leaderboard-player">
+          <img class="leaderboard-avatar" src="${featureEscape(player.avatar.src)}" alt="" width="34" height="34">
+          <div><strong>${featureEscape(player.name)}</strong><small>${Number(player.accuracy).toFixed(1)}% accuracy · ${Number(player.matches)} matches</small></div>
+        </div>
         <div class="leaderboard-metric"><strong>${Number(player.kills)}</strong><small>kills · ${Number(player.kd).toFixed(2)} K/D</small></div>
         <div class="leaderboard-metric"><strong>${Number(player.matches)}</strong><small>matches</small></div>
       </div>`;
-    list.innerHTML = (data.leaderboard || []).map(renderPlayer).join("") || '<div class="empty">Complete a match to enter the leaderboard.</div>';
+    const ranked = data.leaderboard || [];
+    const visible = current && !ranked.some(player => player.id === current.id) ? [...ranked, current] : ranked;
+    list.innerHTML = visible.map(renderPlayer).join("") || '<div class="empty">Complete a match to enter the leaderboard.</div>';
     const overviewList = document.getElementById("overviewLeaderboardList");
     if (overviewList) overviewList.innerHTML = (data.leaderboard || []).slice(0, 5).map(renderPlayer).join("") || '<div class="empty">Complete a match to enter the leaderboard.</div>';
   } catch (error) {
@@ -359,6 +364,8 @@ rewardStore?.addEventListener("click", async (event) => {
     if (result.avatar && typeof currentAppearance !== "undefined") {
       currentAppearance.avatar = result.avatar;
       currentAppearance.avatar_image = result.artwork || null;
+      savedPortrait = result.avatar_portrait;
+      loadLeaderboard();
     }
     if (result.banner && typeof currentAppearance !== "undefined") {
       currentAppearance.banner = result.banner;

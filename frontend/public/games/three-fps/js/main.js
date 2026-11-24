@@ -189,9 +189,6 @@ async function initGame() {
 function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplayer, camera) {
   const loadingOverlay = document.getElementById('loading-overlay');
 
-  // Load Saved Preferences from localStorage
-  loadSavedSettings(controller, camera);
-
   // Helper to deploy local game match with strict mode isolation
   async function deployLocalMatch(mode, difficulty = 'normal') {
     window.gameAudio.resume();
@@ -403,6 +400,27 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
   // 5. MULTIPLAYER LOBBY SYSTEM
   // =========================================================================
   const playerNameInput = document.getElementById('mp-player-name');
+  const operatorSelect = document.getElementById('mp-operator');
+  const previews = { vanguard: window.SecureFPSGame.menuOperator };
+  function selectOperator() {
+    const key = operatorSelect.value;
+    if (!previews[key]) {
+      previews[key] = new TacticalOperator(window.SecureFPSGame.scene, {
+        isFemale: true,
+        callsign: 'Valkyrie',
+        position: new THREE.Vector3(0, 0, 24),
+      });
+    }
+    window.SecureFPSGame.menuOperator.root.visible = false;
+    window.SecureFPSGame.menuOperator = previews[key];
+    previews[key].root.visible = true;
+  }
+  operatorSelect.value = localStorage.getItem('securefps_operator') === 'valkyrie' ? 'valkyrie' : 'vanguard';
+  operatorSelect.addEventListener('change', () => {
+    selectOperator();
+    localStorage.setItem('securefps_operator', operatorSelect.value);
+  });
+  selectOperator();
   const serverStatusPill = document.getElementById('mp-server-status');
   const serverStatusText = document.getElementById('mp-status-text');
   const roomSelectView = document.getElementById('mp-room-selection');
@@ -718,7 +736,7 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
 
   if (btnCreateRoom) {
     btnCreateRoom.addEventListener('click', () => {
-      multiplayer.createRoom(getPlayerName(), window.localPlayerHonour || 100);
+      multiplayer.createRoom(getPlayerName(), window.localPlayerHonour || 100, operatorSelect.value);
     });
   }
 
@@ -729,7 +747,7 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
         showError('Please enter a valid 6-character room code.');
         return;
       }
-      multiplayer.joinRoom(code, getPlayerName(), window.localPlayerHonour || 100);
+      multiplayer.joinRoom(code, getPlayerName(), window.localPlayerHonour || 100, operatorSelect.value);
     });
   }
 
@@ -952,12 +970,13 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
   // Master Volume
   const masterVolInput = document.getElementById('setting-master-volume');
   const masterVolVal = document.getElementById('setting-master-val');
-  if (masterVolInput && masterVolVal) {
-    masterVolInput.addEventListener('input', () => {
-      masterVolVal.textContent = `${masterVolInput.value}%`;
-      window.gameAudio.setMasterVolume(parseFloat(masterVolInput.value) / 100);
-    });
-  }
+  const muteInput = document.getElementById('setting-mute');
+  const updateMasterVolume = () => {
+    masterVolVal.textContent = `${masterVolInput.value}%`;
+    window.gameAudio.setMasterVolume(muteInput.checked ? 0 : Number(masterVolInput.value) / 100);
+  };
+  masterVolInput.addEventListener('input', updateMasterVolume);
+  muteInput.addEventListener('change', updateMasterVolume);
 
   // Sound FX Volume
   const volumeInput = document.getElementById('setting-volume');
@@ -969,18 +988,6 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
         window.gameAudio.setSFXVolume(parseFloat(volumeInput.value) / 100);
       } else {
         window.gameAudio.setMasterVolume(parseFloat(volumeInput.value) / 100);
-      }
-    });
-  }
-
-  // Music Volume
-  const musicVolInput = document.getElementById('setting-music-volume');
-  const musicVolVal = document.getElementById('setting-music-val');
-  if (musicVolInput && musicVolVal) {
-    musicVolInput.addEventListener('input', () => {
-      musicVolVal.textContent = `${musicVolInput.value}%`;
-      if (typeof window.gameAudio.setMusicVolume === 'function') {
-        window.gameAudio.setMusicVolume(parseFloat(musicVolInput.value) / 100);
       }
     });
   }
@@ -1008,6 +1015,11 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
       window.SecureFPSGame?.hud?.setCrosshairVisible(crosshairVisibleCheck.checked);
     });
   }
+  const crosshairOpacity = document.getElementById('setting-crosshair-opacity');
+  crosshairOpacity.addEventListener('input', () => {
+    document.getElementById('crosshair').style.opacity = Number(crosshairOpacity.value) / 100;
+    document.getElementById('setting-crosshair-opacity-value').value = `${crosshairOpacity.value}%`;
+  });
 
   // Show FPS Toggle
   const showFpsCheck = document.getElementById('setting-show-fps');
@@ -1026,6 +1038,7 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
       const fov = parseInt(fovInput.value, 10);
       fovVal.textContent = `${fov}°`;
       camera.fov = fov;
+      window.SecureFPSGame.weapons.baseFov = fov;
       camera.updateProjectionMatrix();
     });
   }
@@ -1058,132 +1071,213 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
     });
   }
 
-  // Multiplayer Server URL
-  const serverUrlInput = document.getElementById('setting-server-url');
-  if (serverUrlInput) {
-    serverUrlInput.value = localStorage.getItem('securefps_server_url') || '';
-  }
-
-  // Save Settings Button
-  const btnSaveSettings = document.getElementById('btn-save-settings');
-  if (btnSaveSettings) {
-    btnSaveSettings.addEventListener('click', () => {
-      const settings = {
-        sensitivity: sensInput ? sensInput.value : '4',
-        aimSensitivity: aimSensInput ? (parseFloat(aimSensInput.value) / 10).toString() : '0.7',
-        masterVolume: masterVolInput ? masterVolInput.value : '90',
-        sfxVolume: volumeInput ? volumeInput.value : '85',
-        musicVolume: musicVolInput ? musicVolInput.value : '70',
-        crosshairSize: crosshairSizeSelect ? crosshairSizeSelect.value : 'normal',
-        crosshairColor: crosshairColorSelect ? crosshairColorSelect.value : 'cyan',
-        crosshairVisible: crosshairVisibleCheck ? crosshairVisibleCheck.checked : true,
-        showFps: showFpsCheck ? showFpsCheck.checked : true,
-        fov: fovInput ? fovInput.value : '75',
-        invertY: invertYCheck ? invertYCheck.checked : false,
-        graphics: graphicsSelect ? graphicsSelect.value : 'medium',
-        serverUrl: serverUrlInput ? serverUrlInput.value.trim() : ''
-      };
-      localStorage.setItem('securefps_settings', JSON.stringify(settings));
-      if (settings.serverUrl) {
-        localStorage.setItem('securefps_server_url', settings.serverUrl);
-      }
-      switchTab('bots');
-    });
-  }
+  wireGamePreferences();
+  wireGameRecording();
 
   if (sessionStorage.getItem('securefps_reconnect')) {
     switchTab('multiplayer');
   }
 }
 
-function loadSavedSettings(controller, camera) {
-  try {
-    const raw = localStorage.getItem('securefps_settings');
-    if (!raw) return;
-    const s = JSON.parse(raw);
+function wireGamePreferences() {
+  const settingsKey = 'securefps_settings';
+  const serverKey = 'securefps_server_url';
+  const serverInput = document.getElementById('setting-server-url');
+  const status = document.getElementById('settings-status');
+  const fields = {
+    sensitivity: 'setting-sens',
+    aimSensitivity: 'setting-aim-sens',
+    masterVolume: 'setting-master-volume',
+    mute: 'setting-mute',
+    sfxVolume: 'setting-volume',
+    crosshairSize: 'setting-crosshair-size',
+    crosshairColor: 'setting-crosshair-color',
+    crosshairVisible: 'setting-crosshair-visible',
+    crosshairOpacity: 'setting-crosshair-opacity',
+    showFps: 'setting-show-fps',
+    fov: 'setting-fov',
+    invertY: 'setting-invert-y',
+    graphics: 'setting-graphics',
+  };
 
-    if (s.sensitivity) {
-      const sens = parseFloat(s.sensitivity);
-      controller.mouseSensitivity = sens * 0.00055;
-      const el = document.getElementById('setting-sens');
-      const valEl = document.getElementById('setting-sens-val');
-      if (el) el.value = s.sensitivity;
-      if (valEl) valEl.textContent = sens.toFixed(1);
-    }
-    if (s.aimSensitivity && controller) {
-      const mult = parseFloat(s.aimSensitivity);
-      controller.aimSensitivityMultiplier = mult;
-      const el = document.getElementById('setting-aim-sens');
-      const valEl = document.getElementById('setting-aim-sens-val');
-      if (el) el.value = Math.round(mult * 10);
-      if (valEl) valEl.textContent = `${mult.toFixed(1)}x`;
-    }
-    if (s.masterVolume !== undefined) {
-      const mVol = parseFloat(s.masterVolume);
-      window.gameAudio.setMasterVolume(mVol / 100);
-      const el = document.getElementById('setting-master-volume');
-      const valEl = document.getElementById('setting-master-val');
-      if (el) el.value = s.masterVolume;
-      if (valEl) valEl.textContent = `${mVol}%`;
-    }
-    if (s.sfxVolume !== undefined) {
-      const sVol = parseFloat(s.sfxVolume);
-      if (typeof window.gameAudio.setSFXVolume === 'function') {
-        window.gameAudio.setSFXVolume(sVol / 100);
-      }
-      const el = document.getElementById('setting-volume');
-      const valEl = document.getElementById('setting-volume-val');
-      if (el) el.value = s.sfxVolume;
-      if (valEl) valEl.textContent = `${sVol}%`;
-    }
-    if (s.musicVolume !== undefined) {
-      const muVol = parseFloat(s.musicVolume);
-      if (typeof window.gameAudio.setMusicVolume === 'function') {
-        window.gameAudio.setMusicVolume(muVol / 100);
-      }
-      const el = document.getElementById('setting-music-volume');
-      const valEl = document.getElementById('setting-music-val');
-      if (el) el.value = s.musicVolume;
-      if (valEl) valEl.textContent = `${muVol}%`;
-    }
-    if (s.crosshairSize && window.SecureFPSGame?.hud) {
-      window.SecureFPSGame.hud.setCrosshairSize(s.crosshairSize);
-      const el = document.getElementById('setting-crosshair-size');
-      if (el) el.value = s.crosshairSize;
-    }
-    if (s.crosshairColor && window.SecureFPSGame?.hud) {
-      window.SecureFPSGame.hud.setCrosshairColor(s.crosshairColor);
-      const el = document.getElementById('setting-crosshair-color');
-      if (el) el.value = s.crosshairColor;
-    }
-    if (s.crosshairVisible !== undefined && window.SecureFPSGame?.hud) {
-      window.SecureFPSGame.hud.setCrosshairVisible(!!s.crosshairVisible);
-      const el = document.getElementById('setting-crosshair-visible');
-      if (el) el.checked = !!s.crosshairVisible;
-    }
-    if (s.showFps !== undefined) {
-      const cleanFps = document.getElementById('clean-fps-badge');
-      if (cleanFps) cleanFps.style.display = s.showFps ? 'block' : 'none';
-      const el = document.getElementById('setting-show-fps');
-      if (el) el.checked = !!s.showFps;
-    }
-    if (s.fov && camera) {
-      const fov = parseInt(s.fov, 10);
-      camera.fov = fov;
-      camera.updateProjectionMatrix();
-      const el = document.getElementById('setting-fov');
-      const valEl = document.getElementById('setting-fov-val');
-      if (el) el.value = s.fov;
-      if (valEl) valEl.textContent = `${fov}°`;
-    }
-    if (s.invertY !== undefined) {
-      controller.invertY = !!s.invertY;
-      const el = document.getElementById('setting-invert-y');
-      if (el) el.checked = !!s.invertY;
-    }
-  } catch (e) {
-    console.warn('[SecureFPS Settings] Load error:', e);
+  function readPreferences() {
+    return Object.fromEntries(Object.entries(fields).map(([key, id]) => {
+      const input = document.getElementById(id);
+      const value = input.type === 'checkbox' ? input.checked : input.value;
+      return [key, key === 'aimSensitivity' ? String(Number(value) / 10) : value];
+    }));
   }
+
+  const defaults = readPreferences();
+
+  function applyPreferences(preferences, strict = false) {
+    if (!preferences || typeof preferences !== 'object' || Array.isArray(preferences)) throw new Error('Invalid settings file.');
+    const values = Object.entries(fields).map(([key, id]) => {
+      const input = document.getElementById(id);
+      let value = preferences[key];
+      let valid;
+      if (input.type === 'checkbox') {
+        valid = typeof value === 'boolean';
+      } else if (input.type === 'range') {
+        valid = ['string', 'number'].includes(typeof value) && String(value).trim() !== '';
+        value = Number(value) * (key === 'aimSensitivity' ? 10 : 1);
+        valid = valid && Number.isFinite(value) && value >= Number(input.min) && value <= Number(input.max);
+      } else {
+        valid = [...input.options].some(option => option.value === value);
+      }
+      if (!valid && strict && Object.hasOwn(preferences, key)) throw new Error(`Invalid preference: ${input.labels[0]?.textContent || key}.`);
+      return { input, valid, value };
+    });
+
+    for (const { input, valid, value } of values) {
+      if (!valid) continue;
+      if (input.type === 'checkbox') input.checked = value;
+      else input.value = value;
+      input.dispatchEvent(new Event(input.type === 'range' ? 'input' : 'change'));
+    }
+  }
+
+  function restore() {
+    applyPreferences(defaults);
+    const saved = localStorage.getItem(settingsKey);
+    if (saved) applyPreferences(JSON.parse(saved));
+    serverInput.value = localStorage.getItem(serverKey) || '';
+  }
+
+  try { restore(); } catch { status.textContent = 'Saved preferences could not be read.'; }
+
+  document.getElementById('btn-save-settings').addEventListener('click', () => {
+    try {
+      const address = serverInput.value.trim();
+      if (address) {
+        const url = new URL(address);
+        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+          throw new Error('Enter an HTTP or HTTPS server origin without credentials or a path.');
+        }
+        localStorage.setItem(serverKey, url.origin);
+      } else {
+        localStorage.removeItem(serverKey);
+      }
+      localStorage.setItem(settingsKey, JSON.stringify({ version: 1, ...readPreferences() }));
+      status.textContent = 'Settings saved in this browser.';
+    } catch (error) {
+      status.textContent = error.message;
+    }
+  });
+  document.getElementById('restore-settings').addEventListener('click', () => {
+    try {
+      restore();
+      status.textContent = 'Saved preferences restored.';
+    } catch {
+      status.textContent = 'Saved preferences could not be read.';
+    }
+  });
+  document.getElementById('reset-settings').addEventListener('click', () => {
+    applyPreferences(defaults);
+    serverInput.value = '';
+    status.textContent = 'Defaults restored. Save settings to keep them.';
+  });
+
+  const fileInput = document.getElementById('settings-file');
+  document.getElementById('import-settings').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files[0];
+    fileInput.value = '';
+    if (!file) return;
+    try {
+      if (file.size > 16384) throw new Error('Settings files must be smaller than 16 KB.');
+      const document = JSON.parse(await file.text());
+      if (document?.version !== 1) throw new Error('Unsupported settings version.');
+      applyPreferences(document.preferences, true);
+      status.textContent = 'Preferences imported. Save settings to keep them.';
+    } catch (error) {
+      status.textContent = error.message;
+    }
+  });
+  document.getElementById('export-settings').addEventListener('click', () => {
+    const data = JSON.stringify({ version: 1, preferences: readPreferences() }, null, 2);
+    const url = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'securefps-settings.json';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+  const categories = document.querySelectorAll('[data-settings-category]');
+  const panels = document.querySelectorAll('[data-settings-panel]');
+  categories.forEach(button => button.addEventListener('click', () => {
+    categories.forEach(category => category.setAttribute('aria-pressed', String(category === button)));
+    panels.forEach(panel => { panel.hidden = panel.dataset.settingsPanel !== button.dataset.settingsCategory; });
+  }));
+}
+
+function wireGameRecording() {
+  const canvas = document.getElementById('game-canvas');
+  const start = document.getElementById('start-recording');
+  const stop = document.getElementById('stop-recording');
+  const download = document.getElementById('download-recording');
+  const status = document.getElementById('recording-status');
+  if (!canvas?.captureStream || typeof MediaRecorder !== 'function') {
+    status.textContent = 'Gameplay recording is unavailable in this browser.';
+    return;
+  }
+  status.textContent = 'Capture up to five minutes of arena video without audio or HUD overlays.';
+  start.disabled = false;
+  let recorder;
+  let recordingUrl;
+  let timer;
+
+  function stopRecording() {
+    if (recorder?.state === 'recording') recorder.stop();
+  }
+  stop.addEventListener('click', stopRecording);
+
+  start.addEventListener('click', () => {
+    let stream;
+    try {
+      stream = canvas.captureStream(30);
+      recorder = new MediaRecorder(stream, { videoBitsPerSecond: 4000000 });
+      const chunks = [];
+      let bytes = 0;
+      let failed = false;
+      recorder.addEventListener('dataavailable', event => {
+        if (!event.data.size) return;
+        chunks.push(event.data);
+        bytes += event.data.size;
+        if (bytes >= 150000000) stopRecording();
+      });
+      recorder.addEventListener('error', () => {
+        failed = true;
+        status.textContent = 'The browser could not finish recording.';
+      });
+      recorder.addEventListener('stop', () => {
+        clearTimeout(timer);
+        stream.getTracks().forEach(track => track.stop());
+        start.disabled = false;
+        stop.disabled = true;
+        if (failed || !chunks.length) {
+          status.textContent = 'No recording was saved.';
+          return;
+        }
+        const mime = recorder.mimeType || chunks[0].type;
+        if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+        recordingUrl = URL.createObjectURL(new Blob(chunks, { type: mime }));
+        download.href = recordingUrl;
+        download.download = `securefps-${Date.now()}.${mime.includes('mp4') ? 'mp4' : 'webm'}`;
+        download.hidden = false;
+        status.textContent = 'Recording ready to download.';
+      });
+      recorder.start(1000);
+      start.disabled = true;
+      stop.disabled = false;
+      status.textContent = 'Recording arena video.';
+      timer = setTimeout(stopRecording, 300000);
+    } catch {
+      stream?.getTracks().forEach(track => track.stop());
+      status.textContent = 'The browser could not start recording.';
+    }
+  });
 }
 
 function applyGraphicsQuality(quality) {

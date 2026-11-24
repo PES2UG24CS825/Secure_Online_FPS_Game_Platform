@@ -7,11 +7,13 @@ function escapeHtml(value) {
 }
 window.escapeHtml = escapeHtml;
 
-const playerDate = (value) => {
-  if (!value) return "Recently joined";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Recently joined";
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+const playerDate = (value, includeTime = false) => {
+  if (!value) return "—";
+  const date = new Date(typeof value === 'string' && value.includes('T') && !/(Z|[+-]\d{2}:\d{2})$/.test(value) ? `${value}Z` : value);
+  if (Number.isNaN(date.getTime())) return "—";
+  const options = { year: 'numeric', month: 'short', day: 'numeric' };
+  if (includeTime) Object.assign(options, { hour: 'numeric', minute: '2-digit' });
+  return date.toLocaleString(undefined, options);
 };
 
 const playerRisk = (value) => {
@@ -42,22 +44,13 @@ const overviewDate = (value) => {
 };
 
 
-const avatarPortraits = {
-  "default-operator": "public/avatars/default-operator.png",
-  "chibi-male-1": "public/avatars/chibi-male-1.png",
-  "chibi-female-1": "public/avatars/chibi-female-1.png",
-  "chibi-male-2": "public/avatars/chibi-male-2.png",
-  "chibi-female-2": "public/avatars/chibi-female-2.png",
-  "valkyrie-void": "public/avatars/valkyrie-void.png",
-  "ghost-specops": "public/avatars/ghost-specops.png",
-  "celestial-sovereign": "public/avatars/celestial-sovereign.png"
-};
-const bannerScenes = new Set([
-  "sakura", "frontline", "dawn", "neon"
-]);
+
 let playerDashboardLoading = false;
 let appearanceControlsBound = false;
-let currentAppearance = { avatar: "chibi-male-2", banner: "sakura", avatar_image: null, banner_image: null };
+let avatarOptions = [];
+let savedPortrait = null;
+let appearanceSaving = false;
+let currentAppearance = { avatar: null, banner: "sakura", avatar_image: null, banner_image: null };
 let appearanceDirty = false;
 let renderPlayerAppearance = () => {};
 let playerLiveEvents = null;
@@ -140,6 +133,7 @@ function connectPlayerLiveEvents() {
     }
   });
   playerLiveEvents.onopen = () => {
+    window.refreshPlayerNotifications?.();
     const status = document.getElementById("playerLiveStatus");
     if (status) status.textContent = `Live · updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
   };
@@ -219,12 +213,13 @@ async function loadPlayerDashboard() {
 
     const user = me.user;
     const name = user.name || "Player";
-    const welcome = document.getElementById("welcome");
     const sideName = document.getElementById("sideName");
     const sideEmail = document.getElementById("sideEmail");
     const avatar = document.getElementById("avatar");
-    if (welcome) welcome.textContent = `Welcome back, ${name}`;
-    if (sideName) sideName.textContent = name;
+    const handle = document.getElementById("profileUsername");
+    handle.hidden = !user.username;
+    handle.textContent = user.username ? "@" + user.username : "";
+    if (sideName) sideName.textContent = user.username ? "@" + user.username : name;
     if (sideEmail) sideEmail.textContent = user.email || "";
     if (avatar) avatar.textContent = name.charAt(0).toUpperCase();
 
@@ -307,7 +302,7 @@ async function loadPlayerDashboard() {
         trendChart.querySelectorAll("circle").forEach((point) => {
           const showTooltip = () => {
             if (!tooltip) return;
-            tooltip.innerHTML = `<strong>${point.dataset.match}</strong><br>Risk score: ${point.dataset.score} / 100`;
+            tooltip.textContent = `${point.dataset.match} · Risk score ${point.dataset.score} / 100`;
             const chartRect = trendChart.getBoundingClientRect();
             const svgRect = trendChart.querySelector("svg").getBoundingClientRect();
             tooltip.style.left = `${(Number(point.getAttribute("cx")) / 300) * svgRect.width + svgRect.left - chartRect.left}px`;
@@ -372,7 +367,8 @@ async function loadPlayerDashboard() {
       ? `Server assessment: ${latestScoredMatch.human_evaluation.explanation}`
       : "Server assessment: awaiting completed match analysis";
 
-    document.getElementById("matchesCount").textContent = matchesData ? Number(matchesData.total_matches ?? completedMatches.length) : "Unavailable";
+    const matchesCountEl = document.getElementById("matchesCount");
+    if (matchesCountEl) matchesCountEl.textContent = matchesData ? Number(matchesData.total_matches ?? completedMatches.length) : "Unavailable";
     const matchesSummary = document.getElementById("matchesSummary");
     if (matchesSummary) matchesSummary.textContent = `${analyzedMatches.length} analyzed · ${Math.max(0, completedMatches.length - analyzedMatches.length)} awaiting review`;
 
@@ -403,8 +399,8 @@ async function loadPlayerDashboard() {
 
     const careerShotsEl = document.getElementById("careerShotsSummary");
     if (careerShotsEl) careerShotsEl.textContent = careerAcc == null
-      ? "Unavailable — confirmed shot totals are incomplete"
-      : `${totalHits.toLocaleString()} / ${totalShots.toLocaleString()} confirmed hits / shots`;
+      ? "Shot totals unavailable or zero"
+      : `${totalHits.toLocaleString()} / ${totalShots.toLocaleString()} recorded hits / shots`;
     const careerShotsCountEl = document.getElementById("careerTotalShots");
     if (careerShotsCountEl) careerShotsCountEl.textContent = totalShots == null ? "—" : Number(totalShots).toLocaleString();
     const careerHitsCountEl = document.getElementById("careerTotalHits");
@@ -421,8 +417,21 @@ async function loadPlayerDashboard() {
     if (careerMatchesEl) careerMatchesEl.textContent = totalMatchesCount;
 
     const careerWinRateEl = document.getElementById("careerWinRate");
-    if (careerWinRateEl) careerWinRateEl.textContent = `${statsData?.wins || 0} wins · ${totalMatchesCount} played`;
-    document.getElementById("mfaStatus").textContent = securityData ? securityData.mfa_status === "enabled" ? "On" : "Off" : "Unavailable";
+    if (careerWinRateEl) careerWinRateEl.textContent = statsData?.verified_matches
+      ? `${statsData.wins}W · ${statsData.losses}L · ${statsData.draws}D · ${statsData.win_rate}% win rate`
+      : "No verified multiplayer results";
+    const careerAssistsEl = document.getElementById("careerAssists");
+    if (careerAssistsEl) careerAssistsEl.textContent = statsData?.assists ?? "—";
+    const careerHeadshotsEl = document.getElementById("careerHeadshots");
+    if (careerHeadshotsEl) careerHeadshotsEl.textContent = statsData?.headshots ?? "—";
+    const careerHeadshotRateEl = document.getElementById("careerHeadshotRate");
+    if (careerHeadshotRateEl) careerHeadshotRateEl.textContent = statsData?.headshot_percentage == null
+      ? "Verified matches" : `${statsData.headshot_percentage}% of verified hits`;
+    const playtimeMinutes = Math.floor((statsData?.total_playtime_seconds ?? 0) / 60);
+    const careerPlaytimeEl = document.getElementById("careerPlaytime");
+    if (careerPlaytimeEl) careerPlaytimeEl.textContent = statsData ? `${Math.floor(playtimeMinutes / 60)}h ${playtimeMinutes % 60}m` : "—";
+    const mfaStatusEl = document.getElementById("mfaStatus");
+    if (mfaStatusEl) mfaStatusEl.textContent = securityData ? securityData.mfa_status === "enabled" ? "On" : "Off" : "Unavailable";
     const accountStatus = securityData?.account_status;
     const accountStatusLabels = {
       active: "Active",
@@ -436,7 +445,8 @@ async function loadPlayerDashboard() {
     if (risk == null && !securityData) {
       if (scoreNode) scoreNode.textContent = "—";
     }
-    document.getElementById("lastLoginIp").textContent = securityData ? history[0]?.ip_address || "Not recorded" : "Unavailable";
+    const lastLoginIpEl = document.getElementById("lastLoginIp");
+    if (lastLoginIpEl) lastLoginIpEl.textContent = securityData ? history[0]?.ip_address || "Not recorded" : "Unavailable";
 
     const matchesList = document.getElementById("matchesList");
     if (matchesList) {
@@ -489,258 +499,104 @@ async function loadPlayerDashboard() {
 
     loadBanAppealStatus();
     // Notification center data load
-    loadNotifications();
+    window.refreshPlayerNotifications?.();
 
     const securityStatus = document.getElementById("securityStatus");
     if (securityStatus && securityData) {
-      const currentEntry = history[0] || { ip_address: "127.0.0.1 (Localhost)", browser: "Google Chrome", os: "Windows 11 / 10", authentication_method: "Password + MFA" };
-      const currentIp = currentEntry.ip_address || "127.0.0.1 (Localhost)";
-
-      function getDeviceFingerprint(entry) {
-        let b = (entry?.browser || "").toLowerCase();
-        let os = (entry?.os || "").toLowerCase();
-        
-        let normBrowser = "other";
-        if (b.includes("chrome") && !b.includes("edge") && !b.includes("brave")) normBrowser = "chrome";
-        else if (b.includes("firefox")) normBrowser = "firefox";
-        else if (b.includes("safari") && !b.includes("chrome")) normBrowser = "safari";
-        else if (b.includes("edge") || b.includes("edg")) normBrowser = "edge";
-        else if (b.includes("brave")) normBrowser = "brave";
-
-        let normOs = "other";
-        if (os.includes("win")) normOs = "windows";
-        else if (os.includes("mac") || os.includes("darwin") || os.includes("os x")) normOs = "mac";
-        else if (os.includes("linux")) normOs = "linux";
-        else if (os.includes("android")) normOs = "android";
-        else if (os.includes("ios") || os.includes("iphone") || os.includes("ipad")) normOs = "ios";
-
-        return `${normBrowser}:${normOs}`;
-      }
-
-      const currentFp = getDeviceFingerprint(currentEntry);
-
-      // ONLY display entries if there is a real change in browser or laptop/device (Requirement 6)
-      const otherDeviceEntries = history.filter((entry) => {
-        const fp = getDeviceFingerprint(entry);
-        return fp !== currentFp;
-      });
-
-      const ipRows = otherDeviceEntries.map((entry) => `<tr><td><code>${playerText(entry.ip_address || "Unknown")}</code> <span class="badge warn" style="font-size:9px; margin-left:4px;">OTHER DEVICE</span></td><td><div style="display:inline-flex; align-items:center; gap:6px;"><span style="font-size:14px;">${entry.browser_icon || "🌐"}</span><strong style="color:var(--player-text,#1e1b4b); font-size:12px;">${playerText(entry.browser || "Unknown")}</strong><span style="font-size:10px; color:#5b21b6; background:#ede9fe; padding:2px 6px; border-radius:4px; font-weight:600;">${playerText(entry.os || "Device")}</span></div></td><td>${playerText(playerDate(entry.timestamp))}</td><td>${playerText(entry.authentication_method || "Password + MFA")}</td><td><span class="badge ${entry.success === false ? "bad" : "good"}">${entry.success === false ? "Failed" : "Success"}</span></td></tr>`).join("");
-      const warnings = Array.isArray(securityData.security_warnings) ? securityData.security_warnings : [];
+      const loginHistoryOpen = document.getElementById("playerLoginHistory")?.open || false;
+      const warnings = securityData.security_warnings || [];
       securityStatus.innerHTML = `
-        <article class="security-card honour-score-card" data-honour-risk="${Number(securityData.honour_score ?? 100) >= 80 ? "low" : Number(securityData.honour_score ?? 100) >= 50 ? "medium" : "high"}"><div class="security-card-label">Honour score</div><div class="security-card-value honour-score-value">${Number(securityData.honour_score ?? 100)}/100</div><div class="security-card-meta">Unfinished matches reduce Honour by 5; completed matches add 5.</div></article>
-        <article class="security-card"><div class="security-card-label">MFA / 2FA</div><div class="security-card-value">${securityData.mfa_status === "enabled" ? "Enabled" : "Disabled"}</div><div class="security-card-meta">Authenticator protection</div></article>
-        <article class="security-card"><div class="security-card-label">Active sessions</div><div class="security-card-value">${activeSessions.length}</div><div class="security-card-meta">Devices currently signed in</div></article>
-        <article class="security-card"><div class="security-card-label">Last login</div><div class="security-card-value security-card-value-small">${playerText(playerDate(securityData.last_login))}</div><div class="security-card-meta">Most recent successful sign in</div></article>
-        <article class="security-card"><div class="security-card-label">Latest login IP</div><div class="security-card-value">${playerText(history[0]?.ip_address || "Not recorded")}</div><div class="security-card-meta">Address observed by the server</div></article>
-        ${warnings.length ? `<section class="security-history security-warnings"><h3>Security warnings</h3><p class="page-description">A moderator reviewed gameplay activity on your account.</p>${warnings.map((warning) => `<article class="security-warning"><strong>${playerText(playerDate(warning.created_at))}</strong><p>${playerText(warning.note)}</p></article>`).join("")}</section>` : ""}
-        <section class="security-history">
-          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 8px;">
-            <div>
-              <h3 style="margin: 0; font-size: 15px; color: #4C1D95;">Recognized Device &amp; Session Integrity</h3>
-              <p class="page-description" style="color:#334155; font-weight:500; margin: 4px 0 0;">Hardware fingerprinting ensures your account is accessed exclusively from approved, verified devices.</p>
-            </div>
-            <!-- Cursor Move / Hover History Widget -->
-            <div class="has-hover-tooltip" tabindex="0" style="position: relative; display: inline-flex;">
-              <button type="button" class="play-btn" style="height: 32px; padding: 0 14px; font-size: 11px; background: #6D28D9; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px;">
-                <span>🕒</span> Sign-in History (Hover)
-              </button>
-              <div class="hover-stat-popover" style="min-width: 320px; white-space: normal; padding: 12px; transform: translateX(-80%); border-radius: 10px; z-index: 999;">
-                <span class="popover-title" style="margin-bottom: 8px; display: block; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 4px;">Verified Sign-in History (Cursor Hover)</span>
-                <div style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
-                  ${history.slice(0, 6).map(h => `
-                    <div style="border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px;">
-                      <div style="display: flex; justify-content: space-between; font-size: 11px;">
-                        <strong style="color: #E9D5FF !important;">${playerText(h.browser || "Google Chrome")} (${playerText(h.os || "Windows 11")})</strong>
-                        <span style="color: #A5B4FC; font-size: 10px;">${playerText(playerDate(h.timestamp || h.created_at))}</span>
-                      </div>
-                      <div style="display: flex; justify-content: space-between; font-size: 10px; color: #CBD5E1; margin-top: 2px;">
-                        <code>${playerText(h.ip_address || "127.0.0.1")}</code>
-                        <span style="color: ${h.success === false ? '#F87171' : '#34D399'}; font-weight: 700;">${h.success === false ? '✕ Failed' : '✓ Verified'}</span>
-                      </div>
-                    </div>
-                  `).join('') || '<div style="font-size:11px; color:#A5B4FC;">No sign-in records.</div>'}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div style="background: linear-gradient(135deg, #FAF5FF, #F3E8FF); border: 2px solid #7C3AED; border-radius: 12px; padding: 14px 16px; margin: 10px 0 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
-            <div style="display: flex; align-items: center; gap: 14px;">
-              <span style="font-size: 28px;">💻</span>
-              <div>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <strong style="color: #4C1D95; font-size: 14px;">This Recognized Device (${playerText(currentEntry.browser || "Google Chrome")} on ${playerText(currentEntry.os || "Windows 11")})</strong>
-                  <span style="background: #10B981; color: white; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px;">CURRENT ACTIVE</span>
-                </div>
-                <div style="color: #6D28D9; font-size: 12px; margin-top: 4px;">
-                  IP: <code>${playerText(currentIp)}</code> • Authenticated: ${playerText(currentEntry.authentication_method || "Password + MFA")} • Last active: ${playerText(playerDate(currentEntry.timestamp || securityData.last_login))}
-                </div>
-              </div>
-            </div>
-            <span style="background: #EDE9FE; color: #6D28D9; border: 1px solid #DDD6FE; font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 8px;">
-              🛡️ Verified Session
-            </span>
-          </div>
-
-          ${otherDeviceEntries.length > 0 ? `
-            <div style="background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 12px; padding: 12px 16px; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <span style="font-size: 20px;">⚠️</span>
-                <div>
-                  <strong style="color: #991B1B; font-size: 13px;">Other Device Activity Detected (${otherDeviceEntries.length} foreign session)</strong>
-                  <p style="margin: 2px 0 0; color: #B91C1C; font-size: 11px;">A sign-in was recorded from a different browser or machine: ${playerText(otherDeviceEntries[0].browser || "Unknown")} (${playerText(otherDeviceEntries[0].ip_address || "")})</p>
-                </div>
-              </div>
-              <button id="revokeOtherDevicesBtn" class="play-btn" style="height: 30px; padding: 0 12px; font-size: 11px; background: #DC2626;">Revoke Foreign Sessions</button>
-            </div>
-          ` : `
-            <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 10px;">
-              <span style="font-size: 18px;">🛡️</span>
-              <div style="font-size: 12px; color: #15803D;">
-                <strong>Primary device verified:</strong> All sign-ins originate from your recognized workstation (${playerText(currentEntry.browser || "Chrome")} / ${playerText(currentIp)}). No foreign devices.
-              </div>
-            </div>
-          `}
-        </section>
-        <section class="security-history" style="margin-top:14px;">
-          <h3 style="font-size:14px; margin-bottom:8px;">Active Sign-in Status</h3>
-          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#F8FAFC; border:1px solid #E2E8F0; padding:10px 14px; border-radius:10px;">
-            <span style="font-size:16px;">🟢</span>
-            <div style="font-size:12px; color:#334155;">
-              Active session on <strong>${playerText(currentEntry.browser || "Chrome")}</strong> (<code>${playerText(currentIp)}</code>) • Session ID: <code>${activeSessions[0]?.session_id ? playerText(activeSessions[0].session_id.substring(0,8)) : 'sess_active'}</code>
-            </div>
-          </div>
-        </section>`;
+        <div class="account-security-facts">
+          <article class="security-card"><div class="security-card-label">Account status</div><strong>${playerText(accountStatusLabels[securityData.account_status] || "Unavailable")}</strong></article>
+          <article class="security-card"><div class="security-card-label">Authenticator</div><strong>${securityData.mfa_status === "enabled" ? "Enabled" : "Disabled"}</strong></article>
+          <article class="security-card"><div class="security-card-label">Verified recovery address</div><strong>${playerText(securityData.recovery_email || "Unavailable")}</strong></article>
+          <article class="security-card"><div class="security-card-label">Last successful sign-in</div><strong>${playerText(playerDate(securityData.last_login, true))}</strong></article>
+        </div>
+        ${warnings.length ? `<section class="security-history security-warnings"><h3>Account warnings</h3>${warnings.map(warning => `<p><strong>${playerText(playerDate(warning.created_at, true))}</strong> · ${playerText(warning.note)}</p>`).join("")}</section>` : ""}
+        <details class="security-history" id="playerLoginHistory"><summary>Sign-in history (${history.length})</summary>
+          <div class="overview-table-wrap"><table class="overview-recent-table">
+            <thead><tr><th>Time</th><th>Browser / OS</th><th>IP address</th><th>Result</th></tr></thead>
+            <tbody>${history.map(entry => `<tr><td>${playerText(playerDate(entry.timestamp, true))}</td><td>${playerText(entry.browser || "Unknown")} / ${playerText(entry.os || "Unknown")}</td><td>${playerText(entry.ip_address || "Unknown")}</td><td>${entry.success === false ? "Failed" : "Successful"}</td></tr>`).join("") || '<tr><td colspan="4">No sign-ins recorded.</td></tr>'}</tbody>
+          </table></div>
+        </details>`;
+      document.getElementById("playerLoginHistory").open = loginHistoryOpen;
     }
-    if (securityStatus && !securityData) securityStatus.innerHTML = '<div class="match-empty"><strong>Account security unavailable</strong><span>The security service could not be reached.</span></div>';
+    if (securityStatus && !securityData) securityStatus.textContent = "Account security unavailable.";
 
-    const profileContent = document.getElementById("profileContent");
-    if (profileContent) {
-      profileContent.innerHTML = `
-        <div class="profile-row"><span>Username</span><strong>${playerText(profileData ? name : "Unavailable")}</strong></div>
-        <div class="profile-row"><span>Email</span><strong>${playerText(profileData ? user.email || "" : "Unavailable")}</strong></div>
-        <div class="profile-row"><span>Role</span><strong>${playerText(profileData ? user.role : "Unavailable")}</strong></div>
-        <div class="profile-row"><span>Created</span><strong>${playerText(profileData ? (user.created_at ? playerDate(user.created_at) : playerDate(new Date())) : "Unavailable")}</strong></div>`;
+    const sessionRows = document.getElementById("activeSessionsRows");
+    if (sessionRows) sessionRows.innerHTML = securityData ? activeSessions.map(device => `
+      <tr><td>${playerText(device.device || "Unknown device")}</td><td>${playerText(device.ip_address || "Unknown")}</td>
+      <td>${playerText(playerDate(device.last_activity, true))}</td>
+      <td>${device.is_current ? "This device" : `<button type="button" class="ghost-btn" data-revoke-device="${playerText(device.id)}">Sign out</button>`}</td></tr>
+    `).join("") || '<tr><td colspan="4">No active sessions.</td></tr>' : '<tr><td colspan="4">Sessions unavailable.</td></tr>';
+
+    document.getElementById("profileContent").textContent = profileData?.created_at ? `Member since ${playerDate(profileData.created_at)}` : "";
+    document.getElementById("profileLevel").textContent = rewardsData ? `Level ${rewardsData.level}` : "Level unavailable";
+    document.getElementById("profileXp").textContent = rewardsData ? `${Number(rewardsData.xp).toLocaleString()} XP` : "—";
+    const profileProgress = document.getElementById("profileXpProgress");
+    profileProgress.hidden = !rewardsData;
+    profileProgress.max = rewardsData?.xp_per_level || 250;
+    profileProgress.value = rewardsData ? rewardsData.xp % profileProgress.max : 0;
+    document.getElementById("profileXpRemaining").textContent = rewardsData
+      ? `${(profileProgress.max - profileProgress.value).toLocaleString()} XP to level ${rewardsData.level + 1}` : "";
+    const previousLevel = profileProgress.dataset.level;
+    if (rewardsData && previousLevel && Number(previousLevel) < rewardsData.level) {
+      window.showAppToast?.(`Rewards level ${rewardsData.level} reached.`, "success");
     }
+    if (rewardsData) profileProgress.dataset.level = rewardsData.level;
 
-    if (!appearanceDirty) {
-      const savedAvatar = profileData?.profile_customization?.avatar;
+    if (profileData) avatarOptions = profileData.avatar_options || [];
+    if (profileData && !appearanceDirty && !appearanceSaving) {
+      savedPortrait = profileData.avatar;
       const savedBanner = profileData?.profile_customization?.banner;
-      const customAvatar = profileData?.profile_customization?.avatar_url || profileData?.profile_customization?.avatar_image || null;
+      const customAvatar = savedPortrait?.key === "custom" ? savedPortrait.src : null;
       const customBanner = profileData?.profile_customization?.banner_url || profileData?.profile_customization?.banner_image || null;
       currentAppearance = {
-        avatar: avatarPortraits[savedAvatar] ? savedAvatar : "chibi-male-2",
-        banner: bannerScenes.has(savedBanner)
-          ? savedBanner
-          : "sakura",
+        avatar: savedPortrait?.key,
+        banner: savedBanner || "default-banner",
         avatar_image: customAvatar,
-        banner_image: null
+        banner_image: customBanner
       };
     }
-    const profileBanner = document.getElementById("profileBanner");
-    const profileAvatar = document.getElementById("profileAvatar");
-    const profileBannerMascot = document.getElementById("profileBannerMascot");
-    const overviewMascot = document.getElementById("playerMascotSticker");
-    const supportMascot = document.getElementById("supportMascotSticker");
-    const gameHubMascot = document.getElementById("gameHubMascotSticker");
-    const leaderboardMascot = document.getElementById("leaderboardMascotSticker");
-    const rewardsMascot = document.getElementById("rewardsMascotSticker");
-    const securityMascot = document.getElementById("securityMascotSticker");
     const profileDisplayName = document.getElementById("profileDisplayName");
     const profileDisplayEmail = document.getElementById("profileDisplayEmail");
     renderPlayerAppearance = () => {
-      if (profileBanner) profileBanner.dataset.banner = currentAppearance.banner;
-      document.body.dataset.playerBanner = bannerScenes.has(currentAppearance.banner) ? currentAppearance.banner : "sakura";
-      if (profileBanner) profileBanner.style.backgroundImage = currentAppearance.banner_image
-        ? `linear-gradient(0deg, rgba(5, 13, 24, .28), rgba(5, 13, 24, .12)), url("${currentAppearance.banner_image}")`
-        : "";
-      if (currentAppearance.banner_image) {
-        document.body.style.setProperty("--player-scene-image", `url(${JSON.stringify(currentAppearance.banner_image)})`);
-      } else {
-        document.body.style.removeProperty("--player-scene-image");
-      }
-      const selectedPortrait = avatarPortraits[currentAppearance.avatar] || "";
-      const avatarImage = currentAppearance.avatar_image || selectedPortrait;
-      const isChibi = Boolean(currentAppearance.avatar && currentAppearance.avatar.startsWith("chibi-"));
-      const chibiMascot = isChibi ? avatarPortraits[currentAppearance.avatar] : avatarPortraits["chibi-female-2"];
-
-      if (profileAvatar) profileAvatar.textContent = avatarImage ? "" : name.charAt(0).toUpperCase();
-      if (avatar) avatar.textContent = avatarImage ? "" : name.charAt(0).toUpperCase();
-      if (profileBannerMascot) {
-        if (isChibi) {
-          profileBannerMascot.src = selectedPortrait;
-          profileBannerMascot.style.display = "block";
-        } else {
-          profileBannerMascot.style.display = "none";
-        }
-      }
-      if (overviewMascot) overviewMascot.src = chibiMascot;
-      if (supportMascot) supportMascot.src = chibiMascot;
-      if (leaderboardMascot) leaderboardMascot.src = chibiMascot;
-      if (rewardsMascot) rewardsMascot.src = chibiMascot;
-      if (securityMascot) securityMascot.src = chibiMascot;
-      for (const avatarElement of [profileAvatar, avatar]) {
-        if (!avatarElement) continue;
-        avatarElement.style.backgroundImage = avatarImage ? `url("${avatarImage}")` : "";
-        avatarElement.classList.toggle("has-profile-image", Boolean(avatarImage));
-      }
+      const banner = document.getElementById("profileBanner");
+      banner.dataset.banner = currentAppearance.banner;
+      banner.style.backgroundImage = currentAppearance.banner_image
+        ? `url(${JSON.stringify(currentAppearance.banner_image)})` : "";
+      const selected = savedPortrait?.key === currentAppearance.avatar
+        ? savedPortrait : avatarOptions.find(option => option.key === currentAppearance.avatar);
+      window.profileAvatars.show(selected, name);
       document.querySelectorAll("#bannerOptions [data-banner]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.banner === currentAppearance.banner)));
-      document.querySelectorAll("#avatarOptions [data-avatar]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.avatar === currentAppearance.avatar)));
     };
     if (profileDisplayName) profileDisplayName.textContent = name;
     if (profileDisplayEmail) profileDisplayEmail.textContent = user.email || "";
     renderPlayerAppearance();
 
-    // Dynamically render player's OWNED banners and avatars in order (Requirement 3)
-    const renderOwnedAppearancePickers = async (preloadedRewards) => {
-      const bannerContainer = document.getElementById("bannerOptions");
-      const avatarContainer = document.getElementById("avatarOptions");
-      if (!bannerContainer && !avatarContainer) return;
+    const bannerContainer = document.getElementById("bannerOptions");
+    const avatarContainer = document.getElementById("avatarOptions");
+    const banners = [
+      { key: "sakura", name: "Cosmic Sakura" },
+      { key: "frontline", name: "Sakura Frontline" },
+      { key: "dawn", name: "Sakura Dawn" },
+      { key: "neon", name: "Neon Sakura" }
+    ];
 
-      let ownedSet = new Set();
-      const rew = preloadedRewards || rewardsData;
-      (rew?.owned_items || []).forEach(id => ownedSet.add(id));
-
-      const ALL_AVATARS_ORDERED = [
-        { key: "chibi-male-1", name: "Silver-haired chibi", img: "public/avatars/chibi-male-1.png" },
-        { key: "chibi-male-2", name: "Dark-haired chibi", img: "public/avatars/chibi-male-2.png" }
-      ];
-
-      const ALL_BANNERS_ORDERED = [
-        { key: "sakura", name: "Cosmic Sakura", isDefault: true },
-        { key: "frontline", name: "Sakura Frontline" },
-        { key: "dawn", name: "Sakura Dawn" },
-        { key: "neon", name: "Neon Sakura" }
-      ];
-
-      if (avatarContainer) {
-        const ownedAvs = ALL_AVATARS_ORDERED.filter(a =>
-          a.isDefault ||
-          ownedSet.has(a.itemId) ||
-          currentAppearance.avatar === a.key
-        );
-        avatarContainer.innerHTML = ownedAvs.map(a => `
-          <button class="appearance-option avatar-option avatar-portrait-option" type="button" data-avatar="${a.key}" aria-label="${a.name}" title="${a.name}" aria-pressed="${String(a.key === currentAppearance.avatar)}">
-            <img src="${a.img}" alt="${a.name}" style="${a.key.startsWith('chibi') ? 'object-fit:contain;' : 'object-fit:cover; border-radius:50%;'} width:44px; height:44px;">
-          </button>
-        `).join("");
-      }
-
-      if (bannerContainer) {
-        const ownedBans = ALL_BANNERS_ORDERED;
-        bannerContainer.innerHTML = ownedBans.map(b => `
-          <button class="appearance-option banner-option" type="button" data-banner="${b.key}" aria-label="${b.name}" title="${b.name}" aria-pressed="${String(b.key === currentAppearance.banner)}"></button>
-        `).join("");
-      }
-    };
-    renderOwnedAppearancePickers();
+    if (avatarContainer && profileData) {
+      window.profileAvatars.renderPicker(avatarContainer, avatarOptions, currentAppearance.avatar);
+    }
+    if (bannerContainer) {
+      bannerContainer.innerHTML = banners.map(b => `
+        <button class="appearance-option banner-option" type="button" data-banner="${b.key}" aria-label="${b.name}" title="${b.name}" aria-pressed="${String(b.key === currentAppearance.banner)}"></button>
+      `).join("");
+    }
 
     if (!appearanceControlsBound) {
       appearanceControlsBound = true;
       document.getElementById("bannerOptions")?.addEventListener("click", (event) => {
         const option = event.target.closest("[data-banner]");
-        if (!option) return;
+        if (!option || appearanceSaving) return;
         currentAppearance.banner = option.dataset.banner;
         currentAppearance.banner_image = null;
         appearanceDirty = true;
@@ -748,29 +604,35 @@ async function loadPlayerDashboard() {
       });
       document.getElementById("avatarOptions")?.addEventListener("click", (event) => {
         const option = event.target.closest("[data-avatar]");
-        if (!option) return;
+        if (!option || appearanceSaving) return;
         currentAppearance.avatar = option.dataset.avatar;
-        currentAppearance.avatar_image = null;
+        currentAppearance.avatar_image = currentAppearance.avatar === "custom" && savedPortrait?.key === "custom" ? savedPortrait.src : null;
         appearanceDirty = true;
         renderPlayerAppearance();
       });
       document.getElementById("saveAppearance")?.addEventListener("click", async (event) => {
       const button = event.currentTarget;
       const status = document.getElementById("appearanceStatus");
+      if (!currentAppearance.avatar) return;
+      appearanceSaving = true;
       button.disabled = true;
       if (status) status.textContent = "Saving…";
       try {
-        await api("/player/profile/customization", { method: "PUT", body: JSON.stringify({
+        const saved = await api("/player/profile/customization", { method: "PUT", body: JSON.stringify({
           ...currentAppearance,
           avatar_image: currentAppearance.avatar_image?.startsWith("data:") ? currentAppearance.avatar_image : null,
           banner_image: currentAppearance.banner_image?.startsWith("data:") ? currentAppearance.banner_image : null,
         }) });
+        savedPortrait = saved.avatar;
         appearanceDirty = false;
+        renderPlayerAppearance();
         if (status) status.textContent = "Appearance saved.";
+        loadLeaderboard();
       } catch (saveError) {
         console.error("Could not save profile appearance", saveError);
         if (status) status.textContent = saveError.status === 401 ? "Sign in again to save." : saveError.message || "Could not save appearance.";
       } finally {
+        appearanceSaving = false;
         button.disabled = false;
       }
       });
@@ -890,6 +752,7 @@ if (changePasswordForm) {
         msg.textContent = res.message || "Password changed successfully!";
       }
       changePasswordForm.reset();
+      window.refreshPlayerNotifications?.();
       window.showAppToast?.("Password changed successfully! Other sessions terminated.", "success");
     } catch (err) {
       if (msg) {
@@ -912,26 +775,22 @@ if (generateRecoveryCodesForm && generateRecoveryCodesBtn) {
     generateRecoveryCodesBtn.disabled = true;
 
     const msg = document.getElementById("recoveryCodesMsg");
-    const display = document.getElementById("recoveryCodesDisplay");
-    const grid = document.getElementById("recoveryCodesGrid");
 
     try {
       const res = await api("/auth/recovery-codes/generate", {
         method: "POST",
         body: JSON.stringify({ password })
       });
-      if (res.recovery_codes && grid) {
-        grid.replaceChildren(...res.recovery_codes.map(code => {
-          const item = document.createElement("code");
-          item.textContent = code;
-          return item;
-        }));
-        if (display) display.style.display = "block";
-        if (msg) {
-          msg.hidden = false;
-          msg.style.color = "#10B981";
-          msg.textContent = "8 backup recovery codes generated. Store them safely.";
-        }
+      if (Array.isArray(res.recovery_codes)) {
+        const url = URL.createObjectURL(new Blob([res.recovery_codes.join("\n") + "\n"], { type: "text/plain" }));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "securefps-recovery-codes.txt";
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        msg.hidden = false;
+        msg.textContent = "New recovery codes downloaded. Store the file securely.";
+        window.refreshPlayerNotifications?.();
       }
     } catch (err) {
       if (msg) {
@@ -944,6 +803,23 @@ if (generateRecoveryCodesForm && generateRecoveryCodesBtn) {
     }
   });
 }
+
+document.getElementById("refreshSessionsBtn")?.addEventListener("click", loadPlayerDashboard);
+document.getElementById("activeSessionsRows")?.addEventListener("click", async event => {
+  const button = event.target.closest("[data-revoke-device]");
+  if (!button || !await window.showAppConfirm("Sign out this device?")) return;
+  button.disabled = true;
+  const status = document.getElementById("revokeSessionsMsg");
+  try {
+    await api(`/player/sessions/${encodeURIComponent(button.dataset.revokeDevice)}/revoke`, { method: "POST" });
+    status.textContent = "Device signed out.";
+    loadPlayerDashboard();
+  } catch (error) {
+    status.textContent = error.message;
+    button.disabled = false;
+  }
+  status.hidden = false;
+});
 
 const revokeOtherSessionsBtn = document.getElementById("revokeOtherSessionsBtn");
 if (revokeOtherSessionsBtn) {
@@ -1056,80 +932,6 @@ if (banAppealForm) {
 // =========================================================================
 // NOTIFICATION CENTER (Item 14)
 // =========================================================================
-
-async function loadNotifications() {
-  const badge = document.getElementById("notifBadge");
-  const list = document.getElementById("notifList");
-  try {
-    const res = await api("/player/notifications?limit=15");
-    const notifs = res?.notifications || [];
-    const unreadCount = Number(res?.unread_count || 0);
-
-    if (badge) {
-      if (unreadCount > 0) {
-        badge.textContent = String(unreadCount);
-        badge.hidden = false;
-      } else {
-        badge.hidden = true;
-      }
-    }
-
-    if (list) {
-      if (!notifs.length) {
-        list.innerHTML = '<div style="padding: 16px; text-align: center; color: var(--player-muted, #94a3b8); font-size: 12px;">No notifications.</div>';
-      } else {
-        list.innerHTML = notifs.map(n => `
-          <div class="notif-item ${n.read ? '' : 'unread'}" data-notif-id="${escapeHtml(n.id)}" style="${n.read ? '' : 'border-left: 3px solid #7C3AED; background: #FAF5FF;'} padding: 10px 12px; margin-bottom: 6px; border-radius: 8px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-              <strong style="font-size:12px; color:#4C1D95;">${escapeHtml(n.title)}</strong>
-              <small style="font-size:10px; color:#6D28D9; font-weight:600;">${escapeHtml(overviewDate(n.created_at))}</small>
-            </div>
-            <div style="font-size:12px; line-height:1.4; color:#334155;">${escapeHtml(n.message)}</div>
-            ${n.type === "support_reply" ? '<a href="#support">View support tickets</a>' : ""}
-          </div>
-        `).join("");
-      }
-    }
-  } catch (err) {
-    // Non-blocking
-  }
-}
-
-const notifBellBtn = document.getElementById("notificationBellBtn");
-const notifDrawer = document.getElementById("notifDrawer");
-const markNotifsReadBtn = document.getElementById("markNotifsReadBtn");
-
-if (notifBellBtn && notifDrawer) {
-  notifBellBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const isHidden = notifDrawer.style.display === "none" || notifDrawer.hidden;
-    notifDrawer.style.display = isHidden ? "block" : "none";
-    notifDrawer.hidden = !isHidden;
-    notifBellBtn.setAttribute("aria-expanded", String(isHidden));
-  });
-
-  document.addEventListener("click", (e) => {
-    if (!notifDrawer.contains(e.target) && !notifBellBtn.contains(e.target)) {
-      notifDrawer.style.display = "none";
-      notifDrawer.hidden = true;
-      notifBellBtn.setAttribute("aria-expanded", "false");
-    }
-  });
-}
-
-if (markNotifsReadBtn) {
-  markNotifsReadBtn.addEventListener("click", async () => {
-    try {
-      await api("/player/notifications/read", {
-        method: "POST",
-        body: JSON.stringify({ mark_all: true })
-      });
-      loadNotifications();
-    } catch (err) {
-      console.warn("Could not mark notifications read", err);
-    }
-  });
-}
 
 // =========================================================================
 // MATCH DETAIL DRILL-DOWN (Item 14)
@@ -1377,3 +1179,13 @@ function initPlayerPolling() {
 
 loadPlayerDashboard();
 initPlayerPolling();
+
+const collapseSidebar = document.getElementById("collapseSidebarBtn");
+document.querySelectorAll("#playerNavigation a:not([aria-label])").forEach(link => {
+  link.setAttribute("aria-label", link.querySelector(".nav-label").textContent.trim());
+});
+collapseSidebar.addEventListener("click", () => {
+  const collapsed = document.body.classList.toggle("sidebar-collapsed");
+  collapseSidebar.setAttribute("aria-expanded", String(!collapsed));
+  collapseSidebar.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
+});

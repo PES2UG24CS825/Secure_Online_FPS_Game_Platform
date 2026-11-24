@@ -1,3 +1,4 @@
+from services.player_notifications import notify_player
 from datetime import datetime, timezone, timedelta
 import os
 import secrets
@@ -25,7 +26,6 @@ from database.db import (
     users,
     sessions_db,
     reward_transactions,
-    player_notifications,
     support_tickets,
     honour_history,
 )
@@ -37,7 +37,8 @@ from services.risk_scoring import clamp_risk_score, classify_risk_score, classif
 from services.player_baseline import get_player_baseline
 from services.telemetry_validation import validate_telemetry_event, check_rate_limit, clear_session_limits
 from services.features_v2 import extract_features_v2, FEATURE_NAMES_V2, FEATURE_UNITS_V2
-from services.reward_credits import record_match_credit
+from services.reward_credits import apply_match_credit, record_match_credit
+from pymongo.errors import DuplicateKeyError
 from services.admin_permissions import has_operational_permission
 from services.csrf import verify_csrf_and_origin
 from services.auth_security import player_login_paused
@@ -87,29 +88,28 @@ def publish_live_update(user_id, session_id=None, event_type="game_update", forc
         _sse_event_id_counter += 1
         event_id = _sse_event_id_counter
 
-    payload_dict = {
-        "id": event_id,
-        "type": event_type,
-        "session_id": str(session_id) if session_id else None,
-        "server_received_at": utc_now().isoformat(),
-        "alert_published_at": utc_now().isoformat(),
-        "updated_at": utc_now().isoformat(),
-        **(payload or {}),
-    }
-    payload_json = json.dumps(payload_dict)
+        payload_dict = {
+            "id": event_id,
+            "type": event_type,
+            "session_id": str(session_id) if session_id else None,
+            "server_received_at": utc_now().isoformat(),
+            "alert_published_at": utc_now().isoformat(),
+            "updated_at": utc_now().isoformat(),
+            **(payload or {}),
+        }
+        payload_json = json.dumps(payload_dict)
 
-    with _live_subscribers_lock:
         _recent_sse_events.append((event_id, user_channel, payload_json))
 
-    for subscriber in queues:
-        try:
-            subscriber.put_nowait((event_id, payload_json))
-        except queue.Full:
+        for subscriber in queues:
             try:
-                subscriber.get_nowait()
                 subscriber.put_nowait((event_id, payload_json))
-            except (queue.Empty, queue.Full):
-                pass
+            except queue.Full:
+                try:
+                    subscriber.get_nowait()
+                    subscriber.put_nowait((event_id, payload_json))
+                except (queue.Empty, queue.Full):
+                    pass
 
 
 @game_bp.get("/live/events")
@@ -125,17 +125,17 @@ def live_events():
         return jsonify({"message": "This account has been suspended."}), 403
     if account.get("revoked") is True or account.get("account_status") == "banned":
         return jsonify({"message": "This account is permanently banned."}), 403
-    channel = "admin" if account.get("role") in ["admin", "demo_admin", "moderator", "super_admin"] else str(user_id)
+    channel = "admin" if account.get("role") in {"admin", "normal_admin", "demo_admin", "super_admin"} else str(user_id)
     subscriber = queue.Queue(maxsize=50)
 
     last_event_id_header = request.headers.get("Last-Event-ID")
-    last_event_id = int(last_event_id_header) if last_event_id_header and last_event_id_header.isdigit() else 0
+    last_event_id = int(last_event_id_header) if last_event_id_header and re.fullmatch(r"[0-9]{1,20}", last_event_id_header) else None
 
     with _live_subscribers_lock:
         _live_subscribers.setdefault(channel, set()).add(subscriber)
         missed_events = [
             (eid, p) for (eid, ch, p) in _recent_sse_events
-            if eid > last_event_id and (ch == channel or ch == "admin")
+            if last_event_id is not None and eid > last_event_id and (ch == channel or channel == "admin")
         ]
 
     @stream_with_context
@@ -158,15 +158,11 @@ def live_events():
                 if channel_subscribers:
                     channel_subscribers.discard(subscriber)
 
-    origin = request.headers.get("Origin")
     sse_headers = {
         "Cache-Control": "no-cache",
         "X-Accel-Buffering": "no",
         "Connection": "keep-alive",
     }
-    if origin:
-        sse_headers["Access-Control-Allow-Origin"] = origin
-        sse_headers["Access-Control-Allow-Credentials"] = "true"
 
     return Response(event_stream(), mimetype="text/event-stream", headers=sse_headers)
 
@@ -1105,6 +1101,8 @@ def resume_game_session():
 def receive_game_event():
 
     data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"message": "Telemetry must be a JSON object."}), 400
 
     game_token = data.get("game_token")
     session_id = data.get("session_id")
@@ -1141,6 +1139,8 @@ def receive_game_event():
         })
         if not game_session:
             return jsonify({"message": "Invalid game session or token."}), 401
+        if game_session.get("status") != "active":
+            return jsonify({"message": "Game session is not active."}), 409
 
         now = utc_now()
         inserted_docs = []
@@ -1148,9 +1148,11 @@ def receive_game_event():
         user_id = game_session.get("user_id")
         account = users.find_one({"_id": user_id}) or {}
         for item in batch_events:
+            if not isinstance(item, dict) or not isinstance(item.get("telemetry", {}), dict):
+                continue
             ev_type = item.get("event_type")
             ev_telemetry = item.get("telemetry", {})
-            if ev_type:
+            if isinstance(ev_type, str) and ev_type and ev_type != "game_completed":
                 # Check for cheater demonstration security violations
                 process_security_violations(game_session, account, ev_type, ev_telemetry)
                 event_document = {
@@ -1222,6 +1224,9 @@ def receive_game_event():
         return jsonify({
             "message": "Invalid game session."
         }), 403
+
+    if event_type == "game_completed" and game_session.get("mode") == "multiplayer":
+        return jsonify({"message": "Multiplayer results require a signed match receipt."}), 409
 
     # Server-side Rate Limit Validation (Phase 1)
     allowed, rl_err = check_rate_limit(session_id, event_type)
@@ -1524,7 +1529,8 @@ def receive_game_event():
                 "status": "active"
             },
             {
-                "$set": completion_set
+                "$set": completion_set,
+                "$unset": {"expires_at": ""},
             }
         )
 
@@ -1556,8 +1562,8 @@ def receive_game_event():
                 record_match_credit(user_id, session_id, {
                     "type": "match_completed",
                     "description": f"Completed an FPS Microgame match; +{honour_awarded} Honour",
-                    "coins": 20,
-                    "xp": 50,
+                    "coins": 0,
+                    "xp": 0,
                     "honour": honour_awarded,
                     "honour_before": honour_before,
                     "honour_after": int(honour_after.get("honour_score", honour_before)),
@@ -1949,23 +1955,18 @@ def analyze_game_session(
                 "risk_category": sess_cat,
                 "analysis_status": status,
             }
-            if raw_features.get("accuracy") is not None:
-                sess_update["accuracy"] = raw_features.get("accuracy")
-            if raw_features.get("kdr") is not None:
-                sess_update["kdr"] = raw_features.get("kdr")
-            if raw_features.get("kills") is not None:
-                sess_update["kills"] = int(raw_features.get("kills"))
-            if raw_features.get("deaths") is not None:
-                sess_update["deaths"] = int(raw_features.get("deaths"))
-            if raw_features.get("shots_fired") is not None:
-                sess_update["shots_fired"] = int(raw_features.get("shots_fired"))
-            if raw_features.get("shots_hit") is not None:
-                sess_update["shots_hit"] = int(raw_features.get("shots_hit"))
-            if not realtime:
-                sess_update["status"] = "completed"
+            if game_session.get("mode") != "multiplayer":
+                for metric in ("accuracy", "kdr", "kills", "deaths", "shots_fired", "shots_hit"):
+                    if raw_features.get(metric) is not None:
+                        sess_update[metric] = raw_features[metric] if metric in {"accuracy", "kdr"} else int(raw_features[metric])
+                if not realtime:
+                    sess_update["status"] = "completed"
+            update = {"$set": sess_update}
+            if sess_update.get("status") == "completed":
+                update["$unset"] = {"expires_at": ""}
             game_sessions.update_one(
                 {"session_id": session_id},
-                {"$set": sess_update}
+                update,
             )
         except Exception as sess_err:
             safe_print("[SecureFPS] Warning: Failed to mirror risk to game_sessions:", sess_err)
@@ -2116,7 +2117,8 @@ def voluntary_exit_game():
                 "status": "abandoned_voluntary",
                 "abandoned_at": now,
                 "abandon_reason": "voluntary_match_exit",
-            }
+            },
+            "$unset": {"expires_at": ""},
         }
     )
 
@@ -2217,6 +2219,94 @@ def get_honour_info():
 # END GAME
 # =========================================================
 
+def complete_multiplayer_game(game_session, token):
+    if not isinstance(token, str) or len(token) > 4096:
+        return jsonify({"message": "Multiplayer results require a signed match receipt."}), 409
+    user_id = game_session["user_id"]
+    secret = os.getenv("GAME_SERVER_SECRET", "securefps-multiplayer-secret-key-2026")
+    key = hmac.digest(secret.encode("utf-8"), b"securefps:match-result:v1", "sha256")
+    try:
+        result = jwt.decode(token, key, algorithms=["HS256"], audience="securefps-match-result", subject=str(user_id),
+                            options={"require": ["exp", "iat", "sub", "match_id", "started_at"]})
+        match_id = str(uuid.UUID(result["match_id"]))
+        started_at = datetime.fromtimestamp(result["started_at"] / 1000, timezone.utc)
+        metrics = {name: result[name] for name in ("kills", "deaths", "assists", "headshots", "shots_fired", "shots_hit")}
+        duration = result["duration"]
+        outcome = result["result"]
+        if any(type(value) is not int or not 0 <= value <= 100_000 for value in [*metrics.values(), duration]):
+            raise ValueError("Invalid match metrics")
+        if outcome not in {"win", "loss", "draw"}:
+            raise ValueError("Invalid outcome")
+    except (jwt.InvalidTokenError, ValueError, KeyError, TypeError, AttributeError, OverflowError, OSError):
+        return jsonify({"message": "The match receipt is invalid or expired."}), 403
+
+    session_start = game_session.get("started_at")
+    if session_start and session_start.tzinfo is None:
+        session_start = session_start.replace(tzinfo=timezone.utc)
+    if not session_start or abs((session_start - started_at).total_seconds()) > 120:
+        return jsonify({"message": "The match receipt does not belong to this gameplay session."}), 409
+    if game_session.get("status") != "active" and game_session.get("multiplayer_receipt") != match_id:
+        return jsonify({"message": "This gameplay session is already closed."}), 409
+
+    receipt_id = f"{match_id}:{user_id}"
+    receipts = db["multiplayer_match_receipts"]
+    try:
+        receipts.update_one({"_id": receipt_id}, {
+            "$setOnInsert": {"session_id": game_session["session_id"], "created_at": utc_now()},
+        }, upsert=True)
+    except DuplicateKeyError:
+        pass
+    receipt = receipts.find_one({"_id": receipt_id}) or {}
+    if receipt.get("session_id") != game_session["session_id"]:
+        return jsonify({"message": "This match receipt has already been used."}), 409
+
+    shots = metrics["shots_fired"]
+    metrics["shots_hit"] = min(metrics["shots_hit"], shots)
+    metrics["headshots"] = min(metrics["headshots"], metrics["shots_hit"])
+    now = utc_now()
+    changes = {
+        **metrics,
+        "status": "completed",
+        "stats_source": "multiplayer_server",
+        "multiplayer_receipt": match_id,
+        "result": outcome,
+        "ended_at": started_at + timedelta(seconds=duration),
+        "duration_seconds": duration,
+        "accuracy": round(metrics["shots_hit"] / shots, 3) if shots else 0.0,
+        "kdr": round(metrics["kills"] / max(1, metrics["deaths"]), 2),
+    }
+    completion = game_sessions.update_one(
+        {"_id": game_session["_id"], "status": "active"},
+        {"$set": changes, "$unset": {"expires_at": ""}},
+    )
+    current = game_sessions.find_one({"_id": game_session["_id"], "multiplayer_receipt": match_id})
+    if not current:
+        return jsonify({"message": "This gameplay session is already closed."}), 409
+
+    if duration >= 30 and not (current.get("demo_mode") or current.get("is_demo")):
+        if completion.modified_count:
+            _, _, honour = record_honour_transaction(user_id, current["session_id"], MATCH_COMPLETE_HONOUR_REWARD, "match_completed")
+            game_sessions.update_one({"_id": current["_id"]}, {"$set": {"honour_awarded": honour}})
+            current["honour_awarded"] = honour
+        if current.get("reward_credit"):
+            apply_match_credit(current)
+        else:
+            day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            under_cap = reward_transactions.count_documents({
+                "user_id": user_id, "type": "match_completed", "coins": {"$gt": 0}, "created_at": {"$gte": day_start},
+            }) < 20
+            record_match_credit(user_id, current["session_id"], {
+                "type": "match_completed", "description": "Completed an authoritative multiplayer match",
+                "coins": 20 if under_cap else 0, "xp": 50 if under_cap else 0,
+                "honour": current.get("honour_awarded", 0), "created_at": now,
+            })
+    notify_player(user_id, "match_result", receipt_id)
+    if completion.modified_count:
+        analyze_game_session(user_id, current["session_id"])
+        publish_live_update(user_id, current["session_id"], "analysis_complete", force=True)
+    return jsonify({"success": True, "status": "completed", "session_id": current["session_id"]})
+
+
 @game_bp.post("/game/end")
 def end_game():
 
@@ -2231,12 +2321,14 @@ def end_game():
     data = request.get_json(
         silent=True
     ) or {}
+    if not isinstance(data, dict):
+        return jsonify({"message": "Match completion must be a JSON object."}), 400
 
     session_id = data.get(
         "session_id"
     )
 
-    if not session_id:
+    if not isinstance(session_id, str) or not session_id:
 
         return jsonify({
             "message": "session_id is required."
@@ -2257,14 +2349,16 @@ def end_game():
     # or if this call explicitly declares the match completed.
     is_completed_request = (
         data.get("completed") is True
-        or data.get("reason") in {"match_completed", "score_limit_reached", "time_expired"}
+        or data.get("reason") in ("match_completed", "score_limit_reached", "time_expired")
     )
+    if is_completed_request and game_session.get("mode") == "multiplayer":
+        return complete_multiplayer_game(game_session, data.get("completion_token"))
 
     now = utc_now()
     restriction_until = None
 
     combat_sync = {}
-    for k in ("kills", "deaths", "headshots", "accuracy", "kdr"):
+    for k in ("kills", "deaths", "headshots"):
         if k in data and data[k] is not None:
             combat_sync[k] = data[k]
     if "shots" in data and data["shots"] is not None:
@@ -2279,23 +2373,42 @@ def end_game():
         combat_sync["winner"] = data["winner"]
 
     if game_session.get("status") != "active":
-        if combat_sync:
-            game_sessions.update_one(
-                {"session_id": session_id, "user_id": user_id},
-                {"$set": combat_sync}
-            )
         return jsonify({
             "success": True,
             "status": game_session.get("status"),
-            "message": "Match already closed; combat metrics synchronized.",
+            "message": "Match already closed.",
         }), 200
 
     if is_completed_request:
+        started_at = game_session.get("started_at")
+        if started_at and started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        duration_seconds = max(0, (now - started_at).total_seconds()) if started_at else 0
+        eligible_for_rewards = duration_seconds >= 30
+        if not eligible_for_rewards:
+            combat_sync = {}
+        def count(key):
+            value = combat_sync.get(key)
+            return value if type(value) is int and 0 <= value <= 2**31 - 1 else 0
+
+        match_kills = count("kills")
+        match_deaths = count("deaths")
+        match_shots = count("shots_fired")
+        match_hits = min(match_shots, count("shots_hit"))
         completion_set = {
             "status": "completed",
-            "ended_at": now
+            "ended_at": now,
+            "duration_seconds": duration_seconds,
+            "kills": match_kills,
+            "deaths": match_deaths,
+            "shots_fired": match_shots,
+            "shots_hit": match_hits,
+            "headshots": min(match_hits, count("headshots")),
+            "accuracy": round(match_hits / match_shots, 3) if match_shots else 0.0,
+            "kdr": round(match_kills / max(1, match_deaths), 2),
         }
-        completion_set.update(combat_sync)
+        if isinstance(combat_sync.get("winner"), str):
+            completion_set["winner"] = combat_sync["winner"][:100]
         completion = game_sessions.update_one(
             {
                 "session_id": session_id,
@@ -2303,28 +2416,11 @@ def end_game():
                 "status": "active"
             },
             {
-                "$set": completion_set
+                "$set": completion_set,
+                "$unset": {"expires_at": ""},
             }
         )
         if completion.modified_count:
-            # Reward Integrity: verify duration >= 30s and daily reward cap (max 20 per day)
-            MIN_MATCH_DURATION_SECONDS = 30
-            started_at = game_session.get("started_at")
-            if started_at and started_at.tzinfo is None:
-                started_at = started_at.replace(tzinfo=timezone.utc)
-            duration_seconds = (now - started_at).total_seconds() if started_at else 0
-            eligible_for_rewards = duration_seconds >= MIN_MATCH_DURATION_SECONDS
-
-            start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            daily_rewards_count = reward_transactions.count_documents({
-                "user_id": user_id,
-                "type": "match_completed",
-                "created_at": {"$gte": start_of_day}
-            })
-            under_daily_cap = daily_rewards_count < 20
-
-            coins_to_award = 20 if (eligible_for_rewards and under_daily_cap) else 0
-            xp_to_award = 50 if (eligible_for_rewards and under_daily_cap) else 0
             honour_delta = MATCH_COMPLETE_HONOUR_REWARD if eligible_for_rewards else 0
 
             honour_before, honour_score, honour_awarded = record_honour_transaction(
@@ -2334,34 +2430,18 @@ def end_game():
                 reason="match_completed",
                 is_automatic=True
             )
-            match_kills = int(data.get("kills", 0) or 0)
-            match_deaths = int(data.get("deaths", 0) or 0)
-            match_shots = int(data.get("shots", 0) or 0)
-            match_hits = int(data.get("hits", 0) or 0)
-            match_accuracy = float(data.get("accuracy", 0.0) or (round(match_hits / max(1, match_shots), 3) if match_shots > 0 else 0.0))
-            match_kdr = float(data.get("kdr", 0.0) or (round(match_kills / max(1, match_deaths), 2)))
-
             game_sessions.update_one(
                 {"session_id": session_id, "user_id": user_id},
                 {
-                    "$set": {
-                        "honour_awarded": honour_awarded,
-                        "duration_seconds": duration_seconds,
-                        "kills": match_kills,
-                        "deaths": match_deaths,
-                        "shots": match_shots,
-                        "hits": match_hits,
-                        "accuracy": match_accuracy,
-                        "kdr": match_kdr
-                    }
+                    "$set": {"honour_awarded": honour_awarded}
                 },
             )
             if not (game_session.get("demo_mode") or game_session.get("is_demo")):
                 record_match_credit(user_id, session_id, {
                     "type": "match_completed",
                     "description": f"Completed CyberStrike 3D match ({int(duration_seconds)}s); +{honour_awarded} Honour",
-                    "coins": coins_to_award,
-                    "xp": xp_to_award,
+                    "coins": 0,
+                    "xp": 0,
                     "honour": honour_awarded,
                     "honour_before": honour_before,
                     "honour_after": int(honour_score if honour_score is not None else honour_before),
@@ -2390,7 +2470,8 @@ def end_game():
                 "status": "abandoned",
                 "abandoned_at": now,
                 "abandon_reason": "player_left_before_match_completion",
-            }
+            },
+            "$unset": {"expires_at": ""},
         }
     )
 
@@ -3211,11 +3292,8 @@ def reply_to_support_ticket(ticket_id):
         return jsonify({"message": "Support ticket not found."}), 404
 
     ticket = support_tickets.find_one({"_id": ticket_oid}, {"user_id": 1}) or {}
-    player_notifications.insert_one({
-        "user_id": ticket["user_id"], "type": "support_reply", "title": "Support replied",
-        "message": "Open your support tickets to read the reply.", "read": False,
-        "created_at": now,
-    })
+    if ticket.get("user_id"):
+        notify_player(ticket["user_id"], "support_reply", f"{ticket_oid}:{now.isoformat()}")
     publish_live_update(ticket.get("user_id"), None, "support_reply", force=True)
     return jsonify({"message": "Reply sent to player."})
 
@@ -4706,6 +4784,9 @@ def review_gameplay_alert(session_id):
         "ban_until": ban_until if action == "ban" else None,
         "created_at": reviewed_at,
     })
+    if player_id:
+        event = {"warn": "player_warning", "suspend": "account_suspended", "ban": "account_banned"}.get(action, "review_completed")
+        notify_player(player_id, event, session_id)
     return jsonify({"success": True, "review_status": status, "message": f"Alert review marked as {status}."}), 200
 
 
@@ -4792,11 +4873,7 @@ def admin_trigger_retrain():
 def internal_matchmaking_policy():
     secret = os.getenv("GAME_SERVER_SECRET", "securefps-multiplayer-secret-key-2026")
     supplied = request.headers.get("Authorization", "")
-    fallback_secret = "securefps-multiplayer-secret-key-2026"
-    valid = (
-        hmac.compare_digest(supplied.encode("utf-8"), f"Bearer {secret}".encode("utf-8")) or
-        hmac.compare_digest(supplied.encode("utf-8"), f"Bearer {fallback_secret}".encode("utf-8"))
-    )
+    valid = hmac.compare_digest(supplied.encode("utf-8"), f"Bearer {secret}".encode("utf-8"))
     if not valid:
         return jsonify({"message": "Unauthorized."}), 401
     cfg = db["system_config"].find_one({"type": "global_config"}, {"security_policies.emergency_lockdown": 1}) or {}
@@ -4807,13 +4884,10 @@ def internal_anti_cheat_report():
     auth_header = request.headers.get("X-Game-Server-Signature", "")
     secret = os.getenv("GAME_SERVER_SECRET", "securefps-multiplayer-secret-key-2026")
     body_bytes = request.get_data()
-    fallback_secret = "securefps-multiplayer-secret-key-2026"
     expected_sig = hmac.new(secret.encode("utf-8"), body_bytes, hashlib.sha256).hexdigest()
-    fallback_sig = hmac.new(fallback_secret.encode("utf-8"), body_bytes, hashlib.sha256).hexdigest()
-
-    token = request.headers.get("Authorization", "").replace("Bearer ", "")
-    sig_valid = hmac.compare_digest(auth_header, expected_sig) or hmac.compare_digest(auth_header, fallback_sig)
-    token_valid = token == secret or token == fallback_secret
+    supplied = request.headers.get("Authorization", "")
+    sig_valid = hmac.compare_digest(auth_header.encode("utf-8"), expected_sig.encode("ascii"))
+    token_valid = hmac.compare_digest(supplied.encode("utf-8"), f"Bearer {secret}".encode("utf-8"))
     if not sig_valid and not token_valid:
         return jsonify({"message": "Unauthorized"}), 401
 
@@ -4835,6 +4909,9 @@ def internal_anti_cheat_report():
                 "room_code": payload.get("roomCode"),
                 "user_id": user_id_str,
                 "player_name": payload.get("playerName", "Operator"),
+                "type": "gameplay_anomaly",
+                "severity": "high" if risk >= 65 else "medium",
+                "description": f"AI anti-cheat risk score {risk:.1f}/100",
                 "features": features,
                 "prediction": prediction,
                 "risk_score": risk,

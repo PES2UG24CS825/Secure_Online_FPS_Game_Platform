@@ -69,17 +69,16 @@ describe('Combat & Hit Registration Verification', () => {
     assert.match(mainJs, /setEl\('mc-hits'/);
   });
 
-  it('Player overview dashboard displays career combat stats and clean match feature badges', () => {
+  it('Player overview dashboard stays compact and match details keep clean feature badges', () => {
     const playerHtml = fs.readFileSync(path.resolve(rootDir, '../../../player.html'), 'utf-8');
     const playerJs = fs.readFileSync(path.resolve(rootDir, '../../../js/player.js'), 'utf-8');
     const playerCss = fs.readFileSync(path.resolve(rootDir, '../../../css/player.css'), 'utf-8');
     const routesPy = fs.readFileSync(path.resolve(rootDir, '../../../../backend/routes/player_routes.py'), 'utf-8');
 
-    assert.match(playerHtml, /id="careerTotalKills"/);
-    assert.match(playerHtml, /id="careerTotalDeaths"/);
-    assert.match(playerHtml, /id="careerKd"/);
-    assert.match(playerHtml, /id="careerAccuracy"/);
-    assert.match(playerJs, /careerTotalKills/);
+    assert.match(playerHtml, /id="matchesCount"/);
+    assert.match(playerHtml, /id="accountStatus"/);
+    assert.match(playerHtml, /id="mfaStatus"/);
+    assert.doesNotMatch(playerHtml, /careerTotalKills|careerTotalDeaths|careerKd|careerAccuracy/);
     assert.match(playerJs, /match-features-strip/);
     assert.doesNotMatch(playerJs, /ML Models:\s*<\/strong>\s*RF:/);
     assert.doesNotMatch(playerJs, /Analysis needs gameplay data:/);
@@ -144,12 +143,13 @@ describe('Combat & Hit Registration Verification', () => {
     assert.doesNotMatch(playerHtml, /href="#settings"|id="settings"|Player Settings/);
   });
 
-  it('selected banner becomes the full player UI background', () => {
+  it('keeps profile banners separate from the shared Sakura dashboard artwork', () => {
     const playerJs = fs.readFileSync(path.resolve(rootDir, '../../../js/player.js'), 'utf-8');
-    const playerCss = fs.readFileSync(path.resolve(rootDir, '../../../css/player.css'), 'utf-8');
-    assert.match(playerJs, /body\.dataset\.playerBanner/);
-    assert.match(playerCss, /body\.player-page[\s\S]*var\(--player-scene-image\)/);
-    assert.match(playerCss, /data-player-banner="sakura"/);
+    const sharedCss = fs.readFileSync(path.resolve(rootDir, '../../../css/ui-polish.css'), 'utf-8');
+    assert.match(playerJs, /getElementById\("profileBanner"\)/);
+    assert.doesNotMatch(playerJs, /overviewBanner/);
+    assert.doesNotMatch(playerJs, /body\.dataset\.playerBanner|--player-scene-image/);
+    assert.match(sharedCss, /SecureFPS_Sakura_Anime_Background\.png/);
   });
 
   it('multiplayer weapons use balanced ammo, realistic viewmodel materials, and health-only armour HUD', () => {
@@ -163,14 +163,15 @@ describe('Combat & Hit Registration Verification', () => {
     assert.match(modeCode, /armourCard\.style\.display\s*=\s*this\.currentMode\s*===\s*['"]multiplayer['"]/);
   });
 
-  it('sidebars use text branding and sticky player topbar is opaque', () => {
+  it('sidebars use the original logo lockup and sticky player topbar is opaque', () => {
     const playerHtml = fs.readFileSync(path.resolve(rootDir, '../../../player.html'), 'utf-8');
     const adminHtml = fs.readFileSync(path.resolve(rootDir, '../../../admin.html'), 'utf-8');
     const playerCss = fs.readFileSync(path.resolve(rootDir, '../../../css/player.css'), 'utf-8');
     const adminCss = fs.readFileSync(path.resolve(rootDir, '../../../css/admin.css'), 'utf-8');
-    assert.match(playerHtml, /sidebar-brand-text/);
-    assert.match(adminHtml, /sidebar-brand-text/);
-    assert.match(playerCss, /background:\s*#FFFFFF/);
+    assert.match(playerHtml, /securefps-logo-crop\.png/);
+    assert.match(adminHtml, /securefps-logo-crop\.png/);
+    assert.match(playerHtml, /sidebar-logo-lockup/);
+    assert.match(adminHtml, /sidebar-logo-lockup/);
     assert.match(playerCss, /\.player-topbar\s*\{\s*display:\s*none/);
     assert.match(adminCss, /admin-sidebar \.brand-lockup\s*\{\s*display:none/);
   });
@@ -189,7 +190,7 @@ describe('Combat & Hit Registration Verification', () => {
     assert.match(wepCode, /const\s+camPos\s*=\s*new\s+THREE\.Vector3\(\);[\s\S]*notifyGunshot\(playerPos\)/);
     // Server has matchmaking policy dev fallback
     assert.match(serverCode, /ALLOW_ANONYMOUS\s*\|\|\s*process\.env\.NODE_ENV\s*!==\s*['"]production['"]/);
-    // Backend routes support fallback secret
-    assert.match(gameRoutes, /fallback_secret\s*=\s*['"]securefps-multiplayer-secret-key-2026['"]/);
+    // Internal request authentication must use only the configured secret.
+    assert.doesNotMatch(gameRoutes, /fallback_(secret|sig)\s*=/);
   });
 });

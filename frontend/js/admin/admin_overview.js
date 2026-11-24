@@ -1,8 +1,9 @@
+import { openPlayerMatchesModal } from "./admin_players.js";
 /**
  * SecureFPS Admin Overview Module
  * Cached statistics (30s), server cluster health monitor, and dev fixture toggling.
  */
-import { escapeHtml, formatTimeAgo } from './admin_core.js';
+import { escapeHtml, formatTimeAgo, incidentLabel, PollingManager } from './admin_core.js';
 
 export async function loadAdminOverview(forceRefresh = false) {
   try {
@@ -19,7 +20,14 @@ export async function loadAdminOverview(forceRefresh = false) {
     if (data.admin) renderAdminHeaderBadge(data.admin);
     renderOverviewStats(data.stats || {});
     renderRecentMatches(data.matches || []);
+    const unresolved = document.getElementById('unresolvedCritical');
+    if (unresolved) {
+      const count = data.stats?.unresolved_critical;
+      unresolved.textContent = count == null ? 'Critical alert count unavailable' : `${count} unresolved critical`;
+      unresolved.classList.toggle('badge-danger', count > 0);
+    }
     renderRecentEvents(data.events || []);
+    PollingManager.updateLastUpdatedDisplay();
 
     // Check cluster health
     await loadServerClusterHealth();
@@ -39,13 +47,16 @@ function renderOverviewStats(stats) {
 
   if (pCount) pCount.textContent = stats.total_players ?? 0;
   if (mCount) mCount.textContent = stats.matches_analyzed ?? 0;
-  if (eCount) eCount.textContent = (stats.total_players ? stats.total_players * 3 : '—');
+  if (eCount) eCount.textContent = stats.total_security_events ?? '—';
   if (hCount) hCount.textContent = stats.high_severity_events ?? '0';
 
-  const bannedAccountCount = document.getElementById('bannedAccountCount');
-  if (bannedAccountCount) {
-    const banned = (stats.banned_players || 0) + (stats.suspended_players || 0);
-    bannedAccountCount.textContent = `${banned} account${banned === 1 ? '' : 's'}`;
+  for (const [id, field] of Object.entries({
+    activePlayerCount: 'active_players',
+    activeSessionCount: 'active_sessions',
+    pendingAppealCount: 'pending_appeals',
+  })) {
+    const node = document.getElementById(id);
+    if (node) node.textContent = stats[field] ?? '—';
   }
 }
 
@@ -120,8 +131,9 @@ async function loadMultiplayerRoomsPanel() {
   if (!container) return;
   try {
     const resp = await fetch('/api/admin/multiplayer/rooms', { credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-    if (!resp.ok) return;
+    if (!resp.ok) throw new Error('Room status unavailable');
     const data = await resp.json();
+    if (data.status === 'offline') throw new Error('Multiplayer server offline');
     const rooms = data.rooms || [];
     if (rooms.length === 0) {
       container.innerHTML = '<div class="empty">No active multiplayer rooms currently running.</div>';
@@ -145,15 +157,17 @@ async function loadMultiplayerRoomsPanel() {
                 <td><code>${escapeHtml(r.roomCode)}</code></td>
                 <td><span class="badge ${r.state === 'in_game' ? 'badge-success' : 'badge-cyan'}">${escapeHtml(r.state)}</span></td>
                 <td>${escapeHtml(r.hostName || 'Operator')}</td>
-                <td>${r.playerCount} / 8</td>
-                <td>${(r.players || []).map(p => `<span class="badge badge-cyan" style="font-size:11px; margin-right:4px;">${escapeHtml(p.name)} (${p.kills}K/${p.deaths}D)</span>`).join('')}</td>
+                <td>${escapeHtml(r.playerCount)} / ${escapeHtml(r.maxPlayers ?? '—')}</td>
+                <td>${(r.players || []).map(p => `<span class="badge badge-cyan" style="font-size:11px; margin-right:4px;">${escapeHtml(p.name)} (${escapeHtml(p.kills)}K/${escapeHtml(p.deaths)}D)</span>`).join('')}</td>
               </tr>
             `).join('')}
           </tbody>
         </table>
       </div>
     `;
-  } catch (err) {}
+  } catch (err) {
+    container.innerHTML = '<div class="empty">Multiplayer room status unavailable.</div>';
+  }
 }
 
 function renderRecentMatches(matches) {
@@ -188,15 +202,36 @@ function renderRecentEvents(events) {
     return;
   }
 
-  container.innerHTML = events.map(e => `
-    <div class="event-item severity-${escapeHtml(e.severity || 'low')}">
-      <div class="event-header">
-        <span class="event-type">${escapeHtml(e.type || 'security_event')}</span>
-        <span class="event-time">${formatTimeAgo(e.timestamp)}</span>
-      </div>
-      <div class="event-desc">${escapeHtml(e.description || '')}</div>
-    </div>
-  `).join('');
+  container.innerHTML = `<div class="admin-table-wrap"><table>
+    <thead><tr><th>Incident</th><th>Player</th><th>Severity</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>${events.map(e => `
+      <tr>
+        <td><details><summary>${escapeHtml(incidentLabel(e.type))}</summary>${escapeHtml(e.description || 'No additional detail.')}</details></td>
+        <td>${escapeHtml(e.player_name || '—')}</td>
+        <td><span class="badge ${e.severity === 'critical' ? 'badge-danger' : ''}">${escapeHtml(e.severity || 'Unknown')}</span></td>
+        <td><time>${formatTimeAgo(e.timestamp)}</time></td>
+        <td>${escapeHtml(e.acknowledged && e.status === 'open' ? 'Acknowledged' : incidentLabel(e.status))}</td>
+        <td><div class="event-actions">
+          ${e.player_id ? `<button type="button" class="ghost-btn" data-investigate="${escapeHtml(e.player_id)}" data-name="${escapeHtml(e.player_name || 'Player')}">Investigate</button>` : ''}
+          ${e.severity === 'critical' && !e.acknowledged && !['closed', 'resolved'].includes(e.status) ? `<button type="button" class="ghost-btn" data-acknowledge="${escapeHtml(e.id)}">Acknowledge</button>` : ''}
+        </div></td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  container.querySelectorAll('[data-investigate]').forEach(button => {
+    button.onclick = () => openPlayerMatchesModal(button.dataset.investigate, button.dataset.name, '');
+  });
+  container.querySelectorAll('[data-acknowledge]').forEach(button => {
+    button.onclick = async () => {
+      button.disabled = true;
+      try {
+        await api(`/admin/security-events/${encodeURIComponent(button.dataset.acknowledge)}/acknowledge`, { method: 'POST' });
+        await loadAdminOverview(true);
+      } catch (error) {
+        window.showAppAlert(error.message);
+        button.disabled = false;
+      }
+    };
+  });
 }
 
 export function renderAdminHeaderBadge(admin) {
@@ -204,44 +239,24 @@ export function renderAdminHeaderBadge(admin) {
   window.currentAdmin = admin;
   const isSuper = Boolean(admin.is_super_admin);
   window.isSuperAdmin = isSuper;
+  document.body.dataset.adminRole = isSuper ? 'super' : 'normal';
 
   const nameEl = document.getElementById('adminName');
   const emailEl = document.getElementById('adminEmail');
   const avatarEl = document.querySelector('.admin-header-card .avatar');
+  const roleBadgeEl = document.getElementById('adminRoleBadge');
 
-  // Insert or update Admin Tier Banner
-  let tierBanner = document.getElementById('adminTierBanner');
-  if (!tierBanner) {
-    tierBanner = document.createElement('div');
-    tierBanner.id = 'adminTierBanner';
-    const mainWrap = document.querySelector('.admin-main');
-    if (mainWrap) {
-      mainWrap.insertBefore(tierBanner, mainWrap.children[1]);
-    }
+  if (nameEl) nameEl.textContent = isSuper ? 'Super administrator' : 'Administrator';
+  if (emailEl) emailEl.textContent = [admin.name, admin.email].filter(Boolean).join(' · ');
+  if (avatarEl) avatarEl.textContent = isSuper ? 'SA' : 'AD';
+  if (roleBadgeEl) {
+    roleBadgeEl.textContent = isSuper ? 'Super Admin · L2' : 'Normal Admin · L1';
+    roleBadgeEl.dataset.role = isSuper ? 'super' : 'normal';
   }
+  const superCat = document.getElementById('superAdminNavCategory');
+  if (superCat) superCat.hidden = !isSuper;
 
   if (isSuper) {
-    if (nameEl) nameEl.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;"><span>👑</span><strong>Super Administrator</strong></span>`;
-    if (emailEl) emailEl.innerHTML = `<span style="color:#2563EB; font-weight:700;">Full System Authority</span> · ${escapeHtml(admin.email || '')}`;
-    if (avatarEl) {
-      avatarEl.textContent = '👑';
-      avatarEl.classList.add('super-admin-avatar');
-    }
-    if (tierBanner) {
-      tierBanner.className = 'admin-tier-banner super-tier';
-      tierBanner.innerHTML = `
-        <div>
-          <strong>👑 Super Administrator Command Center:</strong>
-          <span>Full platform authority: Approvals Queue, Administrator Provisioning, Risk Engine Configuration, AI/ML Models, Platform Lockdown, and System Control.</span>
-        </div>
-        <span class="admin-tier-badge level-2" style="background:#2563EB; color:#fff;">SUPER ADMIN</span>
-      `;
-    }
-    document.querySelectorAll('[id*="Export"], [href*="/export/"]').forEach(el => el.style.display = '');
-
-    const superCat = document.getElementById('superAdminNavCategory');
-    if (superCat) superCat.hidden = false;
-
     // Check approvals queue count
     fetch('/api/admin/approvals?status=pending', { credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
       .then(r => r.ok ? r.json() : null)
@@ -257,26 +272,5 @@ export function renderAdminHeaderBadge(admin) {
         if (badge) badge.textContent = pCount;
       })
       .catch(() => {});
-  } else {
-    if (nameEl) nameEl.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;"><span>🛡️</span><strong>Normal Administrator</strong></span>`;
-    if (emailEl) emailEl.innerHTML = `<span style="color:#60A5FA; font-weight:600;">Operational Console</span> · ${escapeHtml(admin.email || '')}`;
-    if (avatarEl) {
-      avatarEl.textContent = 'NA';
-      avatarEl.classList.remove('super-admin-avatar');
-    }
-    if (tierBanner) {
-      tierBanner.className = 'admin-tier-banner normal-tier';
-      tierBanner.innerHTML = `
-        <div>
-          <strong>🛡️ Normal Administrator Console:</strong>
-          <span>Operational monitoring: Player Profiles, Suspensions (up to 7 days), Threat Monitoring, Security &amp; Appeals, Reports, and Support Tickets. Permanent bans and account erasures require Super Admin approval.</span>
-        </div>
-        <span class="admin-tier-badge level-1" style="background:#1E293B; color:#94A3B8;">NORMAL ADMIN</span>
-      `;
-    }
-    document.querySelectorAll('[id*="Export"], [href*="/export/"]').forEach(el => el.style.display = '');
-
-    const superCat = document.getElementById('superAdminNavCategory');
-    if (superCat) superCat.hidden = true;
   }
 }

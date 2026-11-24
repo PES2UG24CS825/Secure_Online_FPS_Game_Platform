@@ -16,7 +16,7 @@ export function escapeHtml(str) {
 export function formatTimeAgo(dateInput) {
   if (!dateInput) return '—';
   const date = new Date(dateInput);
-  if (isNaN(date.getTime())) return String(dateInput);
+  if (isNaN(date.getTime())) return '—';
   const pad = (n) => String(n).padStart(2, '0');
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const day = pad(date.getDate());
@@ -26,6 +26,30 @@ export function formatTimeAgo(dateInput) {
   const minutes = pad(date.getMinutes());
   const seconds = pad(date.getSeconds());
   return `${day} ${month} ${year}, ${hours}:${minutes}:${seconds}`;
+}
+
+const incidentLabels = {
+  abnormal_fire_rate: 'Unusually Fast Shooting',
+  movement_anomaly: 'Unusual Movement Speed',
+  aim_anomaly: 'Suspicious Aiming',
+  impossible_hit: 'Impossible Hit Detected',
+  session_revoked: 'Login Session Ended',
+  mfa_failure: 'Incorrect Verification Code',
+  invalid_mfa: 'Incorrect Authenticator Code',
+  invalid_password: 'Incorrect Password',
+  unknown_account: 'Account Not Recognized',
+  login_failed: 'Sign-in Failed',
+  unauthorized_access: 'Unauthorized Access Attempt',
+  model_rollback: 'Previous AI Model Restored',
+  toggle_emergency_lockdown: 'Emergency Lockdown Changed',
+  soft_delete_player: 'Player Account Deactivated',
+};
+
+export function incidentLabel(code) {
+  if (!code) return 'Unknown action';
+  return Object.hasOwn(incidentLabels, code)
+    ? incidentLabels[code]
+    : String(code).replaceAll('_', ' ').replace(/^./, letter => letter.toUpperCase());
 }
 
 class AdminPollingManager {
@@ -89,7 +113,7 @@ class AdminPollingManager {
     this.isPaused = false;
     const indicator = document.getElementById('adminLiveStatus');
     if (indicator) {
-      indicator.innerHTML = '<span class="status-dot live"></span>Live connected';
+      indicator.textContent = 'Checking connection';
     }
     if (immediate) {
       this.triggerAll();
@@ -98,7 +122,6 @@ class AdminPollingManager {
 
   triggerAll() {
     this.lastUpdated = Date.now();
-    this.updateLastUpdatedDisplay();
     for (const cb of this.subscribers) {
       try {
         cb();

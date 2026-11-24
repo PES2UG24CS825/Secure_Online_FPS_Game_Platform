@@ -3,7 +3,7 @@
  * Handles privileged administrator management, role permissions, ML tuning & rollback,
  * risk engine simulation, emergency lockdown, system control metrics, and backups.
  */
-import { escapeHtml, formatTimeAgo } from './admin_core.js';
+import { escapeHtml, formatTimeAgo, incidentLabel } from './admin_core.js';
 
 export function initSuperAdminModules() {
   setupSuperEventListeners();
@@ -19,9 +19,7 @@ function setupSuperEventListeners() {
 
   if (openCreateBtn && createModal) {
     openCreateBtn.addEventListener('click', () => {
-      document.getElementById('newAdminName').value = '';
-      document.getElementById('newAdminEmail').value = '';
-      document.getElementById('newAdminPassword').value = '';
+      createForm.reset();
       const fb = document.getElementById('createAdminFeedback');
       if (fb) fb.hidden = true;
       createModal.showModal();
@@ -40,17 +38,21 @@ function setupSuperEventListeners() {
       const password = document.getElementById('newAdminPassword').value;
       const fb = document.getElementById('createAdminFeedback');
 
+      const enrollment_key = document.getElementById('newAdminEnrollment').value.trim().toUpperCase();
+      const verification_code = document.getElementById('newAdminVerification').value.trim();
+
       try {
         const resp = await fetch('/api/admin/super/admins', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': 'securefps-csrf' },
-          body: JSON.stringify({ name, email, password })
+          body: JSON.stringify({ name, email, password, enrollment_key, verification_code })
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.message || 'Failed to create administrator');
 
         createModal.close();
-        window.showAppAlert(`Success: Normal Administrator '${name}' created!\nMFA Secret Seed: ${data.admin?.mfa_seed || 'Unavailable'}`);
+        createForm.reset();
+        window.showAppAlert(data.message);
         loadSuperAdmins();
       } catch (err) {
         if (fb) {
@@ -223,23 +225,6 @@ function setupSuperEventListeners() {
   // 7. System metrics refresh
   document.getElementById('refreshSystemMetricsBtn')?.addEventListener('click', loadSystemControlMetrics);
 
-  // 8. Create Backup Snapshot
-  document.getElementById('createBackupSnapshotBtn')?.addEventListener('click', async () => {
-    if (!await window.showAppConfirm('Trigger immediate on-demand cluster snapshot and verify integrity?')) return;
-    try {
-      const resp = await fetch('/api/admin/super/backups/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': 'securefps-csrf' }
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.message || 'Backup failed');
-      window.showAppAlert(`✓ ${data.message}`);
-      loadSystemBackups();
-    } catch (err) {
-      window.showAppAlert(`Backup error: ${err.message}`, { tone: "error" });
-    }
-  });
-
   // 9. Save Platform Config
   document.getElementById('savePlatformConfigBtn')?.addEventListener('click', async () => {
     const timeout = parseInt(document.getElementById('cfgSessionTimeout').value, 10);
@@ -301,8 +286,8 @@ export async function loadSuperAdmins() {
         : (a.account_status === 'suspended' ? '<span class="badge badge-warning">Suspended</span>' : '<span class="badge badge-danger">Deactivated</span>');
       
       const roleBadge = isSuper
-        ? '<span class="admin-tier-badge level-2">👑 Super Admin (L2)</span>'
-        : '<span class="admin-tier-badge level-1">🛡️ Normal Admin (L1)</span>';
+        ? '<span class="admin-tier-badge level-2">Super Admin (L2)</span>'
+        : '<span class="admin-tier-badge level-1">Normal Admin (L1)</span>';
 
       return `
         <tr>
@@ -310,22 +295,13 @@ export async function loadSuperAdmins() {
             <strong>${escapeHtml(a.name)}</strong>
             <br><small class="muted">${escapeHtml(a.email)}</small>
           </td>
-          <td>${roleBadge}</td>
+          <td>${roleBadge}${a.is_test_account ? ' <span class="badge">Development / test</span>' : ""}</td>
           <td>${statusBadge}</td>
           <td><span class="badge ${a.mfa_enabled ? 'badge-cyan' : 'badge-danger'}">${a.mfa_enabled ? 'MFA Enrolled' : 'MFA Disabled'}</span></td>
           <td><strong style="color:#4C1D95;">${a.active_sessions}</strong> active</td>
           <td><small class="muted">${formatTimeAgo(a.last_login)}</small></td>
           <td>
-            <div style="display:flex; gap:6px; flex-wrap:wrap;">
-              <button class="ghost-btn admin-act-btn" data-act="reset-mfa" data-id="${a.id}" data-name="${escapeHtml(a.name)}" title="Reset MFA">MFA</button>
-              <button class="ghost-btn admin-act-btn" data-act="revoke-sessions" data-id="${a.id}" data-name="${escapeHtml(a.name)}" title="Revoke Sessions">Sessions</button>
-              ${!isSuper ? `
-                <button class="ghost-btn admin-act-btn" data-act="toggle-status" data-id="${a.id}" data-status="${a.account_status}" data-name="${escapeHtml(a.name)}" style="color:#D97706;">${a.account_status === 'active' ? 'Suspend' : 'Activate'}</button>
-                <button class="ghost-btn admin-act-btn" data-act="delete" data-id="${a.id}" data-name="${escapeHtml(a.name)}" style="color:#DC2626;">Delete</button>
-              ` : `
-                <span class="badge" style="background:#FEF3C7; color:#B45309; font-size:10px;">Root Protected</span>
-              `}
-            </div>
+            ${!isSuper && a.active_sessions > 0 ? `<button class="ghost-btn admin-act-btn" data-id="${escapeHtml(a.id)}" data-name="${escapeHtml(a.name)}">Revoke sessions</button>` : (isSuper ? '<span class="badge">Protected role</span>' : '—')}
           </td>
         </tr>
       `;
@@ -333,54 +309,20 @@ export async function loadSuperAdmins() {
 
     // Wire action buttons
     tbody.querySelectorAll('.admin-act-btn').forEach(btn => {
-      btn.addEventListener('click', () => handleAdminAction(btn.dataset.act, btn.dataset.id, btn.dataset.name, btn.dataset.status));
+      btn.addEventListener('click', () => revokeAdminSessions(btn.dataset.id, btn.dataset.name));
     });
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="7" class="error-cell">Failed to load administrator roster: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
-async function handleAdminAction(act, id, name, currentStatus) {
-  if (act === 'reset-mfa') {
-    if (!await window.showAppConfirm(`Reset MFA configuration for administrator ${name}? They will re-enroll on next login.`)) return;
-    const resp = await fetch(`/api/admin/super/admins/${id}/reset-mfa`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': 'securefps-csrf' }
-    });
-    const d = await resp.json();
-    window.showAppAlert(d.message || (resp.ok ? 'MFA Reset' : 'Failed'));
+async function revokeAdminSessions(id, name) {
+  if (!await window.showAppConfirm(`Revoke all active sessions for administrator ${name}?`)) return;
+  try {
+    await api(`/admin/super/admins/${encodeURIComponent(id)}/revoke-sessions`, { method: 'POST' });
     loadSuperAdmins();
-  } else if (act === 'revoke-sessions') {
-    if (!await window.showAppConfirm(`Revoke all active sessions for administrator ${name}?`)) return;
-    const resp = await fetch(`/api/admin/super/admins/${id}/revoke-sessions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': 'securefps-csrf' }
-    });
-    const d = await resp.json();
-    window.showAppAlert(d.message || (resp.ok ? 'Sessions Revoked' : 'Failed'));
-    loadSuperAdmins();
-  } else if (act === 'toggle-status') {
-    const nextStatus = currentStatus === 'active' ? 'suspended' : 'active';
-    if (!await window.showAppConfirm(`Set administrator ${name} status to '${nextStatus}'?`)) return;
-    const resp = await fetch(`/api/admin/super/admins/${id}/status`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': 'securefps-csrf' },
-      body: JSON.stringify({ status: nextStatus })
-    });
-    const d = await resp.json();
-    window.showAppAlert(d.message || (resp.ok ? 'Status Updated' : 'Failed'));
-    loadSuperAdmins();
-  } else if (act === 'delete') {
-    const pw = await window.showAppPrompt(`Permanently delete administrator ${name}?`, { type: 'password', label: 'Super Admin password', confirmText: 'Delete administrator' });
-    if (!pw) return;
-    const resp = await fetch(`/api/admin/super/admins/${id}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': 'securefps-csrf' },
-      body: JSON.stringify({ reauth_password: pw })
-    });
-    const d = await resp.json();
-    window.showAppAlert(d.message || (resp.ok ? 'Admin Deleted' : 'Failed'));
-    loadSuperAdmins();
+  } catch (error) {
+    window.showAppAlert(error.message);
   }
 }
 
@@ -430,7 +372,9 @@ export async function loadMlModelsCatalog() {
 
     const nameEl = document.getElementById('superMlModelName');
     const badgeEl = document.getElementById('superMlActiveVersionBadge');
-    if (nameEl) nameEl.textContent = active.name || 'No validated model';
+    if (nameEl) nameEl.textContent = active.algorithm || 'Model information unavailable';
+    const basis = document.getElementById('superMlEvaluationBasis');
+    if (basis) basis.textContent = [active.evaluation_basis, active.trained_at && `Trained ${formatTimeAgo(active.trained_at)}`].filter(Boolean).join(' · ') || 'Training and evaluation details unavailable';
     if (badgeEl) badgeEl.textContent = active.version ? `${active.version} Active` : 'Unavailable';
 
     const accEl = document.getElementById('mlMetricAccuracy');
@@ -700,7 +644,7 @@ export async function loadThreatMonitoring() {
             <td><strong>${escapeHtml(v.name)}</strong><br><small class="muted">${escapeHtml(v.email)}</small></td>
             <td><span class="badge badge-danger">${v.violations} Infractions</span></td>
             <td><strong>${v.risk_score}</strong></td>
-            <td><button class="ghost-btn inspect-threat-btn" data-id="${v.id}" data-name="${escapeHtml(v.name)}" data-email="${escapeHtml(v.email || '')}" style="min-width:auto; height:28px; padding:0 10px; font-size:11px;">View</button></td>
+            <td><button class="ghost-btn inspect-threat-btn" data-view="violations" data-id="${v.id}" data-name="${escapeHtml(v.name)}" data-email="${escapeHtml(v.email || '')}" style="min-width:auto; height:28px; padding:0 10px; font-size:11px;">View</button></td>
           </tr>
         `).join('');
       }
@@ -713,7 +657,7 @@ export async function loadThreatMonitoring() {
         const name = e.currentTarget.dataset.name;
         const email = e.currentTarget.dataset.email || '';
         if (window.openPlayerMatchesModal) {
-          window.openPlayerMatchesModal(id, name, email);
+          window.openPlayerMatchesModal(id, name, email, e.currentTarget.dataset.view === 'violations' ? 'violations' : 'player');
         }
       });
     });
@@ -728,9 +672,9 @@ export async function loadThreatMonitoring() {
           <tr>
             <td><code>${escapeHtml(l.identifier || '—')}</code></td>
             <td><strong>${escapeHtml(l.name)}</strong></td>
-            <td><code style="background:#EDE9FE; color:#5B21B6; padding:2px 6px; border-radius:4px; font-size:11px;">${escapeHtml(l.ip || '127.0.0.1')}</code></td>
-            <td><small>${escapeHtml(l.device || 'Chrome (Win)')}</small></td>
-            <td><span class="badge badge-danger">${escapeHtml(l.reason || 'Failed auth')}</span></td>
+            <td><code style="background:#EDE9FE; color:#5B21B6; padding:2px 6px; border-radius:4px; font-size:11px;">${escapeHtml(l.ip || '—')}</code></td>
+            <td>${l.device ? `<details><summary>Browser details</summary>${escapeHtml(l.device)}</details>` : '—'}</td>
+            <td><details><summary>${escapeHtml(incidentLabel(l.reason || 'login_failed'))}</summary><code>${escapeHtml(l.reason || '—')}</code></details></td>
             <td><small class="muted">${formatTimeAgo(l.time)}</small></td>
           </tr>
         `).join('');

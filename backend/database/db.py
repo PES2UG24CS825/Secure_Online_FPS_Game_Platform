@@ -240,6 +240,8 @@ def init_indexes():
         (ban_appeals, [("user_id", 1), ("status", 1)], {}),
         (ban_appeals, [("created_at", -1)], {}),
         (player_notifications, [("user_id", 1), ("is_read", 1), ("created_at", -1)], {}),
+        (player_notifications, [("user_id", 1), ("event_key", 1)], {"unique": True, "partialFilterExpression": {"event_key": {"$exists": True}}}),
+        (player_notifications, [("user_id", 1), ("dismissed_at", 1), ("created_at", -1), ("_id", -1)], {}),
         (admin_audit_log, [("timestamp", -1)], {}),
         (admin_audit_log, [("target_user_id", 1)], {}),
     )
@@ -254,6 +256,16 @@ def init_indexes():
                 exc,
             )
 
+
+# Earlier releases left the active-session expiry on finalized match records.
+# Keep those records and retain the TTL policy for unfinished sessions.
+try:
+    game_sessions.update_many(
+        {"status": {"$in": ["completed", "abandoned", "abandoned_voluntary"]}, "expires_at": {"$exists": True}},
+        {"$unset": {"expires_at": ""}},
+    )
+except Exception:
+    logger.exception("Could not clear active-session expiry from finalized matches")
 
 init_indexes()
 try:

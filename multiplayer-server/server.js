@@ -39,7 +39,14 @@ const MATCH_DURATION_SECONDS = 480;
 const MATCH_SCORE_LIMIT = (process.env.MATCH_SCORE_LIMIT === '15') ? 10 : parseInt(process.env.MATCH_SCORE_LIMIT || '10', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const GAME_SERVER_SECRET = process.env.GAME_SERVER_SECRET || 'securefps-multiplayer-secret-key-2026';
-const ALLOW_ANONYMOUS = process.env.ALLOW_ANONYMOUS === 'true' || process.env.NODE_ENV !== 'production';
+const MATCH_RESULT_KEY = crypto.createHmac('sha256', GAME_SERVER_SECRET).update('securefps:match-result:v1').digest();
+if (process.env.NODE_ENV === 'production' && (
+  GAME_SERVER_SECRET.trim().length < 32 ||
+  ['securefps-multiplayer-secret-key-2026', 'generate-a-strong-random-shared-game-server-secret'].includes(GAME_SERVER_SECRET.trim())
+)) {
+  throw new Error('Configure a unique GAME_SERVER_SECRET of at least 32 characters.');
+}
+const ALLOW_ANONYMOUS = process.env.NODE_ENV !== 'production' && process.env.ALLOW_ANONYMOUS !== 'false';
 const FLASK_INTERNAL_URL = process.env.FLASK_INTERNAL_URL || 'http://127.0.0.1:5000';
 const RESPAWN_DELAY_MS = parseInt(process.env.RESPAWN_DELAY_MS || '3000', 10);
 
@@ -86,12 +93,14 @@ function releaseRoomIpQuota(room) {
 const LobbyCreateSchema = z.object({
   preferredCode: z.string().trim().regex(/^[A-Za-z0-9]{4,8}$/).optional(),
   name: z.string().trim().min(1).max(24).default('Operator_Host'),
+  operator: z.enum(['vanguard', 'valkyrie']).default('vanguard'),
   honour_score: z.number().int().min(0).max(100).optional().default(100)
 }).passthrough();
 
 const LobbyJoinSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
   name: z.string().trim().min(1).max(24).default('Operator'),
+  operator: z.enum(['vanguard', 'valkyrie']).default('vanguard'),
   userId: z.string().optional(),
   honour_score: z.number().int().min(0).max(100).optional().default(100)
 }).passthrough();
@@ -304,6 +313,7 @@ function sanitizePlayer(p) {
   return {
     id: p.id,
     name: p.name,
+    isFemale: p.operator === 'valkyrie',
     isHost: !!p.isHost,
     isReady: !!p.isReady,
     x: p.x,
@@ -371,6 +381,7 @@ io.use((socket, next) => {
     try {
       const decoded = jwt.verify(token, GAME_SERVER_SECRET);
       socket.userId = decoded.userId || decoded.sub || socket.id;
+      socket.authenticatedPlayer = typeof decoded.userId === 'string';
       socket.username = decoded.username || decoded.name || 'Operator';
       socket.sessionId = decoded.sessionId || null;
       console.log(`[Auth] Socket ${socket.id} authenticated as ${socket.username} (${socket.userId})`);
@@ -437,20 +448,22 @@ app.get('/status', (req, res) => {
 app.get('/api/rooms', (req, res) => {
   const roomList = [];
   rooms.forEach((r, code) => {
+    const connected = [...r.players.values()].filter(player => !player.disconnected);
     roomList.push({
       roomCode: code,
       state: r.state,
-      hostName: r.hostName,
-      playerCount: r.players.size,
-      players: Array.from(r.players.values()).map(p => ({
+      hostName: r.players.get(r.hostId)?.name || null,
+      playerCount: connected.length,
+      maxPlayers: r.maxPlayers,
+      players: connected.map(p => ({
         id: p.id,
         name: p.name,
         kills: p.kills,
         deaths: p.deaths,
         health: p.health,
-        ping: p.ping || 0
+        ping: p.ping ?? null
       })),
-      createdAt: r.createdAt || Date.now()
+      createdAt: r.createdAt ?? null
     });
   });
   res.json({ rooms: roomList, totalRooms: roomList.length });
@@ -643,18 +656,31 @@ function endMatch(room, reason = 'match_completed', winner = null) {
     room.respawnTimers.clear();
   }
 
-  // Generate server-verified completion token for rewards
-  const completionToken = crypto.createHmac('sha256', GAME_SERVER_SECRET)
-    .update(`${room.code}:${Date.now()}:${scoreboard[0]?.id || 'none'}`)
-    .digest('hex');
-
-  io.to(room.code).emit('match:ended', {
+  const result = {
     roomCode: room.code,
     reason: reason,
     scoreboard: scoreboard,
-    completionToken: completionToken,
-    durationSeconds: Math.floor((Date.now() - room.matchStartTime) / 1000)
-  });
+    durationSeconds: Math.floor((Date.now() - room.matchStartTime) / 1000),
+  };
+  const matchId = crypto.randomUUID();
+  const draw = reason === 'time_expired' && !scoreboard.some(row => row.kills > 0);
+  for (const row of scoreboard) {
+    const socket = io.sockets.sockets.get(row.id);
+    if (!socket) continue;
+    const completionToken = socket.authenticatedPlayer ? jwt.sign({
+      match_id: matchId,
+      started_at: room.matchStartTime,
+      duration: result.durationSeconds,
+      kills: row.kills,
+      deaths: row.deaths,
+      assists: row.assists,
+      headshots: row.headshots,
+      shots_fired: row.shotsFired,
+      shots_hit: row.shotsHit,
+      result: draw ? 'draw' : row.isWinner ? 'win' : 'loss',
+    }, MATCH_RESULT_KEY, { algorithm: 'HS256', audience: 'securefps-match-result', subject: socket.userId, expiresIn: '30m' }) : undefined;
+    socket.emit('match:ended', { ...result, completionToken });
+  }
 
   console.log(`[Match Lifecycle] Match in room ${room.code} ended (Reason: ${reason}). Scoreboard sent.`);
 
@@ -894,6 +920,7 @@ io.on('connection', (socket) => {
         name: roomCode,
         hostId: socket.id,
         state: 'lobby',
+        createdAt: Date.now(),
         maxPlayers: 8,
         matchDuration: MATCH_DURATION_SECONDS,
         scoreLimit: MATCH_SCORE_LIMIT,
@@ -910,6 +937,7 @@ io.on('connection', (socket) => {
         id: socket.id,
         userId: socket.userId,
         name: playerName,
+        operator: data.operator,
         reconnectToken: reconnectToken,
         isHost: true,
         isReady: true,
@@ -994,6 +1022,7 @@ io.on('connection', (socket) => {
         id: socket.id,
         userId: socket.userId,
         name: data.name,
+        operator: data.operator,
         reconnectToken: reconnectToken,
         isHost: false,
         isReady: false,

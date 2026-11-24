@@ -1,7 +1,9 @@
+from services.player_notifications import notify_player
 import csv
 import io
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone, timedelta
 from functools import wraps
@@ -13,7 +15,7 @@ import pyotp
 from database.db import (
     users, matches, security_events, login_history, sessions_db,
     game_sessions, game_events, game_telemetry, honour_history,
-    reward_transactions, ban_appeals, player_notifications, db,
+    reward_transactions, ban_appeals, db,
     system_config, admin_permissions, model_versions, system_backups,
     admin_approvals
 )
@@ -65,14 +67,27 @@ def determine_security_incident_label(e):
     raw_type = e.get("type") or e.get("event_type") or e.get("incident_type") or "gameplay_anomaly"
     reason_text = (e.get("description") or e.get("alert_reason") or e.get("reason") or "").strip().lower()
 
+    labels = {
+        "abnormal_fire_rate": "Unusually Fast Shooting",
+        "abnormal_speed": "Unusual Movement Speed",
+        "movement_anomaly": "Unusual Movement Speed",
+        "aim_anomaly": "Suspicious Aiming",
+        "impossible_hit": "Impossible Hit Detected",
+        "session_revoked": "Login Session Ended",
+        "mfa_failure": "Incorrect Verification Code",
+        "unauthorized_access": "Unauthorized Access Attempt",
+    }
+    if raw_type in labels:
+        return labels[raw_type]
+
     if "angle snapping" in reason_text or "aimbot" in reason_text or "aim snap" in reason_text:
-        return "Angle Snap / Aimbot"
+        return "Suspicious Aiming"
     elif "impossible hit" in reason_text or "line-of-sight" in reason_text or "wallhack" in reason_text:
-        return "Impossible Hit Violation"
+        return "Impossible Hit Detected"
     elif "speed" in reason_text or "movement" in reason_text:
-        return "Speed Hack Violation"
+        return "Unusual Movement Speed"
     elif "fire rate" in reason_text or "rapid fire" in reason_text:
-        return "Rapid Fire Violation"
+        return "Unusually Fast Shooting"
     elif "accuracy" in reason_text or "aim" in reason_text:
         return "Abnormal Accuracy"
     elif raw_type == "account_suspended":
@@ -83,7 +98,11 @@ def determine_security_incident_label(e):
         return "Brute Force Attempt"
     elif raw_type == "hard_rule_violation":
         return "Server Hard-Rule Violation"
-    return str(raw_type).replace("_", " ").title()
+    elif raw_type == "gameplay_anomaly" or raw_type == "gameplay_alert":
+        return "Gameplay Anomaly"
+    elif raw_type == "auto_ban":
+        return "Automatic Anti-Cheat Ban"
+    return str(raw_type).replace("_", " ").replace("-", " ").title()
 
 
 # =========================================================================
@@ -277,7 +296,7 @@ ADMIN_OPERATION_PERMISSIONS = {
     "issue_player_warning": "players:warn", "record_investigation_note": "players:notes",
     "adjust_player_honour": "players:account", "reset_player_mfa": "players:account",
     "revoke_player_sessions": "players:account", "force_player_password_reset": "players:account",
-    "review_appeal": "appeals:review", "review_anticheat_decision": "alerts:review",
+    "review_appeal": "appeals:review", "review_anticheat_decision": "alerts:review", "acknowledge_security_event": "alerts:review",
     "get_threat_monitoring": "threats:read", "get_analytics_reports": "analytics:read",
     "get_audit_log": "audit:read", "list_recent_logins": "audit:read",
     "server_health": "health:read", "get_multiplayer_rooms": "health:read",
@@ -387,12 +406,18 @@ def overview():
 
     # Fetch latest 20 security events
     recent_events = list(security_events.find().sort("created_at", -1).limit(20))
+    affected_ids = [ObjectId(row["user_id"]) for row in recent_events if ObjectId.is_valid(row.get("user_id"))]
+    affected_players = {str(row["_id"]): row.get("name") for row in users.find({"_id": {"$in": affected_ids}}, {"name": 1})}
     formatted_events = [
         {
             "id": str(e["_id"]),
             "type": e.get("type", "unknown"),
             "severity": e.get("severity", "low"),
             "timestamp": format_iso(e.get("created_at")),
+            "player_id": str(e["user_id"]) if ObjectId.is_valid(e.get("user_id")) else None,
+            "player_name": affected_players.get(str(e.get("user_id"))) or e.get("player_name"),
+            "status": e.get("status") or "open",
+            "acknowledged": bool(e.get("acknowledged_at")),
             "description": e.get("description", ""),
         }
         for e in recent_events
@@ -441,6 +466,8 @@ def overview():
         "active_sessions": active_sessions_count,
         "matches_analyzed": total_matches_count,
         "high_severity_events": high_severity_count,
+        "total_security_events": security_events.count_documents({}),
+        "unresolved_critical": security_events.count_documents({"severity": "critical", "status": {"$nin": ["resolved", "closed"]}}),
         "pending_appeals": pending_appeals_count,
     }
 
@@ -677,13 +704,9 @@ def get_player_details(player_id):
 
     # 6. Security & ML events
     sec_events = list(security_events.find({
-        "$or": [
-            {"user_id": pid},
-            {"user_id": str(pid)},
-            {"user_id": player.get("email")},
-            {"player_name": player.get("username")},
-            {"player_name": player.get("name")}
-        ]
+        "type": {"$in": ["gameplay_anomaly", "gameplay_alert", "hard_rule_violation", "impossible_hit",
+                         "abnormal_fire_rate", "abnormal_speed", "movement_anomaly", "aim_anomaly"]},
+        "user_id": {"$in": [pid, str(pid)]},
     }).sort("created_at", -1).limit(50))
     ml_analyses = list(game_events.find({"user_id": pid, "analysis_type": "game_session"}).sort("created_at", -1).limit(20))
 
@@ -772,7 +795,7 @@ def get_player_details(player_id):
             {
                 "type": l.get("type"),
                 "ip_address": l.get("ip_address") or l.get("ip"),
-                "device": l.get("device"),
+                "device": l.get("user_agent") or l.get("device"),
                 "status": l.get("status"),
                 "timestamp": format_iso(l.get("created_at"))
             }
@@ -898,13 +921,14 @@ def suspend_player(player_id):
     sessions_db.update_many({"user_id": pid}, {"$set": {"is_active": False, "revoked_at": now}})
 
     # Create security event and audit log
-    security_events.insert_one({
+    restriction_event = security_events.insert_one({
         "type": "account_suspended",
         "user_id": pid,
         "severity": "high",
         "description": f"Account suspended by admin ({admin['email']}). Reason: {reason_or_msg}",
         "created_at": now
     })
+    notify_player(pid, "account_suspended", restriction_event.inserted_id)
 
     log_admin_action(
         admin["_id"],
@@ -1018,13 +1042,14 @@ def ban_player(player_id):
 
     sessions_db.update_many({"user_id": pid}, {"$set": {"is_active": False, "revoked_at": now}})
 
-    security_events.insert_one({
+    restriction_event = security_events.insert_one({
         "type": "account_banned",
         "user_id": pid,
         "severity": "critical",
         "description": f"Permanent ban issued by admin ({admin['email']}). Reason: {reason_or_msg}",
         "created_at": now
     })
+    notify_player(pid, "account_banned", restriction_event.inserted_id)
 
     log_admin_action(
         admin["_id"],
@@ -1531,11 +1556,11 @@ def reset_player_mfa(player_id):
     except Exception:
         return jsonify({"message": "Invalid player ID format."}), 400
 
-    target = users.find_one({"_id": pid})
-    if not target:
-        return jsonify({"message": "Player not found."}), 404
+    target, error, status = _verify_target_not_admin(pid)
+    if error:
+        return error, status
 
-    users.update_one(
+    changed = users.update_one(
         {"_id": pid},
         {"$set": {"mfa_enabled": False}, "$unset": {"mfa_secret": "", "totp_secret": ""}}
     )
@@ -1552,6 +1577,8 @@ def reset_player_mfa(player_id):
         }
     )
 
+    if changed.modified_count:
+        notify_player(pid, "mfa_changed", datetime.now(timezone.utc).isoformat())
     return jsonify({
         "success": True,
         "message": f"MFA has been successfully reset for {target.get('name')}. Player can re-enroll during next login."
@@ -1727,14 +1754,7 @@ def review_appeal(appeal_id):
             }
         )
         # Notify player
-        player_notifications.insert_one({
-            "user_id": uid,
-            "type": "appeal_approved",
-            "title": "Ban Appeal Approved",
-            "message": f"Your appeal has been approved by our security team: {note}. Your account access has been restored.",
-            "read": False,
-            "created_at": now
-        })
+        notify_player(uid, "appeal_approved", aid)
         log_admin_action(admin["_id"], admin["email"], uid, "approve_appeal", details={"note": note, "appeal_id": str(aid)})
         msg = "Appeal approved and player account restored."
     else:
@@ -1749,14 +1769,7 @@ def review_appeal(appeal_id):
                 }
             }
         )
-        player_notifications.insert_one({
-            "user_id": uid,
-            "type": "appeal_rejected",
-            "title": "Ban Appeal Update",
-            "message": f"Your appeal was reviewed and rejected: {note}.",
-            "read": False,
-            "created_at": now
-        })
+        notify_player(uid, "appeal_rejected", aid)
         log_admin_action(admin["_id"], admin["email"], uid, "reject_appeal", details={"note": note, "appeal_id": str(aid)})
         msg = "Appeal rejected."
 
@@ -1908,7 +1921,7 @@ def export_audit_log_csv():
             l.get("admin_email", "System"),
             l.get("action", "unknown"),
             str(l.get("target_user_id", "")),
-            json.dumps(l.get("details", {})) if l.get("details") else ""
+            json.dumps(audit_display_details(l.get("details")))
         ])
 
     return Response(
@@ -1924,44 +1937,23 @@ def list_recent_logins():
     offset = max(0, request.args.get("offset", 0, type=int))
     role_filter = request.args.get("role", "player").strip().lower()
 
-    # Find admin user IDs and emails to exclude when role_filter is 'player'
-    admin_users = list(users.find({"role": {"$in": ["admin", "normal_admin", "super_admin", "demo_admin"]}}, {"_id": 1, "email": 1}))
-    admin_ids = [u["_id"] for u in admin_users]
-    admin_emails = [u.get("email", "").lower() for u in admin_users if u.get("email")]
-
-    GENUINE_PLAYER_EMAILS = ["sudh@gmail.com", "pk123@gmail.com", "sudi12@gamil.com", "varun1234@gmail.com"]
-    GENUINE_ADMIN_EMAILS = ["admin1@gmail.com", "superadmin@securefps.io"]
-
     query = {}
-    if role_filter == "player":
-        genuine_players = list(users.find({
-            "email": {"$in": GENUINE_PLAYER_EMAILS},
-            "role": "player",
-            "account_status": {"$ne": "deleted"}
-        }, {"_id": 1, "email": 1}))
-        player_ids = [u["_id"] for u in genuine_players] + [str(u["_id"]) for u in genuine_players]
-        player_emails = [u.get("email", "").lower() for u in genuine_players if u.get("email")]
-        query = {
-            "$or": [
-                {"user_id": {"$in": player_ids}},
-                {"identifier": {"$in": player_emails}}
-            ],
-            "user_agent": {"$not": {"$regex": "Werkzeug"}}
-        }
-    elif role_filter == "admin":
-        admin_ids_str = admin_ids + [str(aid) for aid in admin_ids]
-        query = {
-            "$or": [
-                {"user_id": {"$in": admin_ids_str}},
-                {"identifier": {"$in": GENUINE_ADMIN_EMAILS}}
-            ]
-        }
+    if role_filter in {"player", "admin"}:
+        admin_roles = ["admin", "normal_admin", "super_admin", "demo_admin"]
+        role = "player" if role_filter == "player" else {"$in": admin_roles}
+        accounts = list(users.find({"role": role}, {"_id": 1, "email": 1}))
+        account_ids = [value for account in accounts for value in (account["_id"], str(account["_id"]))]
+        emails = [account["email"].lower() for account in accounts if account.get("email")]
+        query["$or"] = [
+            {"user_id": {"$in": account_ids}},
+            {"identifier": {"$in": emails}},
+        ]
 
     docs = list(login_history.find(query).sort("created_at", -1).skip(offset).limit(limit))
-    user_ids = [d["user_id"] for d in docs if d.get("user_id")]
+    user_ids = {ObjectId(d["user_id"]) for d in docs if ObjectId.is_valid(d.get("user_id"))}
     user_map = {}
     if user_ids:
-        for u in users.find({"_id": {"$in": user_ids}}, {"name": 1, "email": 1}):
+        for u in users.find({"_id": {"$in": list(user_ids)}}, {"name": 1, "email": 1}):
             user_map[u["_id"]] = u.get("name") or u.get("email") or "Operator"
             user_map[str(u["_id"])] = user_map[u["_id"]]
 
@@ -1969,13 +1961,13 @@ def list_recent_logins():
     for d in docs:
         uid = d.get("user_id")
         pname = user_map.get(uid, user_map.get(str(uid) if uid else None, d.get("identifier", "Player")))
-        ip = d.get("ip_address", "127.0.0.1")
-        status = d.get("status", "success")
+        ip = d.get("ip_address") or "Unknown"
+        status = d.get("status")
         is_succ = status == "success" or d.get("type") == "login_success"
-        device_str = d.get("device") or d.get("user_agent") or "Chrome on Windows 11"
+        device_str = d.get("device") or d.get("user_agent") or "Unknown device"
         if len(device_str) > 35:
             if "Chrome" in device_str:
-                device_str = "Google Chrome (Windows)"
+                device_str = "Google Chrome"
             elif "Firefox" in device_str:
                 device_str = "Mozilla Firefox"
             elif "Safari" in device_str:
@@ -1990,21 +1982,16 @@ def list_recent_logins():
             "user_id": str(uid) if uid else "",
             "player_name": pname,
             "identifier": d.get("identifier", ""),
-            "status": "success" if is_succ else "failed",
+            "status": "success" if is_succ else ("failed" if status == "failed" or d.get("type") == "login_failed" else "unknown"),
             "reason": d.get("reason", "None"),
             "device": device_str,
             "ip": ip,
-            "location": "Local Host" if ip in ("127.0.0.1", "localhost", "::1") else "Remote Client",
-            "risk": "Low" if is_succ else "High",
+            "location": "Local Host" if ip in ("127.0.0.1", "localhost", "::1") else ("Unknown" if ip == "Unknown" else "Remote Client"),
+            "risk": d.get("risk"),
             "time": format_iso(d.get("created_at"))
         })
 
-    if role_filter == "player":
-        target_role_query = {"role": "player", "email": {"$in": GENUINE_PLAYER_EMAILS}}
-    elif role_filter == "admin":
-        target_role_query = {"role": {"$in": ["admin", "normal_admin", "super_admin"]}, "email": {"$in": GENUINE_ADMIN_EMAILS}}
-    else:
-        target_role_query = {"email": {"$in": GENUINE_PLAYER_EMAILS + GENUINE_ADMIN_EMAILS}}
+    target_role_query = {"role": role} if role_filter in {"player", "admin"} else {}
 
     accounts_list = []
     for u in users.find({**target_role_query, "account_status": {"$ne": "deleted"}}).sort("created_at", 1):
@@ -2123,31 +2110,89 @@ def get_multiplayer_rooms():
             data = json.loads(resp.read().decode("utf-8"))
             return jsonify(data), 200
     except Exception:
-        # Fallback when game server is idle or offline
         return jsonify({
-            "status": "idle",
+            "status": "offline",
             "rooms": [],
             "totalRooms": 0,
-            "message": "Game server idle or offline"
-        }), 200
+            "message": "Multiplayer room data is unavailable."
+        }), 503
 
 
 # =========================================================================
 # ANTI-CHEAT DECISIONS PANEL & REVIEW (Item 9)
 # =========================================================================
 
+def deployed_model_metadata(version):
+    from models.ml_model import MODEL_DIR, FEATURES, FEATURE_NAMES_V2, artifact_v2, metadata_v2, rf_model
+    model, names, trained_at = None, [], None
+    report = {}
+    if version == "v2.0-rf" and artifact_v2:
+        pipeline = artifact_v2["supervised_pipeline"]
+        model = pipeline.steps[-1][1]
+        names = list(artifact_v2.get("feature_order", metadata_v2.get("feature_order", FEATURE_NAMES_V2)))
+        trained_at = metadata_v2.get("date")
+        try:
+            report = json.loads((MODEL_DIR / "evaluation_report.json").read_text(encoding="utf-8")).get("held_out_metrics", {})
+        except (OSError, ValueError):
+            pass
+    elif version == "v1.5-rf" and rf_model is not None:
+        model = rf_model
+        names = list(FEATURES)
+
+    importance = getattr(model, "feature_importances_", ())
+    calibrated = getattr(model, "calibrated_classifiers_", ())
+    if calibrated:
+        folds = [getattr(fold.estimator, "feature_importances_", ()) for fold in calibrated]
+        if all(len(fold) == len(names) for fold in folds):
+            importance = [sum(values) / len(folds) for values in zip(*folds)]
+    matrix = report.get("confusion_matrix") or []
+    total = sum(map(sum, matrix)) if len(matrix) == 2 and all(len(row) == 2 for row in matrix) else 0
+    return {
+        "version": version,
+        "algorithm": ("Calibrated Random Forest" if calibrated else type(model).__name__) + " + Isolation Forest" if model is not None else None,
+        "trained_at": trained_at,
+        "feature_names": names,
+        "top_features": [
+            {"name": name, "importance": float(value)}
+            for name, value in sorted(zip(names, importance), key=lambda pair: pair[1], reverse=True)
+        ] if len(names) == len(importance) else [],
+        "accuracy": (matrix[0][0] + matrix[1][1]) / total if total else None,
+        "precision": report.get("precision"),
+        "recall": report.get("recall"),
+        "f1_score": report.get("f1"),
+        "false_positive_rate": report.get("fpr_on_normal_test"),
+        "evaluation_basis": f"Held-out RF evaluation · {total} sessions" if total else None,
+        "dataset_hash": metadata_v2.get("dataset_hash") if total else None,
+    }
+
+
+def active_model_version():
+    from models.ml_model import artifact_v2
+    config = system_config.find_one({"type": "global_config"}, {"active_model_version": 1}) or {}
+    return config.get("active_model_version") or ("v2.0-rf" if artifact_v2 is not None else "v1.5-rf")
+
+
+@admin_bp.post("/security-events/<event_id>/acknowledge")
+@require_admin_write
+def acknowledge_security_event(event_id):
+    if not ObjectId.is_valid(event_id):
+        return jsonify({"message": "Invalid security event identifier."}), 400
+    admin = current_admin()
+    result = security_events.find_one_and_update(
+        {"_id": ObjectId(event_id), "severity": "critical", "status": {"$nin": ["resolved", "closed"]}, "acknowledged_at": None},
+        {"$set": {"acknowledged_at": datetime.now(timezone.utc), "acknowledged_by": admin["_id"]}},
+        projection={"user_id": 1},
+    )
+    if result is None:
+        return jsonify({"message": "This critical event is unavailable or already acknowledged."}), 409
+    log_admin_action(admin["_id"], admin["email"], result.get("user_id"), "acknowledge_security_event", {"event_id": event_id})
+    _OVERVIEW_CACHE["data"] = None
+    return jsonify({"success": True})
+
+
 @admin_bp.get("/anticheat/decisions")
 def get_anticheat_decisions():
-    # Read model metadata if available
-    metadata = {}
-    meta_path = os.path.join(os.path.dirname(__file__), "..", "models", "model_metadata.json")
-    if os.path.exists(meta_path):
-        try:
-            with open(meta_path, "r", encoding="utf-8") as f:
-                metadata = json.load(f)
-        except Exception:
-            pass
-
+    metadata = deployed_model_metadata(active_model_version())
     # High risk sessions in need of review or recently reviewed
     flagged_sessions = list(
         game_sessions.find({"risk_score": {"$gte": 50}})
@@ -2159,14 +2204,17 @@ def get_anticheat_decisions():
     for s in flagged_sessions:
         sid = s.get("session_id", str(s["_id"]))
         ana = game_events.find_one({"session_id": sid, "analysis_type": "game_session"}) or {}
-        raw_feat = ana.get("raw_features", {})
+        raw_feat = ana.get("raw_features") or {}
         results.append({
             "session_id": sid,
             "player_id": str(s.get("user_id", "")),
             "player_name": s.get("player_name", "Operator"),
             "risk_score": s.get("risk_score"),
             "risk_category": classify_risk_score(s.get("risk_score"))["category"],
-            "model_version": ana.get("model_version", metadata.get("model_version", "v2.0-rf")),
+            "model_version": ana.get("model_version"),
+            "detected_at": format_iso(ana.get("created_at")),
+            "has_hard_evidence": bool((ana.get("human_evaluation") or {}).get("hard_cheat_evidence")),
+            "has_telemetry": any(isinstance(value, (int, float)) for value in raw_feat.values()),
             "features": {
                 "accuracy": raw_feat.get("accuracy"),
                 "headshot_ratio": raw_feat.get("headshot_ratio"),
@@ -2180,19 +2228,10 @@ def get_anticheat_decisions():
         })
 
     return jsonify({
-        "model_metadata": {
-            "version": metadata.get("model_version", "v2.0-authoritative-rf"),
-            "trained_at": metadata.get("trained_at", "2026-11-13"),
-            "accuracy": metadata.get("metrics", {}).get("test_accuracy", 0.98),
-            "top_features": [
-                {"name": "aim_speed_max", "importance": 0.28},
-                {"name": "flick_rate", "importance": 0.24},
-                {"name": "reaction_time_median", "importance": 0.18},
-                {"name": "headshot_ratio", "importance": 0.15},
-                {"name": "accuracy", "importance": 0.10}
-            ]
-        },
-        "flagged_sessions": results
+        "model_metadata": metadata,
+        "flagged_sessions": results,
+        "can_finalize_review": has_operational_permission(current_admin(), "alerts:review", write=True)
+        and (current_admin().get("role") == "super_admin" or current_admin().get("is_super_admin") is True),
     })
 
 
@@ -2301,6 +2340,9 @@ def get_demo_cheater_status():
             "alert_severity": latest_analysis_doc.get("alert_severity"),
             "random_forest": res.get("random_forest"),
             "random_forest_probability": res.get("random_forest_probability"),
+            "model_risk_score": res.get("model_risk_score"),
+            "risk_calibration": res.get("risk_calibration"),
+            "risk_explanation": (res.get("human_evaluation") or {}).get("explanation"),
             "isolation_forest": res.get("isolation_forest"),
             "isolation_forest_anomaly_score": res.get("isolation_forest_anomaly_score"),
             "features": {
@@ -2363,20 +2405,26 @@ def review_anticheat_decision(session_id):
     if verdict not in {"confirm_cheat", "false_positive"}:
         return jsonify({"message": "Verdict must be 'confirm_cheat' or 'false_positive'."}), 400
 
+    if not 5 <= len(note) <= 1000:
+        return jsonify({"message": "Provide an evidence review note between 5 and 1000 characters."}), 400
+
     admin = current_admin()
     now = datetime.now(timezone.utc)
-
-    game_sessions.update_one(
-        {"$or": [{"session_id": session_id}, {"_id": ObjectId(session_id) if ObjectId.is_valid(session_id) else None}]},
-        {
-            "$set": {
-                "admin_review_status": verdict,
-                "admin_reviewed_by": admin["email"],
-                "admin_review_note": note,
-                "admin_reviewed_at": now
-            }
-        }
+    target = game_sessions.find_one({"session_id": session_id}, {"_id": 1, "risk_score": 1, "user_id": 1})
+    if not target:
+        return jsonify({"message": "Session not found."}), 404
+    if (target.get("risk_score") or 0) < 50:
+        return jsonify({"message": "The session is outside the flagged review queue."}), 409
+    evidence = game_events.find_one({"session_id": session_id, "analysis_type": "game_session"}, {"human_evaluation": 1}) or {}
+    if verdict == "confirm_cheat" and not (evidence.get("human_evaluation") or {}).get("hard_cheat_evidence"):
+        return jsonify({"message": "Confirming cheating requires recorded hard evidence."}), 409
+    update = game_sessions.update_one(
+        {"_id": target["_id"], "admin_review_status": {"$nin": ["confirm_cheat", "false_positive"]}},
+        {"$set": {"admin_review_status": verdict, "admin_reviewed_by": admin["email"],
+                  "admin_review_note": note, "admin_reviewed_at": now}},
     )
+    if not update.modified_count:
+        return jsonify({"message": "This session already has a final review."}), 409
 
     log_admin_action(
         admin["_id"],
@@ -2393,21 +2441,53 @@ def review_anticheat_decision(session_id):
 # AUDIT LOG & REWARDS MANAGEMENT (Paginated)
 # =========================================================================
 
+def audit_display_details(details):
+    if isinstance(details, str):
+        try:
+            details = json.loads(details)
+        except ValueError:
+            return {}
+    if not isinstance(details, dict):
+        return {}
+    visible = {"reason", "note", "ban_reason", "result", "status", "severity", "verdict", "appeal_id", "session_id", "model_version"}
+    return {key: value for key, value in details.items() if key in visible and isinstance(value, (str, bool, int, float))}
+
+
 @admin_bp.get("/audit-log")
 def get_audit_log():
     limit = max(1, min(request.args.get("limit", 50, type=int), 100))
     offset = max(0, request.args.get("offset", 0, type=int))
     action_filter = (request.args.get("action") or "").strip()
-    admin_filter = (request.args.get("admin") or "").strip()
+    admin_filter = (request.args.get("admin") or "").strip()[:160]
+    search = (request.args.get("q") or "").strip()[:160]
 
     query = {}
     if action_filter:
         query["action"] = action_filter
     if admin_filter:
-        query["admin_email"] = {"$regex": admin_filter, "$options": "i"}
+        query["admin_email"] = {"$regex": re.escape(admin_filter), "$options": "i"}
+    if search:
+        literal = {"$regex": re.escape(search), "$options": "i"}
+        query["$or"] = [{field: literal} for field in ("action", "admin_email", "details.reason", "details.note")]
+        if ObjectId.is_valid(search):
+            query["$or"].append({"target_user_id": {"$in": [search, ObjectId(search)]}})
+    date_filter = {}
+    for param, operator in (("from", "$gte"), ("to", "$lt")):
+        raw_date = request.args.get(param)
+        if raw_date:
+            try:
+                bound = datetime.strptime(raw_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                date_filter[operator] = bound + timedelta(days=1) if param == "to" else bound
+            except (ValueError, OverflowError):
+                return jsonify({"message": "Use valid UTC dates for the audit range."}), 400
+    if date_filter:
+        query["timestamp"] = date_filter
+    severity = request.args.get("severity")
+    if severity in {"low", "medium", "high", "critical"}:
+        query["details.severity"] = severity
 
     total = admin_audit_log.count_documents(query)
-    logs = list(admin_audit_log.find(query).sort("timestamp", -1).skip(offset).limit(limit))
+    logs = list(admin_audit_log.find(query).sort([("timestamp", -1), ("_id", -1)]).skip(offset).limit(limit))
 
     return jsonify({
         "audit_logs": [
@@ -2416,12 +2496,13 @@ def get_audit_log():
                 "admin_email": l.get("admin_email"),
                 "target_user_id": str(l.get("target_user_id", "")),
                 "action": l.get("action"),
-                "details": l.get("details"),
+                "details": audit_display_details(l.get("details")),
                 "timestamp": format_iso(l.get("timestamp")),
             }
             for l in logs
         ],
         "total": total,
+        "actions": sorted(action for action in admin_audit_log.distinct("action") if isinstance(action, str) and action),
         "limit": limit,
         "offset": offset
     })
@@ -2492,7 +2573,7 @@ def issue_player_warning(player_id):
         return jsonify({"message": "Warning note must be at least 5 characters long."}), 400
 
     now = datetime.now(timezone.utc)
-    security_events.insert_one({
+    warning_event = security_events.insert_one({
         "user_id": pid,
         "type": "moderator_warning",
         "severity": "medium",
@@ -2502,14 +2583,7 @@ def issue_player_warning(player_id):
         "created_at": now
     })
 
-    player_notifications.insert_one({
-        "user_id": pid,
-        "title": "Official Security Warning",
-        "message": note,
-        "type": "warning",
-        "is_read": False,
-        "created_at": now
-    })
+    notify_player(pid, "player_warning", warning_event.inserted_id)
 
     log_admin_action(
         admin["_id"],
@@ -2588,28 +2662,36 @@ def get_threat_monitoring():
     )
 
     # 3. Repeated Violators
-    pipeline = [
-        {"$group": {"_id": "$user_id", "violation_count": {"$sum": 1}}},
-        {"$match": {"violation_count": {"$gte": 2}}},
-        {"$sort": {"violation_count": -1}},
-        {"$limit": 10}
-    ]
-    repeated = list(security_events.aggregate(pipeline))
-    violator_ids = [r["_id"] for r in repeated if r.get("_id")]
-    violator_map = {}
-    if violator_ids:
-        for u in users.find({"_id": {"$in": violator_ids}}, {"name": 1, "email": 1, "risk_score": 1}):
-            violator_map[u["_id"]] = u
+    repeated_counts = {}
+    for event in security_events.find({"user_id": {"$ne": None}}, {"user_id": 1}):
+        raw_uid = event.get("user_id")
+        try:
+            normalized = str(ObjectId(str(raw_uid)))
+        except Exception:
+            normalized = str(raw_uid)
+        repeated_counts[normalized] = repeated_counts.get(normalized, 0) + 1
+
+    repeated = sorted(
+        ((uid, count) for uid, count in repeated_counts.items() if count >= 2),
+        key=lambda item: item[1],
+        reverse=True,
+    )[:10]
 
     violator_list = []
-    for r in repeated:
-        u = violator_map.get(r["_id"])
+    for uid, count in repeated:
+        user_lookup = {"$or": [{"_id": uid}]}
+        try:
+            oid = ObjectId(uid)
+            user_lookup = {"$or": [{"_id": oid}, {"_id": uid}]}
+        except Exception:
+            pass
+        u = users.find_one(user_lookup, {"name": 1, "email": 1, "risk_score": 1})
         if u:
             violator_list.append({
                 "id": str(u["_id"]),
-                "name": u.get("name"),
+                "name": u.get("name") or u.get("email") or "Operator",
                 "email": u.get("email"),
-                "violations": r["violation_count"],
+                "violations": count,
                 "risk_score": u.get("risk_score", 0)
             })
 
@@ -2621,7 +2703,7 @@ def get_threat_monitoring():
         "suspicious_logins": [
             {
                 "identifier": l.get("identifier"),
-                "name": l.get("player_name", "Operator"),
+                "name": l.get("player_name"),
                 "ip": l.get("ip_address"),
                 "device": l.get("device"),
                 "reason": l.get("reason", "Failed verification"),
@@ -2710,7 +2792,11 @@ def list_super_admins():
             "mfa_enabled": bool(a.get("mfa_enabled")),
             "active_sessions": active_sess,
             "created_at": format_iso(a.get("created_at")),
-            "last_login": format_iso(a.get("last_login"))
+            "is_test_account": bool(a.get("is_demo") or a.get("demo") or a.get("account_type") == "demo_test" or a.get("role") == "demo_admin"),
+            "last_login": format_iso((login_history.find_one(
+                {"user_id": {"$in": [aid, str(aid)]}, "type": "login_success"},
+                {"created_at": 1}, sort=[("created_at", -1)]
+            ) or {}).get("created_at"))
         })
 
     return jsonify({"admins": admins, "total": len(admins)})
@@ -2739,7 +2825,16 @@ def create_normal_admin():
 
     now = datetime.now(timezone.utc)
     hashed_pw = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-    mfa_secret = pyotp.random_base32()
+    mfa_secret = data.get("enrollment_key")
+    code = data.get("verification_code")
+    if not isinstance(mfa_secret, str) or not re.fullmatch(r"[A-Z2-7]{32,64}", mfa_secret):
+        return jsonify({"message": "Supply the verified administrator's authenticator enrollment key."}), 400
+    try:
+        valid = isinstance(code, str) and re.fullmatch(r"[0-9]{6}", code) and pyotp.TOTP(mfa_secret).verify(code, valid_window=1)
+    except ValueError:
+        valid = False
+    if not valid:
+        return jsonify({"message": "Authenticator verification failed."}), 400
 
     new_admin_doc = {
         "name": name,
@@ -2775,8 +2870,7 @@ def create_normal_admin():
             "name": name,
             "email": email,
             "role": "normal_admin",
-            "level": 1,
-            "mfa_seed": mfa_secret
+            "level": 1
         }
     }), 201
 
@@ -2794,6 +2888,9 @@ def update_admin_profile(admin_id):
     target = users.find_one({"_id": aid, "role": {"$in": ["admin", "normal_admin", "super_admin", "demo_admin"]}})
     if not target:
         return jsonify({"message": "Administrator not found."}), 404
+
+    if target.get("role") == "super_admin" or target.get("is_super_admin"):
+        return jsonify({"message": "Super administrator profiles are protected from roster changes."}), 403
 
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or target.get("name")).strip()
@@ -2868,37 +2965,8 @@ def toggle_admin_status(admin_id):
 @admin_bp.post("/super/admins/<admin_id>/reset-mfa")
 @require_super_admin
 def super_reset_admin_mfa(admin_id):
-    """Super Admin: Reset an administrator's MFA configuration."""
-    admin = current_admin()
-    try:
-        aid = ObjectId(admin_id)
-    except Exception:
-        return jsonify({"message": "Invalid administrator ID format."}), 400
-
-    target = users.find_one({"_id": aid, "role": {"$in": ["admin", "normal_admin", "super_admin", "demo_admin"]}})
-    if not target:
-        return jsonify({"message": "Administrator not found."}), 404
-
-    # Generate new MFA secret for re-enrollment
-    new_secret = pyotp.random_base32()
-    users.update_one(
-        {"_id": aid},
-        {"$set": {"mfa_secret": new_secret, "mfa_enabled": True}}
-    )
-
-    log_admin_action(
-        admin["_id"],
-        admin["email"],
-        aid,
-        "super_reset_admin_mfa",
-        details={"target_email": target.get("email")}
-    )
-
-    return jsonify({
-        "success": True,
-        "message": f"MFA has been reset for administrator {target.get('name')}.",
-        "new_mfa_seed": new_secret
-    })
+    """Direct resets are unavailable without a verified administrator recovery workflow."""
+    return jsonify({"message": "Administrator MFA recovery requires verified enrollment. Direct reset is unavailable."}), 409
 
 
 @admin_bp.post("/super/admins/<admin_id>/revoke-sessions")
@@ -2914,6 +2982,9 @@ def super_revoke_admin_sessions(admin_id):
     target = users.find_one({"_id": aid, "role": {"$in": ["admin", "normal_admin", "super_admin", "demo_admin"]}})
     if not target:
         return jsonify({"message": "Administrator not found."}), 404
+
+    if target.get("role") == "super_admin" or target.get("is_super_admin"):
+        return jsonify({"message": "Super administrator sessions are protected from roster actions."}), 403
 
     res = sessions_db.update_many(
         {"user_id": aid, "is_active": True},
@@ -3023,42 +3094,14 @@ def get_ml_models_catalog():
 
     cfg = system_config.find_one({"type": "global_config"}) or {}
     risk_cfg = cfg.get("risk_engine", {})
-    from models.ml_model import artifact_v2, probe_model
-
-    default_metrics = {
-        "v2.0-rf": {
-            "accuracy": 0.9047,
-            "precision": 0.9764,
-            "recall": 0.8294,
-            "f1_score": 0.8968,
-            "false_positive_rate": 0.0236,
-            "false_negative_rate": 0.1706
-        },
-        "v1.5-rf": {
-            "accuracy": 0.8825,
-            "precision": 0.9386,
-            "recall": 0.8188,
-            "f1_score": 0.8744,
-            "false_positive_rate": 0.0614,
-            "false_negative_rate": 0.1812
-        }
-    }
-
-    active_version = cfg.get("active_model_version") or ("v2.0-rf" if artifact_v2 is not None else "v1.5-rf")
-    try:
-        probe_model(active_version)
-    except Exception:
-        pass
-
+    version = active_model_version()
     for model in models:
-        ver = model.get("version")
-        model["is_active"] = (ver == active_version)
-        bench = default_metrics.get(ver, default_metrics["v2.0-rf"])
-        for k, v in bench.items():
-            if model.get(k) is None:
-                model[k] = v
-
-    active_model = next((model for model in models if model.get("is_active")), models[0] if models else {})
+        details = deployed_model_metadata(model.get("version"))
+        model.update(details, is_active=model.get("version") == version)
+    active_model = next((model for model in models if model["is_active"]), None)
+    if active_model is None:
+        active_model = {**deployed_model_metadata(version), "is_active": True}
+        models.insert(0, active_model)
 
     return jsonify({
         "active_model": active_model,
@@ -3285,7 +3328,14 @@ def get_security_command_status():
         player_label = f"{player_name} ({player_email})" if player_email else player_name
 
         raw_type = e.get("type") or e.get("event_type") or "gameplay_anomaly"
-        reason_text = (e.get("description") or e.get("alert_reason") or e.get("reason") or "").strip()
+        reason_text = (
+            e.get("description")
+            or e.get("alert_reason")
+            or e.get("reason")
+            or e.get("violation")
+            or e.get("evidence")
+            or ""
+        ).strip()
 
         r_low = reason_text.lower()
         if "angle snapping" in r_low or "aimbot" in r_low or "aim snap" in r_low:
@@ -3360,7 +3410,7 @@ def toggle_emergency_lockdown():
         return jsonify({"message": "Super Admin re-authentication failed. Provide your password or MFA code."}), 401
 
     now = datetime.now(timezone.utc)
-    system_config.update_one(
+    previous = system_config.find_one_and_update(
         {"type": "global_config"},
         {"$set": {
             "security_policies.emergency_lockdown": enable_lockdown,
@@ -3378,6 +3428,11 @@ def toggle_emergency_lockdown():
         "toggle_emergency_lockdown",
         details={"lockdown_engaged": enable_lockdown, "reason": reason}
     )
+
+    if bool((previous or {}).get("security_policies", {}).get("emergency_lockdown")) != enable_lockdown:
+        event = "lockdown_enabled" if enable_lockdown else "lockdown_disabled"
+        for player in users.find({"role": "player", "account_status": {"$ne": "deleted"}}, {"_id": 1}):
+            notify_player(player["_id"], event, now.isoformat())
 
     return jsonify({
         "success": True,

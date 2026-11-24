@@ -20,11 +20,25 @@ def is_allowed_origin(origin_url, req=None):
     try:
         parsed = urlparse(origin_url)
         origin_base = f"{parsed.scheme}://{parsed.netloc}".lower()
+        production = os.getenv("APP_ENV", "production").strip().lower() == "production"
 
         # 1. Configured origins in environment
-        configured = os.getenv("FRONTEND_ORIGIN", "").strip()
-        if configured and origin_base == configured.lower():
-            return True
+        configured_origins = [
+            os.getenv("FRONTEND_ORIGIN", "").strip(),
+            os.getenv("PUBLIC_URL", "").strip(),
+            os.getenv("ALLOWED_ORIGINS", "").strip(),
+            os.getenv("CORS_ORIGINS", "").strip(),
+        ]
+        for configured in configured_origins:
+            for candidate in re.split(r"[,;\s]+", configured):
+                candidate = candidate.strip().rstrip("/")
+                if not candidate:
+                    continue
+                candidate_origin = candidate.lower()
+                if "://" in candidate:
+                    candidate_origin = f"{urlparse(candidate).scheme}://{urlparse(candidate).netloc}".lower()
+                if origin_base == candidate_origin:
+                    return True
 
         public_url = os.getenv("PUBLIC_URL", "").strip()
         if public_url and origin_base == public_url.lower():
@@ -32,6 +46,8 @@ def is_allowed_origin(origin_url, req=None):
 
         # 2. Same-origin validation against current request headers
         if req:
+            if production:
+                return origin_base == req.host_url.rstrip("/").lower()
             forwarded_host = (req.headers.get("X-Forwarded-Host") or "").split(",")[0].strip().lower()
             req_host = (req.headers.get("Host") or req.host or "").split(",")[0].strip().lower()
             parsed_netloc = parsed.netloc.lower()
@@ -42,9 +58,8 @@ def is_allowed_origin(origin_url, req=None):
                 return True
 
         # 3. Known safe origin patterns (localhost, private subnets, cloudflare tunnels)
-        for pat in ALLOWED_ORIGIN_PATTERNS:
-            if pat.match(origin_base):
-                return True
+        if not production:
+            return any(pat.match(origin_base) for pat in ALLOWED_ORIGIN_PATTERNS)
     except Exception:
         return False
     return False
@@ -61,6 +76,10 @@ def verify_csrf_and_origin(req=None):
 
     if req.method not in ("POST", "PUT", "DELETE", "PATCH"):
         return None
+
+    if os.getenv("SECUREFPS_LOCAL_DEV", "").strip().lower() in {"1", "true", "yes"}:
+        if req.headers.get("X-Requested-With") or req.headers.get("X-CSRF-Token") or req.headers.get("X-SecureFPS-Action"):
+            return None
 
     # Allow werkzeug test client unless specifically testing CSRF enforcement
     if req.environ.get("werkzeug.test") and os.getenv("TEST_ENFORCE_CSRF") != "1":
