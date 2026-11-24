@@ -159,17 +159,17 @@
       color: #1E1B4B;
     }
 
-    .admin-sidebar { position:fixed; inset:0 auto 0 0; display:flex; flex-direction:column; width:240px; height:100vh; box-sizing:border-box; padding:24px 18px; overflow-y:auto; z-index:100; background:rgba(233,231,245,.66); backdrop-filter:blur(9px); border-right:1px solid rgba(195,191,224,.8); }
-    .admin-sidebar .brand { margin-bottom:34px; }
+    .admin-sidebar { position:fixed; inset:0 auto 0 0; display:flex; flex-direction:column; width:250px; height:100vh; box-sizing:border-box; padding:16px 14px; overflow:hidden; z-index:100; background:rgba(233,231,245,.66); backdrop-filter:blur(9px); border-right:1px solid rgba(195,191,224,.8); }
+    .admin-sidebar .brand { flex:0 0 56px; margin:0 0 10px; padding:6px 2px; }
     .admin-sidebar .brand-lockup { display:none; }
-    .admin-sidebar nav { display:grid; gap:6px; }
+    .admin-sidebar nav { display:grid; gap:4px; min-height:0; overflow-y:auto; overflow-x:hidden; }
     .admin-sidebar-mascots { display:flex; align-items:flex-end; justify-content:center; flex:1 1 auto; min-height:170px; margin-top:auto; overflow:hidden; pointer-events:none; }
     .admin-sidebar-mascots img { display:block; width:min(100%, 190px); max-height:30vh; object-fit:contain; object-position:center bottom; filter:drop-shadow(0 8px 18px rgba(37,22,63,.22)); }
-    .admin-nav-btn { display:flex; align-items:center; justify-content:flex-start; gap:12px; width:100%; padding:12px 13px; border:1px solid transparent; border-radius:10px; color:#475569; background:transparent; font:inherit; font-size:13px; text-align:left; cursor:pointer; transition:background .18s ease,color .18s ease,border-color .18s ease; }
-    .admin-nav-btn:hover { color:#7C3AED; background:rgba(207,198,242,.55); }
-    .admin-nav-btn.active { color:#5B21B6; background:#EDE9FE; border-color:#DDD6FE; box-shadow:inset 3px 0 #7C3AED; font-weight:700; }
+    .admin-nav-btn { display:flex; align-items:center; justify-content:flex-start; gap:10px; width:100%; min-height:40px; padding:8px 10px; border:1px solid transparent; border-radius:10px; color:#475569; background:transparent; font:inherit; font-size:13px; text-align:left; cursor:pointer; transition:background .18s ease,color .18s ease,border-color .18s ease; }
+    .admin-nav-btn:hover:not(.active) { color:var(--role-text,#172B4D); background:var(--role-hover,#CBDCF3); }
+    .admin-nav-btn.active { color:#fff; background:var(--role-accent,#315BA8); border-color:transparent; box-shadow:none; font-weight:700; }
     .admin-nav-icon { display:grid; place-items:center; flex:0 0 24px; width:24px; height:24px; border-radius:7px; color:#7C3AED; background:rgba(207,198,242,.65); font-size:14px; }
-    .admin-main-wrapper { margin-left:240px; width:calc(100% - 240px); min-width:0; }
+    .admin-main-wrapper { margin-left:250px; width:calc(100% - 250px); min-width:0; transition:margin-left .2s ease,width .2s ease; }
     .admin-main-wrapper .dashboard-main { width:100%; max-width:none; margin:0; padding:30px 38px 50px; box-sizing:border-box; }
     .admin-section { display:none; }
     .admin-section.active { display:block; }
@@ -360,7 +360,7 @@
     }
 
     .admin-page {
-      background: linear-gradient(rgba(222,220,238,.86), rgba(222,220,238,.86)),
+      background: linear-gradient(rgba(222,220,238,.36), rgba(222,220,238,.36)),
         url("../public/backgrounds/sakura-dawn.jpg") center / cover fixed,
         var(--bg);
     }
@@ -661,23 +661,20 @@
 /* 2. Modern High-Contrast Cluster Health Cards */
 .health-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
 }
 .health-card {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 14px;
-  padding: 18px 20px;
-  color: #1E1B4B;
-  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.08);
+  background:var(--role-inner,#F0F5FC);
+  border:1px solid var(--role-border,#AFC3E2);
+  border-radius:12px;
+  padding:12px 14px;
+  color:var(--role-text,#172B4D);
+  box-shadow:none;
   transition: transform .18s ease, box-shadow .18s ease;
 }
-.health-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.16);
-}
+.health-card:hover { transform:none; box-shadow:none; }
 .health-header {
   display: flex;
   align-items: center;
@@ -1027,8 +1024,11 @@
 
 /* 8. Player Matches & Career Inspector Modal */
 .player-matches-dialog {
-  max-width: 880px;
-  width: 95%;
+  width:min(880px,calc(100vw - 32px));
+  max-width:880px;
+  max-height:90dvh;
+  overflow:auto;
+  box-sizing:border-box;
   background: #FFFFFF;
   color: #1E1B4B;
   border: 1px solid #DDD6FE;
@@ -1036,6 +1036,13 @@
   padding: 24px 30px;
   box-shadow: 0 25px 60px rgba(109, 40, 217, 0.25);
 }
+.player-matches-dialog[data-view="violations"] > :not(.player-modal-header):not(.modal-violations-section):not(.modal-actions) { display:none; }
+.player-matches-dialog[data-view="violations"] .modal-violations-section { margin-top:12px !important; }
+.player-matches-dialog .violation-severity { font-size:11px; text-transform:uppercase; }
+.player-matches-dialog .violation-severity.high { color:#B91C1C; }
+.player-matches-dialog .violation-severity.medium { color:#92400E; }
+.player-matches-dialog .violation-severity.low { color:#1D4ED8; }
+.player-matches-dialog .violation-details { color:var(--role-text,#172B4D); font-size:12px; line-height:1.4; }
 .player-matches-dialog::backdrop {
   background: rgba(15, 23, 42, 0.7);
   backdrop-filter: blur(5px);
@@ -1549,3 +1556,37 @@ table td .text-muted, table td .muted {
 [data-admin-view="rewards"] summary { cursor: pointer; font-weight: 700; padding-block: .5rem; }
 [data-admin-view="rewards"] form:not([hidden]) { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; padding-block: .75rem; }
 [data-admin-view="rewards"] form label { display: grid; gap: .25rem; }
+
+.admin-page[data-admin-role="normal"] .admin-sidebar,
+.admin-page:not([data-admin-role]) .admin-sidebar {
+  background:linear-gradient(color-mix(in srgb,#D8E2F3 84%,transparent),color-mix(in srgb,#D8E2F3 84%,transparent)),url("../public/backgrounds/SecureFPS_Sakura_Anime_Background.png") center / cover fixed !important;
+  border-right: 1px solid #AFC3E2 !important;
+  backdrop-filter: blur(6px);
+}
+.admin-page[data-admin-role="super"] .admin-sidebar {
+  background:linear-gradient(color-mix(in srgb,#E8D3EB 84%,transparent),color-mix(in srgb,#E8D3EB 84%,transparent)),url("../public/backgrounds/SecureFPS_Sakura_Anime_Background.png") center / cover fixed !important;
+  border-right: 1px solid #D4AFD5 !important;
+  backdrop-filter: blur(6px);
+}
+body.admin-page.admin-page[data-admin-role="super"] .admin-sidebar {
+  background:linear-gradient(color-mix(in srgb,#E8D3EB 84%,transparent),color-mix(in srgb,#E8D3EB 84%,transparent)),url("../public/backgrounds/SecureFPS_Sakura_Anime_Background.png") center / cover fixed !important;
+  border-right: 1px solid #D4AFD5 !important;
+}
+body.admin-page.admin-page[data-admin-role="normal"] .admin-sidebar,
+body.admin-page.admin-page:not([data-admin-role]) .admin-sidebar {
+  background:linear-gradient(color-mix(in srgb,#D8E2F3 84%,transparent),color-mix(in srgb,#D8E2F3 84%,transparent)),url("../public/backgrounds/SecureFPS_Sakura_Anime_Background.png") center / cover fixed !important;
+  border-right: 1px solid #AFC3E2 !important;
+}
+body.sidebar-collapsed.admin-page .admin-sidebar {
+  width: 72px !important;
+  min-width: 72px !important;
+  max-width: 72px !important;
+}
+body.sidebar-collapsed.admin-page .admin-main-wrapper {
+  margin-left:72px !important;
+  width:calc(100% - 72px) !important;
+}
+@media(max-width:900px) {
+  body.sidebar-collapsed.admin-page .admin-sidebar { width:100% !important; min-width:0 !important; max-width:none !important; }
+  body.sidebar-collapsed.admin-page .admin-main-wrapper { margin-left:0 !important; width:100% !important; }
+}

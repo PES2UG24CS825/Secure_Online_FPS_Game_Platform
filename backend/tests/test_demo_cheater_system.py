@@ -444,6 +444,78 @@ class TestDemoCheaterSystem(unittest.TestCase):
         self.assertEqual(normal_acc.get("role"), "player")
         self.assertNotEqual(normal_acc.get("username"), "cheater_demo")
 
+    def test_18_headshot_anomaly_detection(self):
+        """Phase 6: Server detects abnormal headshot pattern (100% headshot ratio on hits >= 3)."""
+        self.login_user("cheater_demo", self.demo_password, self.demo_mfa_secret)
+        start_res = self.client.post("/api/game/start", json={
+            "game": "CyberStrike_3D",
+            "mode": "bots",
+            "demo": True
+        })
+        session_id = start_res.get_json()["session_id"]
+        game_token = start_res.get_json()["game_token"]
+
+        # Hit 1: 1st headshot (should not trigger alert alone - avoid single-hit false positive)
+        self.client.post("/api/game-events", json={
+            "session_id": session_id,
+            "game_token": game_token,
+            "game": "CyberStrike_3D",
+            "event_type": "weapon_fire",
+            "telemetry": {"weapon": "P-24 Carbine", "timestamp": 1.0}
+        })
+        self.client.post("/api/game-events", json={
+            "session_id": session_id,
+            "game_token": game_token,
+            "game": "CyberStrike_3D",
+            "event_type": "enemy_hit",
+            "telemetry": {"target_id": "bot_1", "headshot": True, "damage": 50, "timestamp": 1.05}
+        })
+        evt1 = security_events.find_one({"session_id": session_id, "event_type": "headshot_anomaly"})
+        self.assertIsNone(evt1, "Single headshot must not trigger a cheat detection alert")
+
+        # Hit 2: 2nd headshot
+        self.client.post("/api/game-events", json={
+            "session_id": session_id,
+            "game_token": game_token,
+            "game": "CyberStrike_3D",
+            "event_type": "weapon_fire",
+            "telemetry": {"weapon": "P-24 Carbine", "timestamp": 2.0}
+        })
+        self.client.post("/api/game-events", json={
+            "session_id": session_id,
+            "game_token": game_token,
+            "game": "CyberStrike_3D",
+            "event_type": "enemy_hit",
+            "telemetry": {"target_id": "bot_2", "headshot": True, "damage": 50, "timestamp": 2.05}
+        })
+        evt2 = security_events.find_one({"session_id": session_id, "event_type": "headshot_anomaly"})
+        self.assertIsNone(evt2, "Two headshots must not trigger without sufficient statistical evidence (>= 3 hits)")
+
+        # Hit 3: 3rd headshot (reaching evidence threshold: 3 hits, 100% headshot ratio)
+        self.client.post("/api/game-events", json={
+            "session_id": session_id,
+            "game_token": game_token,
+            "game": "CyberStrike_3D",
+            "event_type": "weapon_fire",
+            "telemetry": {"weapon": "P-24 Carbine", "timestamp": 3.0}
+        })
+        self.client.post("/api/game-events", json={
+            "session_id": session_id,
+            "game_token": game_token,
+            "game": "CyberStrike_3D",
+            "event_type": "enemy_hit",
+            "telemetry": {"target_id": "bot_3", "headshot": True, "damage": 50, "timestamp": 3.05}
+        })
+        evt3 = security_events.find_one({"session_id": session_id, "event_type": "headshot_anomaly"})
+        self.assertIsNotNone(evt3, "Three consecutive headshots (100% ratio) must trigger headshot_anomaly")
+        self.assertEqual(evt3.get("severity"), "critical")
+        self.assertTrue(evt3.get("is_demo"))
+        self.assertIn("100.0%", evt3.get("observed_value", ""))
+        self.assertEqual(evt3.get("evidence", {}).get("successful_hits"), 3)
+        self.assertEqual(evt3.get("evidence", {}).get("headshots"), 3)
+        self.assertEqual(evt3.get("evidence", {}).get("headshot_ratio"), 100.0)
+        self.assertEqual(evt3.get("evidence", {}).get("match_id"), session_id)
+
 
 if __name__ == "__main__":
     unittest.main()

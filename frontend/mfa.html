@@ -6,21 +6,21 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>SecureFPS | MFA Verification</title>
   <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg?v=2">
-  <link rel="stylesheet" href="css/styles.css?v=20261114_0415">
-  <link rel="stylesheet" href="css/ui-polish.css?v=20261114_0415">
+  <link rel="stylesheet" href="css/styles.css?v=20261124_restore9">
+  <link rel="stylesheet" href="css/ui-polish.css?v=20261124_restore9">
 </head>
 <body class="auth-page mfa-page">
   <main class="auth-shell single">
     <section class="auth-card mfa-card">
       <div class="auth-logo-lockup">
-        <img class="brand-lockup securefps-auth-mark" src="public/securefps-mark.svg?v=2" alt="SecureFPS">
+        <img class="brand-lockup securefps-auth-mark" src="public/securefps-logo-crop.png?v=20261124" alt="SecureFPS Gaming Security">
       </div>
       <p class="eyebrow">SECOND FACTOR</p>
       <h2>Verify your identity</h2>
       <p>Enter the 6-digit code from your authenticator app.</p>
       <form id="mfaForm" class="form">
         <label>Authentication code
-          <input id="code" class="otp-input" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required placeholder="000000">
+          <input id="code" name="mfa_code" class="otp-input" type="text" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required placeholder="000000">
         </label>
         <button class="primary-btn" type="submit">Verify & enter dashboard <span>→</span></button>
       </form>

@@ -65,14 +65,16 @@ def determine_security_incident_label(e):
     if not isinstance(e, dict):
         return "Security Incident"
     raw_type = e.get("type") or e.get("event_type") or e.get("incident_type") or "gameplay_anomaly"
-    reason_text = (e.get("description") or e.get("alert_reason") or e.get("reason") or "").strip().lower()
+    reason_text = (e.get("description") or e.get("alert_reason") or e.get("violation") or e.get("reason") or "").strip().lower()
 
     labels = {
-        "abnormal_fire_rate": "Unusually Fast Shooting",
-        "abnormal_speed": "Unusual Movement Speed",
-        "movement_anomaly": "Unusual Movement Speed",
-        "aim_anomaly": "Suspicious Aiming",
-        "impossible_hit": "Impossible Hit Detected",
+        "headshot_anomaly": "Unusual Headshot Pattern",
+        "abnormal_speed": "Excessive Movement Speed",
+        "movement_anomaly": "Excessive Movement Speed",
+        "impossible_hit": "Shot Through Obstacle",
+        "wall_penetration": "Shot Through Obstacle",
+        "abnormal_fire_rate": "Rapid Fire Violation",
+        "aim_anomaly": "Angle Snap / Aimbot",
         "session_revoked": "Login Session Ended",
         "mfa_failure": "Incorrect Verification Code",
         "unauthorized_access": "Unauthorized Access Attempt",
@@ -80,14 +82,16 @@ def determine_security_incident_label(e):
     if raw_type in labels:
         return labels[raw_type]
 
-    if "angle snapping" in reason_text or "aimbot" in reason_text or "aim snap" in reason_text:
-        return "Suspicious Aiming"
-    elif "impossible hit" in reason_text or "line-of-sight" in reason_text or "wallhack" in reason_text:
-        return "Impossible Hit Detected"
-    elif "speed" in reason_text or "movement" in reason_text:
-        return "Unusual Movement Speed"
-    elif "fire rate" in reason_text or "rapid fire" in reason_text:
-        return "Unusually Fast Shooting"
+    if "headshot" in reason_text or raw_type == "headshot_anomaly":
+        return "Unusual Headshot Pattern"
+    elif "angle snapping" in reason_text or "aimbot" in reason_text or "aim snap" in reason_text:
+        return "Angle Snap / Aimbot"
+    elif "impossible hit" in reason_text or "line-of-sight" in reason_text or "wallhack" in reason_text or "obstacle" in reason_text or "through wall" in reason_text or raw_type in {"impossible_hit", "wall_penetration"}:
+        return "Shot Through Obstacle"
+    elif "speed" in reason_text or "movement" in reason_text or raw_type in {"abnormal_speed", "movement_anomaly"}:
+        return "Excessive Movement Speed"
+    elif "fire rate" in reason_text or "rapid fire" in reason_text or raw_type == "abnormal_fire_rate":
+        return "Rapid Fire Violation"
     elif "accuracy" in reason_text or "aim" in reason_text:
         return "Abnormal Accuracy"
     elif raw_type == "account_suspended":
@@ -292,6 +296,7 @@ def check_super_admin_guard(target_admin_id, current_admin_user, action_name):
 
 ADMIN_OPERATION_PERMISSIONS = {
     "list_players": "players:read", "get_player_details": "players:read",
+    "get_player_violations": "players:read",
     "suspend_player": "players:suspend", "unsuspend_player": "players:suspend",
     "issue_player_warning": "players:warn", "record_investigation_note": "players:notes",
     "adjust_player_honour": "players:account", "reset_player_mfa": "players:account",
@@ -399,7 +404,20 @@ def overview():
         **genuine_filter,
         "account_status": "banned"
     })
-    total_matches_count = game_sessions.count_documents({}) + matches.count_documents({})
+    completed_session_ids = set(game_sessions.distinct("session_id", {"status": "completed"}))
+    legacy_session_ids = set(matches.distinct("session_id"))
+    telemetry_session_ids = set(game_telemetry.distinct(
+        "session_id", {"event_type": "game_completed"}
+    ))
+    total_matches_count = len(
+        {sid for sid in completed_session_ids | legacy_session_ids | telemetry_session_ids if sid}
+    )
+    total_matches_count += game_sessions.count_documents({
+        "status": "completed", "$or": [{"session_id": {"$exists": False}}, {"session_id": None}]
+    })
+    total_matches_count += matches.count_documents({
+        "$or": [{"session_id": {"$exists": False}}, {"session_id": None}]
+    })
     high_severity_count = security_events.count_documents({"severity": {"$in": ["high", "critical"]}})
     active_sessions_count = sessions_db.count_documents({"is_active": True})
     pending_appeals_count = ban_appeals.count_documents({"status": "pending"})
@@ -424,7 +442,29 @@ def overview():
     ]
 
     # Fetch latest 20 game sessions
-    recent_game_sessions = list(game_sessions.find().sort("created_at", -1).limit(20))
+    recent_game_sessions = list(
+        game_sessions.find({"status": "completed"}).sort("created_at", -1).limit(20)
+    )
+    recent_session_ids = {row.get("session_id") for row in recent_game_sessions if row.get("session_id")}
+    for event in game_telemetry.find({"event_type": "game_completed"}).sort("created_at", -1).limit(50):
+        sid = event.get("session_id")
+        if not sid or sid in recent_session_ids:
+            continue
+        recent_session_ids.add(sid)
+        recent_game_sessions.append({
+            "_id": event.get("_id"),
+            "session_id": sid,
+            "user_id": event.get("user_id"),
+            "game": event.get("game", "CyberStrike 3D"),
+            "started_at": event.get("created_at"),
+            "created_at": event.get("created_at"),
+            "status": "completed",
+        })
+    recent_game_sessions.sort(
+        key=lambda row: row.get("started_at") or row.get("created_at") or datetime.min,
+        reverse=True,
+    )
+    recent_game_sessions = recent_game_sessions[:20]
     user_ids = []
     for s in recent_game_sessions:
         uid = s.get("user_id")
@@ -553,12 +593,36 @@ def list_players():
     player_rows = []
     for p in player_cursor:
         pid = p["_id"]
-        c1 = game_sessions.count_documents({"user_id": pid, "status": "completed"})
-        c2 = matches.count_documents({"user_id": pid})
-        matches_count = c1 + c2
+        player_ids = [pid, str(pid)]
+        player_filter = {"$or": [
+            {"user_id": {"$in": player_ids}},
+            {"player_id": {"$in": player_ids}},
+        ]}
+        completed_ids = {
+            sid for sid in game_sessions.distinct(
+                "session_id", {"$and": [player_filter, {"status": "completed"}]}
+            ) if sid
+        }
+        completed_ids.update(
+            sid for sid in matches.distinct("session_id", player_filter) if sid
+        )
+        completed_ids.update(
+            sid for sid in game_telemetry.distinct(
+                "session_id", {"$and": [player_filter, {"event_type": "game_completed"}]}
+            ) if sid
+        )
+        no_id_sessions = game_sessions.count_documents({
+            "$and": [player_filter, {"status": "completed"},
+                     {"$or": [{"session_id": {"$exists": False}}, {"session_id": None}]}]
+        })
+        no_id_legacy = matches.count_documents({
+            "$and": [player_filter,
+                     {"$or": [{"session_id": {"$exists": False}}, {"session_id": None}]}]
+        })
+        matches_count = len(completed_ids) + no_id_sessions + no_id_legacy
 
-        kills = game_telemetry.count_documents({"user_id": pid, "event_type": "enemy_killed"})
-        deaths = game_telemetry.count_documents({"user_id": pid, "event_type": "player_death"})
+        kills = game_telemetry.count_documents({"user_id": {"$in": player_ids}, "event_type": "enemy_killed"})
+        deaths = game_telemetry.count_documents({"user_id": {"$in": player_ids}, "event_type": "player_death"})
         kdr = round(kills / max(deaths, 1), 2)
 
         raw_score = p.get("risk_score")
@@ -644,10 +708,37 @@ def get_player_details(player_id):
         return jsonify({"message": "Player not found."}), 404
 
     # 1. Matches & stats
-    p_sessions = list(game_sessions.find(
-        {"user_id": pid, "status": "completed"}
-    ).sort("created_at", -1))
-    legacy_matches = list(matches.find({"user_id": pid}).sort("created_at", -1))
+    player_ids = [pid, str(pid)]
+    player_id_filter = {"$or": [
+        {"user_id": {"$in": player_ids}},
+        {"player_id": {"$in": player_ids}},
+    ]}
+    p_sessions = list(game_sessions.find({
+        "$and": [player_id_filter, {"status": "completed"}]
+    }).sort("created_at", -1))
+    legacy_matches = list(matches.find(player_id_filter).sort("created_at", -1))
+    completion_events = list(game_telemetry.find({
+        "$and": [player_id_filter, {"event_type": "game_completed"}]
+    }).sort("created_at", -1))
+    known_session_ids = {
+        row.get("session_id") for row in p_sessions + legacy_matches if row.get("session_id")
+    }
+    for event in completion_events:
+        sid = event.get("session_id")
+        if not sid or sid in known_session_ids:
+            continue
+        known_session_ids.add(sid)
+        telemetry = event.get("telemetry") or {}
+        p_sessions.append({
+            "session_id": sid, "user_id": event.get("user_id"), "status": "completed",
+            "game": event.get("game", "CyberStrike 3D"),
+            "kills": telemetry.get("kills"), "deaths": telemetry.get("deaths"),
+            "shots_fired": telemetry.get("shots"), "shots_hit": telemetry.get("hits"),
+            "accuracy": telemetry.get("accuracy"), "headshots": telemetry.get("headshots"),
+            "kdr": telemetry.get("kdr"), "winner": telemetry.get("winner"),
+            "started_at": event.get("created_at"), "created_at": event.get("created_at"),
+            "stats_source": "completed_telemetry",
+        })
     known_session_ids = {row.get("session_id") for row in p_sessions if row.get("session_id")}
     legacy_matches = [
         row for row in legacy_matches
@@ -657,9 +748,12 @@ def get_player_details(player_id):
     combat_session_ids = [row["session_id"] for row in combat_matches if row.get("session_id")]
     telemetry_rows = list(game_telemetry.find(
         {
-            "user_id": pid,
+            "$or": [
+                {"user_id": {"$in": player_ids}},
+                {"player_id": {"$in": player_ids}},
+            ],
             "session_id": {"$in": combat_session_ids},
-            "event_type": {"$in": ["enemy_killed", "player_death", "weapon_fire", "enemy_hit"]},
+            "event_type": {"$in": ["enemy_killed", "player_death", "weapon_fire", "enemy_hit", "game_completed"]},
         },
         {"session_id": 1, "event_type": 1},
     )) if combat_session_ids else []
@@ -672,13 +766,13 @@ def get_player_details(player_id):
         for row, stats in zip(combat_matches, resolved_matches)
     }
     total_matches = len(combat_matches)
-    kills = combat_totals["kills"] or 0
-    deaths = combat_totals["deaths"] or 0
+    kills = combat_totals["kills"]
+    deaths = combat_totals["deaths"]
     kdr = combat_totals["kdr"]
 
     # 2. Latest ML analysis
     latest_analysis = game_events.find_one(
-        {"user_id": pid, "analysis_type": "game_session", "status": "success"},
+        {"user_id": {"$in": player_ids}, "analysis_type": "game_session", "status": "success"},
         sort=[("created_at", -1)]
     ) or {}
     raw_score = latest_analysis.get("risk_score")
@@ -703,20 +797,23 @@ def get_player_details(player_id):
     active_devices = list(sessions_db.find({"user_id": pid, "is_active": True}).sort("last_activity", -1).limit(10))
 
     # 6. Security & ML events
+    anti_cheat_types = ["gameplay_anomaly", "gameplay_alert", "hard_rule_violation", "impossible_hit",
+                        "abnormal_fire_rate", "abnormal_speed", "movement_anomaly", "aim_anomaly", "headshot_anomaly"]
     sec_events = list(security_events.find({
-        "type": {"$in": ["gameplay_anomaly", "gameplay_alert", "hard_rule_violation", "impossible_hit",
-                         "abnormal_fire_rate", "abnormal_speed", "movement_anomaly", "aim_anomaly"]},
-        "user_id": {"$in": [pid, str(pid)]},
+        "$and": [
+            {"$or": [{"event_type": {"$in": anti_cheat_types}}, {"type": {"$in": anti_cheat_types}}]},
+            {"$or": [{"user_id": {"$in": [pid, str(pid)]}}, {"player_id": str(pid)}]},
+        ],
     }).sort("created_at", -1).limit(50))
-    ml_analyses = list(game_events.find({"user_id": pid, "analysis_type": "game_session"}).sort("created_at", -1).limit(20))
+    ml_analyses = list(game_events.find({"user_id": {"$in": player_ids}, "analysis_type": "game_session"}).sort("created_at", -1).limit(20))
 
     # 7. Admin audit logs on this player
     audit_records = list(admin_audit_log.find({"target_user_id": pid}).sort("timestamp", -1).limit(20))
 
     # Format recent 10 matches
     recent_matches = []
-    for s in p_sessions[:10]:
-        sid = s.get("session_id", str(s["_id"]))
+    for s in combat_matches[:10]:
+        sid = s.get("session_id") or str(s.get("_id", "unknown"))
         stats = combat_by_session.get(sid, {})
         s_kills = stats.get("kills")
         s_deaths = stats.get("deaths")
@@ -735,6 +832,8 @@ def get_player_details(player_id):
             "kdr": s_kdr,
             "shots_fired": stats.get("shots_fired"),
             "shots_hit": stats.get("shots_hit"),
+            "headshots": stats.get("headshots"),
+            "headshot_percentage": stats.get("headshot_percentage"),
             "accuracy": stats.get("accuracy"),
             "result": s.get("winner", "Completed"),
             "risk_score": s_risk,
@@ -762,6 +861,9 @@ def get_player_details(player_id):
             "kdr": kdr,
             "shots_fired": combat_totals["shots_fired"],
             "shots_hit": combat_totals["shots_hit"],
+            "headshots": combat_totals["headshots"],
+            "headshots_coverage": combat_totals["headshots_coverage"],
+            "headshot_percentage": combat_totals["headshot_percentage"],
             "accuracy": combat_totals["accuracy"],
             "shots_fired_coverage": combat_totals["shots_fired_coverage"],
             "shots_hit_coverage": combat_totals["shots_hit_coverage"],
@@ -812,14 +914,20 @@ def get_player_details(player_id):
         "security_events": [
             {
                 "id": str(e.get("_id")),
-                "type": e.get("type", "gameplay_anomaly"),
+                "type": e.get("event_type") or e.get("type", "gameplay_anomaly"),
+                "event_type": e.get("event_type") or e.get("type"),
+                "violation": e.get("violation"),
+                "observed_value": e.get("observed_value"),
+                "allowed_value": e.get("allowed_value"),
+                "evidence": e.get("evidence"),
                 "incident_type": determine_security_incident_label(e),
                 "severity": e.get("severity") or ("high" if (e.get("risk_score") or 0) >= 65 else "medium"),
                 "description": (
                     e.get("description")
                     or e.get("alert_reason")
+                    or e.get("violation")
                     or e.get("reason")
-                    or (f"Physical anomaly detected: {e.get('incident_type')}" if e.get('incident_type') else "Physical anomaly detected by server anti-cheat engine.")
+                    or (f"Physical anomaly detected: {e.get('incident_type')}" if e.get('incident_type') else "Server-verified anti-cheat finding.")
                 ),
                 "risk_score": e.get("risk_score"),
                 "timestamp": format_iso(e.get("created_at"))
@@ -847,6 +955,47 @@ def get_player_details(player_id):
             for ar in audit_records
         ]
     })
+
+
+@admin_bp.get("/players/<player_id>/violations")
+def get_player_violations(player_id):
+    try:
+        pid = ObjectId(player_id)
+    except Exception:
+        return jsonify({"message": "Invalid player ID format."}), 400
+    if not users.find_one({"_id": pid}, {"_id": 1}):
+        return jsonify({"message": "Player not found."}), 404
+
+    anti_cheat_types = [
+        "gameplay_anomaly", "gameplay_alert", "hard_rule_violation", "impossible_hit",
+        "abnormal_fire_rate", "abnormal_speed", "movement_anomaly", "aim_anomaly", "headshot_anomaly",
+    ]
+    events = list(security_events.find({
+        "$and": [
+            {"$or": [{"event_type": {"$in": anti_cheat_types}}, {"type": {"$in": anti_cheat_types}}]},
+            {"$or": [
+                {"user_id": {"$in": [pid, str(pid)]}},
+                {"player_id": {"$in": [pid, str(pid)]}},
+            ]},
+        ],
+    }).sort("created_at", -1).limit(50))
+    return jsonify({"security_events": [{
+        "id": str(event.get("_id")),
+        "type": event.get("event_type") or event.get("type", "gameplay_anomaly"),
+        "event_type": event.get("event_type") or event.get("type"),
+        "violation": event.get("violation"),
+        "observed_value": event.get("observed_value"),
+        "allowed_value": event.get("allowed_value"),
+        "evidence": event.get("evidence"),
+        "incident_type": determine_security_incident_label(event),
+        "severity": event.get("severity") or ("high" if (event.get("risk_score") or 0) >= 65 else "medium"),
+        "description": (
+            event.get("description") or event.get("alert_reason") or event.get("violation")
+            or event.get("reason") or "Server-verified anti-cheat finding."
+        ),
+        "risk_score": event.get("risk_score"),
+        "created_at": format_iso(event.get("created_at")),
+    } for event in events]})
 
 
 # =========================================================================
@@ -2036,7 +2185,7 @@ def server_health():
     active socket rooms, and worker status.
     """
     db_ok = False
-    database_counts = {"total_users": None, "total_sessions": None}
+    database_counts = {"total_users": None, "total_sessions": None, "completed_matches": None}
     try:
         db.command("ping")
         database_counts = {
@@ -2046,7 +2195,18 @@ def server_health():
                 "email": {"$not": {"$regex": r"(@example\.com|@test\.local|@example\.test|@test\.com|@test\.lan|@securefps\.local|@deleted\.securefps\.local)"}},
                 "name": {"$not": {"$regex": r"^(Test Player|Test Soldier|Demo Player|Deleted Player)"}}
             }),
-            "total_sessions": game_sessions.count_documents({})
+            "total_sessions": game_sessions.count_documents({}),
+            "completed_matches": len({
+                sid for sid in (
+                    set(game_sessions.distinct("session_id", {"status": "completed"}))
+                    | set(matches.distinct("session_id"))
+                    | set(game_telemetry.distinct("session_id", {"event_type": "game_completed"}))
+                ) if sid
+            }) + game_sessions.count_documents({
+                "status": "completed", "$or": [{"session_id": {"$exists": False}}, {"session_id": None}]
+            }) + matches.count_documents({
+                "$or": [{"session_id": {"$exists": False}}, {"session_id": None}]
+            })
         }
         db_ok = True
     except Exception:
@@ -2661,10 +2821,23 @@ def get_threat_monitoring():
         ).sort("created_at", -1).limit(10)
     )
 
-    # 3. Repeated Violators
+    # 3. Repeated anti-cheat violators. Keep this list aligned with the
+    # violations inspection endpoint; counting unrelated security events here
+    # produced rows whose View action legitimately had no anti-cheat records.
+    anti_cheat_types = [
+        "gameplay_anomaly", "gameplay_alert", "hard_rule_violation", "impossible_hit",
+        "abnormal_fire_rate", "abnormal_speed", "movement_anomaly", "aim_anomaly", "headshot_anomaly",
+    ]
     repeated_counts = {}
-    for event in security_events.find({"user_id": {"$ne": None}}, {"user_id": 1}):
-        raw_uid = event.get("user_id")
+    for event in security_events.find({
+        "$and": [
+            {"$or": [{"event_type": {"$in": anti_cheat_types}}, {"type": {"$in": anti_cheat_types}}]},
+            {"$or": [{"user_id": {"$ne": None}}, {"player_id": {"$ne": None}}]},
+        ],
+    }, {"user_id": 1, "player_id": 1}):
+        raw_uid = event.get("user_id") or event.get("player_id")
+        if raw_uid is None:
+            continue
         try:
             normalized = str(ObjectId(str(raw_uid)))
         except Exception:
@@ -3338,13 +3511,15 @@ def get_security_command_status():
         ).strip()
 
         r_low = reason_text.lower()
-        if "angle snapping" in r_low or "aimbot" in r_low or "aim snap" in r_low:
+        if "headshot" in r_low or raw_type == "headshot_anomaly":
+            incident_type = "Unusual Headshot Pattern"
+        elif "angle snapping" in r_low or "aimbot" in r_low or "aim snap" in r_low:
             incident_type = "Angle Snap / Aimbot"
-        elif "impossible hit" in r_low or "line-of-sight" in r_low or "wallhack" in r_low:
-            incident_type = "Impossible Hit Violation"
-        elif "speed" in r_low or "movement" in r_low:
-            incident_type = "Speed Hack Violation"
-        elif "fire rate" in r_low or "rapid fire" in r_low:
+        elif "impossible hit" in r_low or "line-of-sight" in r_low or "wallhack" in r_low or "obstacle" in r_low or "through wall" in r_low or raw_type in {"impossible_hit", "wall_penetration"}:
+            incident_type = "Shot Through Obstacle"
+        elif "speed" in r_low or "movement" in r_low or raw_type == "abnormal_speed":
+            incident_type = "Excessive Movement Speed"
+        elif "fire rate" in r_low or "rapid fire" in r_low or raw_type == "abnormal_fire_rate":
             incident_type = "Rapid Fire Violation"
         elif "accuracy" in r_low or "aim" in r_low:
             incident_type = "Abnormal Accuracy"

@@ -242,10 +242,11 @@ DEMO_ACCOUNT_USERNAME = "cheater_demo"
 DEMO_ACCOUNT_USERNAMES = {"cheater_demo", "demo_cheater"}
 DEMO_ACCOUNT_EMAILS = {"cheater_demo@example.test", "demo_cheater@example.test"}
 
-# In-memory caches for demo violation alert debouncing and fire rate interval tracking
+# In-memory caches for demo violation alert debouncing, fire rate interval tracking, and session combat stats
 _violation_alert_cache = {}
 _violation_cache_lock = threading.Lock()
 _demo_last_fire_time = {}
+_demo_session_combat_stats = {}
 
 
 def process_security_violations(game_session, account, event_type, telemetry):
@@ -271,8 +272,18 @@ def process_security_violations(game_session, account, event_type, telemetry):
     now_dt = utc_now()
     violations_found = []
 
-    # 1. IMPOSSIBLE HIT CHECK
+    # Track session combat statistics for statistical anomaly detection
+    cstats = _demo_session_combat_stats.setdefault(session_id, {"shots": 0, "hits": 0, "headshots": 0})
+    if event_type == "weapon_fire":
+        cstats["shots"] += 1
+
+    # 1. IMPOSSIBLE HIT CHECK (Wall Penetration & Extreme Range)
     if event_type in {"enemy_hit", "hit_detail", "weapon_hit"}:
+        cstats["hits"] += 1
+        is_hs = bool(telemetry.get("headshot") or telemetry.get("is_headshot") or telemetry.get("body_part") == "head")
+        if is_hs:
+            cstats["headshots"] += 1
+
         visible_through_wall = bool(
             telemetry.get("visible_through_wall")
             or telemetry.get("through_obstacle")
@@ -286,41 +297,82 @@ def process_security_violations(game_session, account, event_type, telemetry):
             except (ValueError, TypeError):
                 pass
 
+        shooter_name = account.get("username") or account.get("name") or "cheater_demo"
+        target_name = telemetry.get("target_id") or telemetry.get("target") or "Combat Bot"
+
         if visible_through_wall:
             violations_found.append({
                 "type": "impossible_hit",
                 "severity": "critical",
-                "violation": "Hit through obstacle / impossible distance",
-                "observed_value": "line_of_sight: false (obstacle penetration)",
+                "violation": "Shot Through Obstacle: Hit registered through solid scenery geometry",
+                "observed_value": "line_of_sight: false (obstacle penetration detected)",
                 "allowed_value": "line_of_sight: true",
                 "evidence": {
-                    "target_id": telemetry.get("target_id") or telemetry.get("target"),
+                    "shooter": shooter_name,
+                    "target": target_name,
+                    "target_id": target_name,
+                    "match_id": session_id,
+                    "session_id": session_id,
+                    "obstruction_evidence": "Obstacle geometry intersected direct line between shooter and target",
                     "distance": distance,
                     "line_of_sight": False,
                     "through_obstacle": True,
                     "player_position": telemetry.get("player_position") or telemetry.get("position"),
                     "target_position": telemetry.get("target_position"),
                     "weapon": telemetry.get("weapon", "P-24 Carbine"),
-                    "timestamp": telemetry.get("timestamp"),
+                    "timestamp": telemetry.get("timestamp") or now_mono,
+                    "detection_timestamp": now_dt.isoformat(),
                 }
             })
         elif distance is not None and distance > 100.0:
             violations_found.append({
                 "type": "impossible_hit",
                 "severity": "critical",
-                "violation": "Hit through obstacle / impossible distance",
+                "violation": "Shot Through Obstacle / Extreme Distance: Hit registered at impossible range",
                 "observed_value": f"distance: {distance:.1f}m",
                 "allowed_value": "distance: <= 100.0m",
                 "evidence": {
-                    "target_id": telemetry.get("target_id") or telemetry.get("target"),
+                    "shooter": shooter_name,
+                    "target": target_name,
+                    "target_id": target_name,
+                    "match_id": session_id,
+                    "session_id": session_id,
                     "distance": distance,
                     "line_of_sight": True,
                     "player_position": telemetry.get("player_position") or telemetry.get("position"),
                     "target_position": telemetry.get("target_position"),
                     "weapon": telemetry.get("weapon", "P-24 Carbine"),
-                    "timestamp": telemetry.get("timestamp"),
+                    "timestamp": telemetry.get("timestamp") or now_mono,
+                    "detection_timestamp": now_dt.isoformat(),
                 }
             })
+
+        # 1B. HEADSHOT PATTERN ANOMALY CHECK
+        # Avoid classifying based on a single hit: requires at least 3 confirmed hits
+        if cstats["hits"] >= 3:
+            hs_ratio = cstats["headshots"] / cstats["hits"]
+            if hs_ratio >= 0.80:
+                ratio_pct = round(hs_ratio * 100, 1)
+                total_shots_val = max(cstats["shots"], cstats["hits"])
+                violations_found.append({
+                    "type": "headshot_anomaly",
+                    "severity": "critical" if hs_ratio >= 0.95 else "high",
+                    "violation": f"Unusual Headshot Pattern: {ratio_pct}% headshots across {cstats['hits']} hits",
+                    "observed_value": f"{cstats['headshots']} headshots / {cstats['hits']} hits ({ratio_pct}%, {total_shots_val} shots fired)",
+                    "allowed_value": "<= 40.0% expected human headshot ratio",
+                    "evidence": {
+                        "total_shots": total_shots_val,
+                        "successful_hits": cstats["hits"],
+                        "headshots": cstats["headshots"],
+                        "headshot_ratio": ratio_pct,
+                        "match_id": session_id,
+                        "session_id": session_id,
+                        "target": target_name,
+                        "weapon": telemetry.get("weapon", "P-24 Carbine"),
+                        "timestamp": telemetry.get("timestamp") or now_mono,
+                        "detection_timestamp": now_dt.isoformat(),
+                    }
+                })
 
     # 2. ABNORMAL MOVEMENT SPEED CHECK
     if event_type in {"player_behavior", "movement_sample"}:
@@ -331,19 +383,27 @@ def process_security_violations(game_session, account, event_type, telemetry):
             except (ValueError, TypeError):
                 pass
         if speed is not None and speed >= 25.0:
+            speed_multiplier = round(speed / 11.5, 2)
             violations_found.append({
                 "type": "abnormal_speed",
                 "severity": "critical",
-                "violation": "Movement exceeds legitimate speed limit",
-                "observed_value": f"{speed:.1f} m/s",
-                "allowed_value": "11.5 m/s",
+                "violation": "Excessive Movement Speed: Speed exceeds legitimate physical limits",
+                "observed_value": f"{speed:.1f} m/s ({speed_multiplier}x speed multiplier)",
+                "allowed_value": "11.5 m/s maximum sprint speed",
                 "evidence": {
+                    "observed_movement_speed": speed,
+                    "normal_permitted_speed": 11.5,
+                    "speed_multiplier": speed_multiplier,
+                    "deviation_ms": round(speed - 11.5, 1),
+                    "match_id": session_id,
+                    "session_id": session_id,
                     "calculated_speed": speed,
                     "allowed_maximum": 11.5,
-                    "multiplier": round(speed / 11.5, 1),
+                    "multiplier": speed_multiplier,
                     "position": telemetry.get("position"),
                     "grounded": telemetry.get("grounded", True),
-                    "timestamp": telemetry.get("timestamp"),
+                    "timestamp": telemetry.get("timestamp") or now_mono,
+                    "detection_timestamp": now_dt.isoformat(),
                 }
             })
 

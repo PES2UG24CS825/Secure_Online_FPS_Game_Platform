@@ -1,0 +1,17 @@
+{
+  "overview": null,
+  "profile": {
+    "avatarInsideBanner": true,
+    "avatarWidth": 88,
+    "bannerHeight": 190,
+    "nameColor": "rgb(255, 255, 255)",
+    "headingBg": "rgb(109, 40, 217)",
+    "appearanceHeadingColor": "rgb(255, 255, 255)"
+  },
+  "mobile": {
+    "viewport": 390,
+    "documentWidth": 390,
+    "navWidth": 361,
+    "navContentWidth": 361
+  }
+}

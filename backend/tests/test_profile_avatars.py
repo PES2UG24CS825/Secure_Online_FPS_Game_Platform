@@ -36,7 +36,7 @@ def test_all_chibi_avatars_persist_through_login_and_reach_leaderboard(monkeypat
     try:
         browser = login()
         profile = browser.get("/api/player/profile").get_json()
-        assert profile["avatar"]["key"] == "default-operator"
+        assert profile["avatar"]["key"] == "chibi-male-1"
         options = profile["avatar_options"]
         assert "ghost-specops" in {option["key"] for option in options}
         assert "robot" not in {option["key"] for option in options}

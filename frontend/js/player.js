@@ -216,12 +216,18 @@ async function loadPlayerDashboard() {
     const sideName = document.getElementById("sideName");
     const sideEmail = document.getElementById("sideEmail");
     const avatar = document.getElementById("avatar");
+    const miniProfile = avatar?.closest(".mini-profile");
     const handle = document.getElementById("profileUsername");
     handle.hidden = !user.username;
     handle.textContent = user.username ? "@" + user.username : "";
     if (sideName) sideName.textContent = user.username ? "@" + user.username : name;
     if (sideEmail) sideEmail.textContent = user.email || "";
-    if (avatar) avatar.textContent = name.charAt(0).toUpperCase();
+    if (miniProfile) miniProfile.title = [name, user.email].filter(Boolean).join(" · ");
+    if (avatar) {
+      avatar.textContent = name.charAt(0).toUpperCase();
+      avatar.setAttribute("aria-label", `Player account: ${[name, user.email].filter(Boolean).join(", ")}`);
+      avatar.title = miniProfile?.title || name;
+    }
 
     const failedSections = [];
     const loadSection = async (name, path) => {
@@ -370,12 +376,20 @@ async function loadPlayerDashboard() {
     const matchesCountEl = document.getElementById("matchesCount");
     if (matchesCountEl) matchesCountEl.textContent = matchesData ? Number(matchesData.total_matches ?? completedMatches.length) : "Unavailable";
     const matchesSummary = document.getElementById("matchesSummary");
-    if (matchesSummary) matchesSummary.textContent = `${analyzedMatches.length} analyzed · ${Math.max(0, completedMatches.length - analyzedMatches.length)} awaiting review`;
+    if (matchesSummary) matchesSummary.textContent = matchesData
+      ? `${analyzedMatches.length} analyzed · ${Math.max(0, completedMatches.length - analyzedMatches.length)} awaiting review`
+      : "Match history unavailable";
 
     // Populate Combat Career Lifetime Overview Statistics
-    const totalKills = statsData?.kills ?? completedMatches.reduce((sum, m) => sum + (Number(m.kills) || 0), 0);
-    const totalDeaths = statsData?.deaths ?? completedMatches.reduce((sum, m) => sum + (Number(m.deaths) || 0), 0);
-    const careerKd = totalDeaths > 0 ? totalKills / totalDeaths : totalKills;
+    const sumRecorded = (key) => {
+      const values = completedMatches.map(match => match[key]).filter(value => value != null && Number.isFinite(Number(value)));
+      if (values.length) return values.reduce((sum, value) => sum + Number(value), 0);
+      return matchesData && Number(matchesData.total_matches) === 0 ? 0 : null;
+    };
+    const totalKills = statsData?.kills ?? sumRecorded("kills");
+    const totalDeaths = statsData?.deaths ?? sumRecorded("deaths");
+    const careerKd = totalKills == null || totalDeaths == null
+      ? null : Number(totalDeaths) > 0 ? Number(totalKills) / Number(totalDeaths) : Number(totalKills);
     const shotValues = completedMatches.map(match => match.shots_fired).filter(value => value != null);
     const hitValues = completedMatches.map(match => match.shots_hit).filter(value => value != null);
     const totalShots = statsData?.shots_fired ?? (shotValues.length ? shotValues.reduce((sum, value) => sum + Number(value), 0) : null);
@@ -386,13 +400,13 @@ async function loadPlayerDashboard() {
     const totalMatchesCount = statsData?.total_matches ?? Number(matchesData?.total_matches ?? completedMatches.length);
 
     const careerKillsEl = document.getElementById("careerTotalKills");
-    if (careerKillsEl) careerKillsEl.textContent = totalKills;
+    if (careerKillsEl) careerKillsEl.textContent = totalKills == null ? "—" : Number(totalKills).toLocaleString();
 
     const careerDeathsEl = document.getElementById("careerTotalDeaths");
-    if (careerDeathsEl) careerDeathsEl.textContent = totalDeaths;
+    if (careerDeathsEl) careerDeathsEl.textContent = totalDeaths == null ? "—" : Number(totalDeaths).toLocaleString();
 
     const careerKdEl = document.getElementById("careerKd");
-    if (careerKdEl) careerKdEl.textContent = Number(careerKd).toFixed(2);
+    if (careerKdEl) careerKdEl.textContent = careerKd == null ? "—" : Number(careerKd).toFixed(2);
 
     const careerAccEl = document.getElementById("careerAccuracy");
     if (careerAccEl) careerAccEl.textContent = careerAcc == null ? "—" : `${careerAcc.toFixed(1)}%`;
@@ -424,6 +438,12 @@ async function loadPlayerDashboard() {
     if (careerAssistsEl) careerAssistsEl.textContent = statsData?.assists ?? "—";
     const careerHeadshotsEl = document.getElementById("careerHeadshots");
     if (careerHeadshotsEl) careerHeadshotsEl.textContent = statsData?.headshots ?? "—";
+    const headshotCoverageEl = document.getElementById("careerHeadshotsCoverage");
+    if (headshotCoverageEl) {
+      const coverage = statsData?.headshots_coverage;
+      headshotCoverageEl.textContent = coverage === "complete" ? "Complete history"
+        : coverage === "partial" ? "Partial history" : "Unavailable";
+    }
     const careerHeadshotRateEl = document.getElementById("careerHeadshotRate");
     if (careerHeadshotRateEl) careerHeadshotRateEl.textContent = statsData?.headshot_percentage == null
       ? "Verified matches" : `${statsData.headshot_percentage}% of verified hits`;
@@ -584,7 +604,16 @@ async function loadPlayerDashboard() {
     ];
 
     if (avatarContainer && profileData) {
-      window.profileAvatars.renderPicker(avatarContainer, avatarOptions, currentAppearance.avatar);
+      const freeAvatarKeys = new Set(["chibi-male-1", "chibi-male-2", "chibi-female-1", "chibi-female-2"]);
+      const freeOptions = avatarOptions.filter(option => freeAvatarKeys.has(option.key));
+      const ownedOptions = avatarOptions.filter(option => !freeAvatarKeys.has(option.key) && option.key !== "custom");
+      window.profileAvatars.renderPicker(avatarContainer, freeOptions, currentAppearance.avatar);
+      const ownedGallery = document.getElementById("ownedAppearanceGallery");
+      const ownedContainer = document.getElementById("ownedAvatarOptions");
+      if (ownedGallery && ownedContainer) {
+        ownedGallery.hidden = ownedOptions.length === 0;
+        if (ownedOptions.length) window.profileAvatars.renderPicker(ownedContainer, ownedOptions, currentAppearance.avatar);
+      }
     }
     if (bannerContainer) {
       bannerContainer.innerHTML = banners.map(b => `
@@ -607,6 +636,23 @@ async function loadPlayerDashboard() {
         if (!option || appearanceSaving) return;
         currentAppearance.avatar = option.dataset.avatar;
         currentAppearance.avatar_image = currentAppearance.avatar === "custom" && savedPortrait?.key === "custom" ? savedPortrait.src : null;
+        appearanceDirty = true;
+        renderPlayerAppearance();
+      });
+      document.getElementById("ownedAvatarOptions")?.addEventListener("click", (event) => {
+        const option = event.target.closest("[data-avatar]");
+        if (!option || appearanceSaving) return;
+        currentAppearance.avatar = option.dataset.avatar;
+        currentAppearance.avatar_image = null;
+        appearanceDirty = true;
+        renderPlayerAppearance();
+      });
+      document.getElementById("restoreAppearance")?.addEventListener("click", () => {
+        if (appearanceSaving) return;
+        currentAppearance.avatar = "chibi-male-1";
+        currentAppearance.banner = "sakura";
+        currentAppearance.avatar_image = null;
+        currentAppearance.banner_image = null;
         appearanceDirty = true;
         renderPlayerAppearance();
       });
@@ -1184,8 +1230,20 @@ const collapseSidebar = document.getElementById("collapseSidebarBtn");
 document.querySelectorAll("#playerNavigation a:not([aria-label])").forEach(link => {
   link.setAttribute("aria-label", link.querySelector(".nav-label").textContent.trim());
 });
-collapseSidebar.addEventListener("click", () => {
-  const collapsed = document.body.classList.toggle("sidebar-collapsed");
-  collapseSidebar.setAttribute("aria-expanded", String(!collapsed));
-  collapseSidebar.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
-});
+if (collapseSidebar) {
+  const applySidebarState = (collapsed) => {
+    document.body.classList.toggle("sidebar-collapsed", collapsed);
+    collapseSidebar.setAttribute("aria-expanded", String(!collapsed));
+    collapseSidebar.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
+    collapseSidebar.innerHTML = collapsed
+      ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m13 5 7 7-7 7m8-7H4"/></svg>'
+      : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m11 5-7 7 7 7m-8-7h16"/></svg>';
+  };
+  const savedCollapsed = localStorage.getItem("securefps-sidebar-collapsed") === "true";
+  applySidebarState(savedCollapsed);
+  collapseSidebar.addEventListener("click", () => {
+    const collapsed = !document.body.classList.contains("sidebar-collapsed");
+    applySidebarState(collapsed);
+    localStorage.setItem("securefps-sidebar-collapsed", String(collapsed));
+  });
+}

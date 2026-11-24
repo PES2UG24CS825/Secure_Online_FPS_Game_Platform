@@ -1322,7 +1322,7 @@
 
     /* Consistent, refined visual treatment across the player console. */
     .player-page .sidebar nav a { transition: all .18s ease; }
-    .player-page .sidebar nav a:hover { background: #F3E8FF; border-color: #DDD6FE; color: #7C3AED; }
+    .player-page .sidebar nav a:hover:not(.active) { background: #F3E8FF; border-color: #DDD6FE; color: var(--role-text,#241638); }
     .player-page .sidebar nav a.active {
       background: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
       border-color: rgba(255, 255, 255, 0.25);
@@ -1913,8 +1913,13 @@
       flex-shrink: 0;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 20px 16px;
+      justify-content:space-between;
+      gap:8px;
+      width:100%;
+      min-height:56px;
+      margin:0 0 10px;
+      padding:6px 8px;
+      box-sizing:border-box;
     }
 
     .sidebar-collapse-btn {
@@ -1976,12 +1981,20 @@
     @media (min-width: 901px) {
       body.sidebar-collapsed .brand-lockup,
       body.sidebar-collapsed .nav-label,
-      body.sidebar-collapsed .mini-profile > div:not(.avatar),
-      body.sidebar-collapsed #logoutBtn {
+      body.sidebar-collapsed .mini-profile > div:not(.avatar) {
         display: none;
+      }
+      body.sidebar-collapsed .sidebar-bottom #logoutBtn {
+        display: inline-flex; width: 100%; min-height: 36px; justify-content: center;
+        align-items: center; padding: 0; overflow: hidden; font-size: 0;
+      }
+      body.sidebar-collapsed .sidebar-bottom #logoutBtn::before {
+        content: "↪"; font-size: 19px; line-height: 1;
       }
     }
 
+    body.sidebar-collapsed .player-page .sidebar .brand { justify-content:center; padding-inline:0; }
+    body.sidebar-collapsed .player-page .sidebar .sidebar-logo-lockup { display:none; }
     body.sidebar-collapsed .player-page .sidebar nav a {
       justify-content: center;
       padding: 0;
@@ -2606,13 +2619,44 @@
 /* Profile and account tools use the existing Sakura console tokens. */
 .player-page .profile-layout { display:grid; gap:.9rem; }
 .player-page .profile-layout .profile-card { padding:clamp(.75rem, 1.5vw, 1.1rem); }
-.profile-layout .profile-banner { width:100%; height:clamp(8rem, 23vw, 17rem); }
-.profile-layout .profile-identity { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:start; gap:clamp(.6rem, 2vw, 1.25rem); padding:0 .35rem; margin:.55rem 0 0; }
-.profile-layout .profile-avatar { width:clamp(4.25rem, 9vw, 6.25rem); height:clamp(4.25rem, 9vw, 6.25rem); margin-top:-2.2rem; background-color:var(--ui-soft); }
-.profile-identity-details { min-width:0; overflow-wrap:anywhere; }
-.profile-layout .profile-identity h3 { font-size:clamp(1.3rem, 3vw, 2rem); margin:0 0 .2rem; }
-.profile-layout .profile-identity p { margin:.15rem 0; }
-#profileUsername { font-weight:750; color:var(--ui-action); }
+.profile-layout .profile-banner { position:relative; isolation:isolate; display:flex; align-items:flex-end; width:100%; height:clamp(160px, 18vw, 190px); overflow:hidden; border-radius:12px; }
+.profile-layout .profile-banner::after { content:""; position:absolute; z-index:-1; inset:0; background:linear-gradient(90deg,rgba(22,12,34,.84) 0%,rgba(22,12,34,.52) 50%,transparent 78%); pointer-events:none; }
+.profile-banner-identity { display:flex; align-items:flex-end; gap:14px; width:min(78%,680px); padding:0 16px 12px; }
+.profile-layout .profile-avatar { flex:0 0 88px; width:88px; height:88px; margin:0; border:3px solid #E9D5FF; border-radius:50%; background-color:#F5EEFC; box-shadow:0 4px 14px rgba(20,10,35,.35); }
+.profile-identity-details { min-width:0; overflow-wrap:anywhere; padding-bottom:3px; }
+.profile-layout .profile-identity-details h3 { margin:0 0 .18rem; color:#fff; font-size:clamp(1.35rem,2.4vw,2rem); line-height:1.1; }
+.profile-layout .profile-identity-details p { margin:.15rem 0; color:#F3E8FF; font-size:13px; }
+.profile-meta { display:grid; grid-template-columns:minmax(0,1fr) minmax(220px, .8fr) auto; align-items:center; gap:12px; padding:10px 4px 2px; color:var(--role-text); }
+.profile-account-details p { margin:2px 0; color:var(--role-secondary); font-size:12px; }
+.profile-layout .profile-progression { min-width:0; }
+.profile-progression progress { width:100%; height:9px; accent-color:#6D28D9; }
+.profile-progression progress::-webkit-progress-bar { background:#E6D8F1; border-radius:9px; }
+.profile-progression progress::-webkit-progress-value { background:#6D28D9; border-radius:9px; }
+.profile-progression progress::-moz-progress-bar { background:#6D28D9; border-radius:9px; }
+.profile-progression small { color:var(--role-secondary); }
+#profileUsername { font-weight:750; color:#F3E8FF; }
+@media(max-width:700px){.profile-meta{grid-template-columns:1fr}.profile-appearance{grid-template-columns:1fr}.profile-banner-identity{width:100%;padding-inline:12px}.profile-layout .profile-avatar{flex-basis:76px;width:76px;height:76px}.profile-appearance .appearance-group{min-width:0}}
+
+@media (max-width: 600px) {
+  .player-page .sidebar nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    overflow: visible;
+    padding: 8px 12px;
+  }
+  .player-page .sidebar nav a {
+    min-width: 0;
+    flex: 1 1 auto;
+    gap: 6px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    padding: 5px 6px;
+    font-size: 10px;
+  }
+  .player-page .sidebar nav a .nav-icon { margin-right: 0; }
+  .player-page .sidebar nav a .nav-label { min-width: 0; line-height: 1.2; }
+}
 #profileContent { font-size:.83rem; }
 .profile-progression { max-width:23rem; margin-top:.55rem; }
 .profile-xp { display:flex; justify-content:space-between; gap:.4rem; flex-wrap:wrap; }
@@ -2623,6 +2667,9 @@
 .player-page .notification-history-grid { display:grid; gap:.9rem; align-items:start; grid-template-columns:minmax(0,2fr) minmax(0,1fr); }
 .player-page :is(.notification-history-grid,.security-actions-container) .profile-card { padding:clamp(.8rem, 1.5vw, 1.15rem); }
 .notification-history-grid h3 { margin:0 0 .6rem; }
+.profile-appearance { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 1rem; }
+.profile-appearance > h3 { grid-column:1/-1; align-self:start; margin:0; padding:8px 10px; border-radius:8px; background:#6D28D9; color:#fff; }
+.profile-appearance > .appearance-actions { grid-column:1/-1; justify-content:flex-end; flex-wrap:wrap; }
 .profile-appearance .appearance-group { margin:.8rem 0 0; }
 .profile-appearance .appearance-group h4 { margin:0 0 .5rem; }
 .profile-appearance .appearance-options { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.5rem; }
@@ -2660,4 +2707,10 @@
 }
 @media (max-width: 440px) {
   .profile-appearance .avatar-portrait-option { font-size:.68rem; }
+}
+
+.player-page .sidebar {
+  background:linear-gradient(color-mix(in srgb,#E2D3F2 84%,transparent),color-mix(in srgb,#E2D3F2 84%,transparent)),url("../public/backgrounds/SecureFPS_Sakura_Anime_Background.png") center / cover fixed !important;
+  border-right: 1px solid #C9B3E4 !important;
+  backdrop-filter: blur(6px);
 }

@@ -4,15 +4,15 @@ import { loadRewardOperations } from './admin/admin_rewards.js';
  * Coordinates section modules, tab navigation, responsive polling, and manual refresh.
  */
 import { PollingManager, connectAdminLiveEvents, escapeHtml, formatTimeAgo } from './admin/admin_core.js';
-import { loadAdminOverview } from './admin/admin_overview.js';
-import { initPlayersSection, loadPlayersTable } from './admin/admin_players.js';
+import { loadAdminOverview } from './admin/admin_overview.js?v=20261124_datafix1';
+import { initPlayersSection, loadPlayersTable } from './admin/admin_players.js?v=20261124_datafix1';
 import { initSecuritySection, loadBanAppeals, loadAntiCheatDecisions, loadAuditLogTable, loadRecentLoginsTable } from './admin/admin_security.js';
 import { initSupportSection, loadSupportTickets } from './admin/admin_support.js';
 import {
   initSuperAdminModules, loadSuperAdmins, loadRolesPermissions, loadMlModelsCatalog,
   loadRiskConfig, loadSecurityCommand, loadSystemControlMetrics,
   loadPlatformConfig, loadThreatMonitoring, loadReportsAnalytics, loadApprovalsQueue
-} from './admin/admin_super.js';
+} from './admin/admin_super.js?v=20261124_datafix1';
 
 let activeSection = 'overview';
 
@@ -107,7 +107,7 @@ function updatePageTitle(section) {
       break;
     case 'super_admins':
       title.textContent = 'Administrator Management';
-      if (sub) sub.textContent = 'Provision Normal Admins, edit profiles, revoke sessions, and manage credentials.';
+      if (sub) sub.textContent = 'Add admins, edit profiles, monitor sessions, and manage credentials.';
       break;
     case 'super_roles':
       title.textContent = 'Role & Permission Management';
@@ -118,7 +118,7 @@ function updatePageTitle(section) {
       if (sub) sub.textContent = 'Model accuracy, precision, recall, threshold tuning, and instant rollback.';
       break;
     case 'super_risk':
-      title.textContent = 'Risk Engine Configuration';
+      title.textContent = 'Risk Settings';
       if (sub) sub.textContent = 'Category boundaries, automated enforcement rules, and Interactive Simulator.';
       break;
     case 'super_command':
@@ -137,6 +137,24 @@ function updatePageTitle(section) {
 }
 
 function setupHeaderControls() {
+  const collapseAdminSidebar = document.getElementById('collapseAdminSidebarBtn');
+  if (collapseAdminSidebar) {
+    const applySidebarState = (collapsed) => {
+      document.body.classList.toggle('sidebar-collapsed', collapsed);
+      collapseAdminSidebar.setAttribute('aria-expanded', String(!collapsed));
+      collapseAdminSidebar.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+      collapseAdminSidebar.innerHTML = collapsed
+        ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m13 5 7 7-7 7m8-7H4"/></svg>'
+        : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m11 5-7 7 7 7m-8-7h16"/></svg>';
+    };
+    const savedCollapsed = localStorage.getItem('securefps-sidebar-collapsed') === 'true';
+    applySidebarState(savedCollapsed);
+    collapseAdminSidebar.addEventListener('click', () => {
+      const collapsed = !document.body.classList.contains('sidebar-collapsed');
+      applySidebarState(collapsed);
+      localStorage.setItem('securefps-sidebar-collapsed', String(collapsed));
+    });
+  }
   const manualRefresh = document.getElementById('manualRefreshBtn');
   if (manualRefresh) {
     manualRefresh.addEventListener('click', async () => {

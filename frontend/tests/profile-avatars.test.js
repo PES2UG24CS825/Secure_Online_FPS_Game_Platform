@@ -23,7 +23,7 @@ test("each avatar picker option updates every profile portrait and the selected 
     querySelectorAll(selector) {
       if (selector === "[data-profile-avatar]") return slots;
       if (selector === "[data-avatar-sticker]") return stickers;
-      assert.equal(selector, "#avatarOptions [data-avatar]");
+      assert.equal(selector, "#avatarOptions [data-avatar], #ownedAvatarOptions [data-avatar]");
       return picker.children;
     },
   };

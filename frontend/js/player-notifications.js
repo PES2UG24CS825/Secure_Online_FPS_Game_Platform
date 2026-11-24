@@ -158,3 +158,49 @@
     }
   });
 })();
+
+(() => {
+  const timeline = document.getElementById("activityTimeline");
+  const category = document.getElementById("activityCategory");
+  const refresh = document.getElementById("refreshActivity");
+  if (!timeline || !category || !refresh) return;
+
+  async function loadActivity() {
+    timeline.innerHTML = '<div class="empty">Loading activity…</div>';
+    try {
+      const data = await api(`/player/activity?category=${encodeURIComponent(category.value)}`);
+      if (!data.activity?.length) {
+        timeline.innerHTML = '<div class="empty">No account activity is recorded yet.</div>';
+        return;
+      }
+      timeline.replaceChildren(...data.activity.map(item => {
+        const article = document.createElement("article");
+        article.className = "activity-item";
+        article.setAttribute("role", "listitem");
+        const title = document.createElement("strong");
+        title.textContent = item.title;
+        const message = document.createElement("p");
+        message.textContent = item.message;
+        const meta = document.createElement("small");
+        const date = item.created_at ? new Date(item.created_at) : null;
+        meta.textContent = date && Number.isFinite(date.getTime())
+          ? `${item.category} · ${date.toLocaleString()}`
+          : `${item.category} · Date unavailable`;
+        article.append(title, message, meta);
+        return article;
+      }));
+    } catch (error) {
+      timeline.innerHTML = "";
+      const message = document.createElement("div");
+      message.className = "empty";
+      message.textContent = error.message || "Activity could not be loaded.";
+      timeline.append(message);
+    }
+  }
+
+  category.addEventListener("change", loadActivity);
+  refresh.addEventListener("click", loadActivity);
+  document.addEventListener("securefps:view", event => {
+    if (event.detail === "activity") loadActivity();
+  });
+})();
