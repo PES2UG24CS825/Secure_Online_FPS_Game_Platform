@@ -1,0 +1,15 @@
+{
+  "action": {
+    "clicked": true,
+    "count": 3
+  },
+  "dialog": {
+    "open": true,
+    "view": "violations",
+    "profileHidden": true,
+    "violationRows": 3,
+    "loading": false,
+    "withinViewport": true,
+    "tableMaxHeight": "260px"
+  }
+}

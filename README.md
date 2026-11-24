@@ -38,6 +38,18 @@ The Sakura profile shows saved appearance, rewards level, and XP. Overview shows
 
 The Notifications sidebar entry shows the unread count from MongoDB. Notification History supports category filters, unread filtering, pagination, marking notices read or unread, and dismissal. Match, rewards, and announcement preferences are optional. Security and account notices stay enabled. The player console also refreshes stored notices after reconnecting to its existing event stream.
 
+The Player sidebar also includes an Activity History view populated only from recorded match activity, reward activity and security events. It does not use fabricated or locally stored records.
+
+## Role-specific dashboard themes
+
+The authenticated interface uses one shared dashboard component system with three complementary role themes:
+
+- **Player:** Lavender and violet (`#EDE3F7`, `#6D28D9`)
+- **Normal Admin:** Soft blue and indigo (`#E1EAF8`, `#315BA8`)
+- **Super Admin:** Orchid and royal purple (`#F0DFEF`, `#862C91`)
+
+The themes affect only presentation. Backend authorization continues to use Flask role checks and MongoDB-backed administrator identities. Player, Normal Admin and Super Admin sidebars share the same structure, logo, navigation sizing and collapse behavior.
+
 **Authors** · Prajwal K and Sudarshan JN
 
 ## Dashboard artwork and administrator review
@@ -76,45 +88,79 @@ The Super Admin roster shows stored roles, MFA status, active sessions, and the 
 - **Python:** 3.10+ (Recommended: Python 3.12)
 - **Node.js:** 18+ (for multiplayer server)
 - **MongoDB:** Running locally on default port `27017`
+- Run the commands below from the SecureFPS project root in **PowerShell**.
 
 ### 2. Environment Configuration
 Create or verify `backend/.env`:
 ```env
-FLASK_SECRET_KEY=secure-secret-key-replace-in-production
+FLASK_SECRET_KEY=replace-with-a-random-secret-at-least-32-characters-long
 MONGO_URI=mongodb://127.0.0.1:27017/secure_fps
 APP_ENV=development
-PORT=5000
-MULTIPLAYER_PORT=4001
 ```
 
-### 3. Start the Authoritative Multiplayer Server
-In a new terminal:
-```bash
-cd multiplayer-server
-npm install
-node server.js
+### 3. Start SecureFPS
+Open PowerShell in the project root. Activate the virtual environment and start the local Flask app, multiplayer server, and proxy:
+```powershell
+.\.venv\Scripts\Activate.ps1
+.\scripts\start_host.ps1
 ```
-*The authoritative multiplayer server will listen on port `4001`.*
 
-### 4. Start the Flask Application
-In a second terminal:
-```bash
-cd backend
-python -m pip install -r requirements.txt
-python app.py
+When startup succeeds, the terminal prints `SecureFPS is ready at http://127.0.0.1:8080`. Open that address in your browser. The launcher starts Flask on port `5000`, multiplayer on `4001`, and the local proxy on `8080`.
+
+If PowerShell blocks the activation script, allow scripts for the current PowerShell process only, then activate and start:
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+.\.venv\Scripts\Activate.ps1
+.\scripts\start_host.ps1
 ```
-*The Flask application will start on `http://127.0.0.1:5000`.*
+This execution policy change ends when that PowerShell process closes. You can also run `.\.venv\Scripts\Activate.ps1` directly from the activation prompt shown in the terminal example.
 
-### 5. Seed Demo Accounts
-In a third terminal:
-```bash
-python scripts/seed_demo.py
+### 4. Stop SecureFPS
+In the same project directory, run:
+```powershell
+.\scripts\stop_all.ps1
 ```
-- Demo credentials are configured through environment variables and must not be copied into application code or documentation.
+The stop script shuts down only the processes started and recorded by `start_host.ps1`.
 
-### 6. Run Adversarial Cheat Simulator
+The launcher requires ports `5000`, `4001`, and `8080` to be available. If startup reports that a launcher state file already exists, stop the previous launcher run with `.\scripts\stop_all.ps1` before starting again.
+
+---
+
+## 🧪 Academic Cheater Demonstration Mode & Real-Time Anti-Cheat Verification
+
+SecureFPS includes a dedicated, server-governed **Cheater Demonstration Mode** designed for academic evaluation and defense of real-time anti-cheat detection architectures.
+
+### 1. Purpose & Threat Emulation
+The demonstration mode allows evaluators to observe live server-side detection, kinematic auditing, and machine learning risk scoring without installing external cheat software or altering normal player mechanics.
+
+### 2. Account Authorization & Server Controls
+- **Designated Account:** Reuses the existing `cheater_demo` account (`account_type: "demo_test"`, `demo: true`, `is_demo: true`).
+- **Server-Side Enforcement:** Eligibility is strictly validated on the server via authenticated session identity (`/api/game/demo-status`). Client-side parameters or token tampering cannot grant demo privileges.
+- **Fail-Closed Security:** Demo capabilities require `APP_ENV=development` and `SECUREFPS_ENABLE_DEMO=1`. Attempting demo activation in production returns `403 Forbidden`.
+- **Zero Impact on Ordinary Gameplay:** Normal player accounts, multiplayer rankings, rewards, coins, and Honour scores remain completely unaffected. Demo matches award zero progression and are excluded from leaderboards.
+
+### 3. Demonstration Abilities (Isolated Matches Only)
+- **100% Headshots on Registered Hits:** Every bullet that successfully intersects a valid target hitbox registers as a headshot with headshot damage. Missed shots (firing into the sky or unpenetrated walls) are genuinely counted as misses, ensuring accurate accuracy and shot-accounting metrics.
+- **4× Movement Speed:** Emulates speed-hack locomotion by scaling horizontal kinematic velocity to 28.0–46.0 m/s (4× normal walk/sprint). Gravity and wall collision remain active.
+- **Wall Penetration:** Allows weapon raycasts to penetrate solid scene geometry, recording confirmed target hits without line-of-sight.
+- **Strict Multiplayer Isolation:** Demo capabilities are strictly prohibited in multiplayer rooms (`mode: "multiplayer"`). Any attempt to activate demo privileges in multiplayer returns `400 Bad Request`.
+
+### 4. Real-Time Detection Architecture & Separation of Concerns
+- **Active ML Feature Vector (5 Features):** The deployed Random Forest and Isolation Forest models evaluate only the standardized 5-feature contract (`accuracy`, `fire_rate`, `movement_speed`, `aim_smoothness`, `kdr`). Model weights, thresholds, and feature spaces are preserved without unauthorized retraining.
+- **Independent Rule-Based Detections:** Geometric and statistical anomalies are flagged via separate, server-authoritative netcode rules:
+  - **Unusual Headshot Pattern:** Detected when 3 or more consecutive hits achieve a 100% headshot ratio (threshold: $\ge 80\%$, normal human variance $\le 40\%$).
+  - **Excessive Movement Speed:** Detected when kinematic telemetry exceeds the physical sprint ceiling ($> 11.5\text{ m/s}$, observed $\ge 25\text{ m/s}$).
+  - **Shot Through Obstacle:** Detected when raycast hit telemetry registers an impossible hit through solid geometry (`line_of_sight: false`, `through_obstacle: true`).
+  - **Rapid Fire Violation:** Detected when shot intervals drop below the mechanical weapon limit ($< 0.055\text{ s}$).
+
+### 5. Administrator Dashboards & Telemetry Persistence
+- **Normal Admin (L1):** Receives real-time Server-Sent Events (SSE) in the **Anti-Cheat Lab — Isolated Demo Environment** feed and Threat Monitoring tab, displaying affected player, match ID, incident type, severity, observed vs. allowed limits, and telemetry evidence.
+- **Super Admin (L2):** Global Security Command audits demo incidents labeled as `DEMONSTRATION` alongside active ML inference metrics and player inspection modals.
+- **MongoDB Persistence:** Detections are stored in `security_events`, `game_telemetry`, `game_sessions`, and `game_events` with UTC timestamps and `is_demo: true` flags.
+
+### 6. Testing & Verification
 ```bash
-node scripts/cheat_simulator.js --mode all
+python -m unittest backend/tests/test_demo_cheater_system.py
 ```
 
 ---

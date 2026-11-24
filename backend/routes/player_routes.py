@@ -83,9 +83,10 @@ ACHIEVEMENTS = [
 ]
 
 # Keep the stored keys stable for existing profiles and reward ownership.
-DEFAULT_PROFILE_AVATAR = "default-operator"
+DEFAULT_PROFILE_AVATAR = "chibi-male-1"
+DEFAULT_PROFILE_BANNER = "sakura"
+FREE_PROFILE_BANNERS = {"sakura", "frontline", "dawn", "neon"}
 PROFILE_AVATARS = {
-    DEFAULT_PROFILE_AVATAR: {"name": "Tactical Operator"},
     "chibi-male-1": {"name": "Chibi Version 1", "reward_item": "skin_cyber_ninja", "free": True},
     "chibi-male-2": {"name": "Chibi Version 2", "reward_item": "skin_tactical_vanguard", "free": True},
     "chibi-female-1": {"name": "Chibi Version 3", "reward_item": "skin_neon_valkyrie", "free": True},
@@ -395,7 +396,24 @@ def get_profile():
         except Exception:
             pass
 
-    customization = user.get("profile_customization") or {"avatar": DEFAULT_PROFILE_AVATAR, "banner": "default-banner"}
+    customization = user.get("profile_customization") or {"avatar": DEFAULT_PROFILE_AVATAR, "banner": DEFAULT_PROFILE_BANNER}
+    migrated = False
+    if customization.get("avatar") not in PROFILE_AVATARS and customization.get("avatar") not in {"custom"}:
+        customization = {**customization, "avatar": DEFAULT_PROFILE_AVATAR, "avatar_url": None, "avatar_image": None}
+        users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"profile_customization.avatar": DEFAULT_PROFILE_AVATAR,
+                      "profile_customization.avatar_url": None,
+                      "profile_customization.avatar_image": None}},
+        )
+    if customization.get("banner") not in FREE_PROFILE_BANNERS:
+        customization = {**customization, "banner": DEFAULT_PROFILE_BANNER, "banner_url": None, "banner_image": None}
+        users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"profile_customization.banner": DEFAULT_PROFILE_BANNER,
+                      "profile_customization.banner_url": None,
+                      "profile_customization.banner_image": None}},
+        )
     selected_avatar = profile_avatar(customization, include_legacy=True)
     owned = set((user.get("rewards") or {}).get("owned_items") or [])
     avatars = [
@@ -435,7 +453,7 @@ def update_profile_customization():
     avatar_image = data.get("avatar_image") or None
     banner_image = data.get("banner_image") or None
     allowed_avatars = PROFILE_AVATARS.keys() | {"custom"}
-    allowed_banners = {"default-banner", "sakura", "frontline", "dawn", "neon", "battlefield", "command-center", "cyber-metropolis", "orbital-bastion", "nebula-eternity", "custom"}
+    allowed_banners = {"default-banner", "sakura", "frontline", "dawn", "neon", "custom"}
 
     if avatar_image:
         avatar = "custom"
@@ -444,6 +462,10 @@ def update_profile_customization():
 
     user_doc = users.find_one({"_id": ObjectId(user_id)}) or {}
     existing_custom = user_doc.get("profile_customization") or {}
+    owned_items = set((user_doc.get("rewards") or {}).get("owned_items") or [])
+    avatar_entry = PROFILE_AVATARS.get(avatar)
+    if avatar_entry and not avatar_entry.get("free") and avatar_entry.get("reward_item") not in owned_items:
+        return jsonify({"message": "Choose an avatar that you own."}), 403
     if not isinstance(avatar, str) or not isinstance(banner, str) or (
         avatar not in allowed_avatars and avatar != existing_custom.get("avatar")
     ) or (
@@ -514,44 +536,54 @@ def get_player_stats():
     player = users.find_one({"_id": user_oid}) or {}
 
     user_id_candidates = [user_oid, str(user_oid)]
+    player_id_filter = {"$or": [
+        {"user_id": {"$in": user_id_candidates}},
+        {"player_id": {"$in": user_id_candidates}},
+    ]}
     completed_sessions = list(game_sessions.find({
-        "$or": [{"user_id": {"$in": user_id_candidates}}, {"player_id": {"$in": user_id_candidates}}],
-        "status": "completed"
+        "$and": [player_id_filter, {"status": "completed"}]
     }))
-    completed_legacy = list(matches.find({
-        "$or": [{"user_id": {"$in": user_id_candidates}}, {"player_id": {"$in": user_id_candidates}}]
-    }))
-    known_session_ids = {row.get("session_id") for row in completed_sessions if row.get("session_id")}
+    completed_legacy = list(matches.find(player_id_filter))
+    known_session_ids = {
+        row.get("session_id") for row in completed_sessions + completed_legacy
+        if row.get("session_id")
+    }
     completed_legacy = [
         row for row in completed_legacy
-        if not row.get("session_id") or row["session_id"] not in known_session_ids
+        if not row.get("session_id") or row["session_id"] not in {
+            item.get("session_id") for item in completed_sessions
+        }
     ]
-    for row in completed_legacy:
-        if row.get("session_id"):
-            known_session_ids.add(row["session_id"])
-
-    # Include analyzed matches from game_events so completed runs are never lost
-    for evt in game_events.find({"user_id": {"$in": user_id_candidates}, "analysis_type": "game_session"}):
-        sid = evt.get("session_id")
+    completion_events = list(game_telemetry.find({
+        "$and": [player_id_filter, {"event_type": "game_completed"}]
+    }).sort("created_at", -1))
+    analyses_by_session = {
+        row.get("session_id"): row
+        for row in game_events.find({
+            "user_id": {"$in": user_id_candidates},
+            "analysis_type": "game_session",
+        })
+        if row.get("session_id")
+    }
+    for completion_event in completion_events:
+        sid = completion_event.get("session_id")
         if not sid or sid in known_session_ids:
             continue
         known_session_ids.add(sid)
-        raw_f = evt.get("raw_features") or {}
-        cmpl = game_telemetry.find_one({"session_id": sid, "event_type": "game_completed"})
-        cmpl_t = cmpl.get("telemetry") if cmpl else {}
+        telemetry = completion_event.get("telemetry") or {}
+        raw = (analyses_by_session.get(sid) or {}).get("raw_features") or {}
         completed_sessions.append({
-            "session_id": sid,
-            "user_id": user_oid,
-            "status": "completed",
-            "kills": int(cmpl_t.get("kills") or raw_f.get("kills") or 0),
-            "deaths": int(cmpl_t.get("deaths") or raw_f.get("deaths") or 0),
-            "shots": int(cmpl_t.get("shots") or raw_f.get("shots") or 0),
-            "hits": int(cmpl_t.get("hits") or raw_f.get("hits") or 0),
-            "accuracy": float(cmpl_t.get("accuracy") or raw_f.get("accuracy") or 0.0),
-            "kdr": float(cmpl_t.get("kdr") or raw_f.get("kdr") or 0.0),
-            "winner": cmpl_t.get("winner") or raw_f.get("winner"),
-            "created_at": evt.get("created_at"),
-            "started_at": evt.get("created_at")
+            "session_id": sid, "user_id": user_oid, "status": "completed",
+            "kills": telemetry.get("kills", raw.get("kills")),
+            "deaths": telemetry.get("deaths", raw.get("deaths")),
+            "shots_fired": telemetry.get("shots", raw.get("shots")),
+            "shots_hit": telemetry.get("hits", raw.get("hits")),
+            "accuracy": telemetry.get("accuracy", raw.get("accuracy")),
+            "kdr": telemetry.get("kdr", raw.get("kdr")),
+            "headshots": telemetry.get("headshots", raw.get("headshots")),
+            "winner": telemetry.get("winner", raw.get("winner")),
+            "created_at": completion_event.get("created_at"),
+            "started_at": completion_event.get("created_at"),
         })
     session_ids = [
         row.get("session_id") for row in completed_sessions + completed_legacy
@@ -559,7 +591,10 @@ def get_player_stats():
     ]
     telemetry_events = list(game_telemetry.find(
         {
-            "user_id": {"$in": user_id_candidates},
+            "$or": [
+                {"user_id": {"$in": user_id_candidates}},
+                {"player_id": {"$in": user_id_candidates}},
+            ],
             "session_id": {"$in": session_ids},
             "event_type": {"$in": ["enemy_killed", "player_death", "weapon_fire", "enemy_hit", "game_completed"]},
         },
@@ -569,8 +604,8 @@ def get_player_stats():
         completed_sessions + completed_legacy,
         group_telemetry_by_session(telemetry_events),
     )
-    total_kills = totals["kills"] or 0
-    total_deaths = totals["deaths"] or 0
+    total_kills = totals["kills"]
+    total_deaths = totals["deaths"]
     total_shots = totals["shots_fired"]
     total_hits = totals["shots_hit"]
     kdr = totals["kdr"]
@@ -581,8 +616,6 @@ def get_player_stats():
     wins = sum(match.get("result") == "win" for match in verified)
     losses = sum(match.get("result") == "loss" for match in verified)
     draws = sum(match.get("result") == "draw" for match in verified)
-    verified_hits = sum(match.get("shots_hit", 0) for match in verified)
-    verified_headshots = sum(match.get("headshots", 0) for match in verified)
 
     total_seconds = 0
     for s in completed_sessions:
@@ -604,7 +637,7 @@ def get_player_stats():
     xp_progress = xp % REWARDS_XP_PER_LEVEL
 
     latest_analysis = game_events.find_one(
-        {"user_id": user_oid, "analysis_type": "game_session", "status": "success"},
+        {"user_id": {"$in": [user_oid, str(user_oid)]}, "analysis_type": "game_session", "status": "success"},
         sort=[("created_at", -1)]
     ) or {}
     risk_score = latest_analysis.get("risk_score")
@@ -618,8 +651,9 @@ def get_player_stats():
         "verified_matches": len(verified),
         "win_rate": round(100 * wins / len(verified), 1) if verified else None,
         "assists": sum(match.get("assists", 0) for match in verified) if verified else None,
-        "headshots": verified_headshots if verified else None,
-        "headshot_percentage": round(100 * verified_headshots / verified_hits, 1) if verified_hits else None,
+        "headshots": totals["headshots"],
+        "headshots_coverage": totals["headshots_coverage"],
+        "headshot_percentage": totals["headshot_percentage"],
         "kills": total_kills,
         "deaths": total_deaths,
         "kdr": kdr,
@@ -673,50 +707,46 @@ def get_matches():
         {"_id": user_oid},
         {"hacker_profile": 1, "account_type": 1},
     ) or {}
-    session_filter = {"user_id": user_oid, "status": "completed"}
-    total_matches = game_sessions.count_documents(session_filter)
-    player_matches = list(game_sessions.find(session_filter).sort("started_at", -1).limit(20))
-    if not player_matches:
-        # Check string user_id or legacy matches
-        alt_filter = {"$or": [{"user_id": str(user_oid)}, {"player_id": str(user_oid)}], "status": "completed"}
-        player_matches = list(game_sessions.find(alt_filter).sort("started_at", -1).limit(20))
-        if player_matches:
-            total_matches = len(player_matches)
-        else:
-            player_matches = list(matches.find({"user_id": user_oid}).sort("created_at", -1).limit(20))
-            total_matches = len(player_matches)
+    player_ids = [user_oid, str(user_oid)]
+    player_id_filter = {"$or": [
+        {"user_id": {"$in": player_ids}},
+        {"player_id": {"$in": player_ids}},
+    ]}
+    session_filter = {"$and": [player_id_filter, {"status": "completed"}]}
+    player_matches = list(game_sessions.find(session_filter).sort("started_at", -1))
+    legacy_matches = list(matches.find(player_id_filter).sort("created_at", -1))
+    known_ids = {row.get("session_id") for row in player_matches if row.get("session_id")}
+    player_matches.extend(
+        row for row in legacy_matches
+        if not row.get("session_id") or row.get("session_id") not in known_ids
+    )
+    known_ids.update(row.get("session_id") for row in legacy_matches if row.get("session_id"))
+    completion_events = list(game_telemetry.find({
+        "$and": [player_id_filter, {"event_type": "game_completed"}]
+    }).sort("created_at", -1))
+    for event in completion_events:
+        sid = event.get("session_id")
+        if not sid or sid in known_ids:
+            continue
+        known_ids.add(sid)
+        telemetry = event.get("telemetry") or {}
+        player_matches.append({
+            "session_id": sid, "user_id": event.get("user_id"), "status": "completed",
+            "game": event.get("game", "CyberStrike 3D"),
+            "kills": telemetry.get("kills"), "deaths": telemetry.get("deaths"),
+            "shots_fired": telemetry.get("shots"), "shots_hit": telemetry.get("hits"),
+            "accuracy": telemetry.get("accuracy"), "headshots": telemetry.get("headshots"),
+            "kdr": telemetry.get("kdr"), "winner": telemetry.get("winner"),
+            "created_at": event.get("created_at"), "started_at": event.get("created_at"),
+        })
     analyses = {}
-    for item in game_events.find(
-        {"user_id": user_oid, "analysis_type": "game_session"}
-    ).sort("created_at", -1):
-        if item.get("session_id"):
-            analyses.setdefault(item["session_id"], item)
-
-    # Ensure analyzed matches from game_events are also included
-    existing_sids = {str(m.get("session_id")) for m in player_matches if m.get("session_id")}
-    for sid, analysis in analyses.items():
-        if sid and sid not in existing_sids:
-            raw_f = analysis.get("raw_features") or {}
-            cmpl = game_telemetry.find_one({"session_id": sid, "event_type": "game_completed"})
-            cmpl_t = cmpl.get("telemetry") if cmpl else {}
-            player_matches.append({
-                "session_id": sid,
-                "user_id": user_oid,
-                "status": "completed",
-                "game": "CyberStrike 3D",
-                "kills": int(cmpl_t.get("kills") or raw_f.get("kills") or 0),
-                "deaths": int(cmpl_t.get("deaths") or raw_f.get("deaths") or 0),
-                "shots_fired": int(cmpl_t.get("shots") or raw_f.get("shots") or 0),
-                "shots_hit": int(cmpl_t.get("hits") or raw_f.get("hits") or 0),
-                "accuracy": float(cmpl_t.get("accuracy") or raw_f.get("accuracy") or 0.0),
-                "kdr": float(cmpl_t.get("kdr") or raw_f.get("kdr") or 0.0),
-                "headshots": int(round((raw_f.get("headshot_ratio") or 0) * (raw_f.get("shots_hit") or 1))) if raw_f.get("headshot_ratio") else 0,
-                "created_at": analysis.get("created_at"),
-                "started_at": analysis.get("created_at")
-            })
-            existing_sids.add(sid)
+    for item in game_events.find({
+        "user_id": {"$in": player_ids}, "analysis_type": "game_session"
+    }).sort("created_at", -1):
+        sid = item.get("session_id")
+        if sid:
+            analyses.setdefault(sid, item)
     total_matches = len(player_matches)
-
     result_matches = []
     for game_session in player_matches:
         session_id = game_session.get("session_id", "")
@@ -736,9 +766,12 @@ def get_matches():
             duration = max(0, int((ended_at - started_at).total_seconds()))
         telemetry_events = list(game_telemetry.find(
             {
-                "user_id": user_oid,
+                "$or": [
+                    {"user_id": {"$in": player_ids}},
+                    {"player_id": {"$in": player_ids}},
+                ],
                 "session_id": session_id,
-                "event_type": {"$in": ["enemy_killed", "player_death", "weapon_fire", "enemy_hit"]},
+                "event_type": {"$in": ["enemy_killed", "player_death", "weapon_fire", "enemy_hit", "game_completed"]},
             },
             {"event_type": 1},
         )) if session_id else []
@@ -773,9 +806,9 @@ def get_matches():
             "kd": combat["kdr"],
             "honour_awarded": game_session.get("honour_awarded"),
             "accuracy": combat["accuracy"],
-            "headshot_ratio": (
-                game_session["headshots"] / combat["shots_hit"] if combat["shots_hit"] else None
-            ) if game_session.get("stats_source") == "multiplayer_server" else raw.get("headshot_ratio"),
+            "headshots": combat["headshots"],
+            "headshot_ratio": combat["headshots"] / combat["shots_hit"]
+            if combat["headshots"] is not None and combat["shots_hit"] else raw.get("headshot_ratio"),
             "risk_score": clamped_score,
             "risk_category": classification["category"],
             "risk_meaning": classification["meaning"],
@@ -868,27 +901,38 @@ def get_leaderboard():
             if row.get("session_id"):
                 known_session_ids.add(row["session_id"])
 
-        for evt in game_events.find({"user_id": {"$in": user_id_candidates}, "analysis_type": "game_session"}):
-            sid = evt.get("session_id")
+        analysis_by_session = {
+            item.get("session_id"): item
+            for item in game_events.find({
+                "user_id": {"$in": user_id_candidates}, "analysis_type": "game_session"
+            })
+            if item.get("session_id")
+        }
+        for cmpl in game_telemetry.find({
+            "$or": [
+                {"user_id": {"$in": user_id_candidates}},
+                {"player_id": {"$in": user_id_candidates}},
+            ], "event_type": "game_completed"
+        }).sort("created_at", -1):
+            sid = cmpl.get("session_id")
             if not sid or sid in known_session_ids:
                 continue
             known_session_ids.add(sid)
-            raw_f = evt.get("raw_features") or {}
-            cmpl = game_telemetry.find_one({"session_id": sid, "event_type": "game_completed"})
-            cmpl_t = cmpl.get("telemetry") if cmpl else {}
+            raw_f = (analysis_by_session.get(sid) or {}).get("raw_features") or {}
+            cmpl_t = cmpl.get("telemetry") or {}
             completed_sessions.append({
                 "session_id": sid,
                 "user_id": user["_id"],
                 "status": "completed",
-                "kills": int(cmpl_t.get("kills") or raw_f.get("kills") or 0),
-                "deaths": int(cmpl_t.get("deaths") or raw_f.get("deaths") or 0),
-                "shots": int(cmpl_t.get("shots") or raw_f.get("shots") or 0),
-                "hits": int(cmpl_t.get("hits") or raw_f.get("hits") or 0),
-                "accuracy": float(cmpl_t.get("accuracy") or raw_f.get("accuracy") or 0.0),
-                "kdr": float(cmpl_t.get("kdr") or raw_f.get("kdr") or 0.0),
-                "winner": cmpl_t.get("winner") or raw_f.get("winner"),
-                "created_at": evt.get("created_at"),
-                "started_at": evt.get("created_at")
+                "kills": cmpl_t.get("kills", raw_f.get("kills")),
+                "deaths": cmpl_t.get("deaths", raw_f.get("deaths")),
+                "shots": cmpl_t.get("shots", raw_f.get("shots")),
+                "hits": cmpl_t.get("hits", raw_f.get("hits")),
+                "accuracy": cmpl_t.get("accuracy", raw_f.get("accuracy")),
+                "kdr": cmpl_t.get("kdr", raw_f.get("kdr")),
+                "winner": cmpl_t.get("winner", raw_f.get("winner")),
+                "created_at": cmpl.get("created_at"),
+                "started_at": cmpl.get("created_at")
             })
 
         session_ids = [item.get("session_id") for item in completed_sessions if item.get("session_id")]
@@ -898,17 +942,18 @@ def get_leaderboard():
         accuracy_values = []
         for cs in completed_sessions:
             sid = cs.get("session_id")
-            telem_k = game_telemetry.count_documents({"user_id": {"$in": user_id_candidates}, "session_id": sid, "event_type": "enemy_killed"}) if sid else 0
-            telem_d = game_telemetry.count_documents({"user_id": {"$in": user_id_candidates}, "session_id": sid, "event_type": "player_death"}) if sid else 0
+            event_owner = {"$or": [{"user_id": {"$in": user_id_candidates}}, {"player_id": {"$in": user_id_candidates}}]}
+            telem_k = game_telemetry.count_documents({"$and": [event_owner, {"session_id": sid, "event_type": "enemy_killed"}]}) if sid else 0
+            telem_d = game_telemetry.count_documents({"$and": [event_owner, {"session_id": sid, "event_type": "player_death"}]}) if sid else 0
             
-            cmpl_telem = game_telemetry.find_one({"session_id": sid, "event_type": "game_completed"}) if sid else None
+            cmpl_telem = game_telemetry.find_one({"$and": [event_owner, {"session_id": sid, "event_type": "game_completed"}]}) if sid else None
             cmpl_k = int(cmpl_telem.get("telemetry", {}).get("kills") or 0) if cmpl_telem else 0
             cmpl_d = int(cmpl_telem.get("telemetry", {}).get("deaths") or 0) if cmpl_telem else 0
 
             raw_k = 0
             raw_d = 0
             if sid:
-                evt = game_events.find_one({"session_id": sid, "analysis_type": "game_session"}, {"raw_features": 1})
+                evt = game_events.find_one({"user_id": {"$in": user_id_candidates}, "session_id": sid, "analysis_type": "game_session"}, {"raw_features": 1})
                 if evt and evt.get("raw_features"):
                     raw_k = int(evt["raw_features"].get("kills") or 0)
                     raw_d = int(evt["raw_features"].get("deaths") or 0)
@@ -945,8 +990,8 @@ def get_leaderboard():
 
         matches_played = len(completed_sessions) + len(completed_legacy)
         kd = round(total_kills / max(total_deaths, 1), 2)
-        accuracy = round((sum(accuracy_values) / len(accuracy_values)), 1) if accuracy_values else 0.0
-        performance = round((total_kills * 3) + (kd * 10) + (accuracy * 0.25), 1)
+        accuracy = round((sum(accuracy_values) / len(accuracy_values)), 1) if accuracy_values else None
+        performance = round((total_kills * 3) + (kd * 10) + ((accuracy or 0) * 0.25), 1)
         players.append({
             "id": str(user["_id"]),
             "name": user.get("name", "Player"),
@@ -966,7 +1011,7 @@ def get_leaderboard():
         item for item in players
         if item["matches"] > 0 or item["id"] == current_id
     ]
-    players.sort(key=lambda item: (-item["kills"], -item["kd"], -item["accuracy"], item["name"].lower()))
+    players.sort(key=lambda item: (-item["kills"], -item["kd"], -(item["accuracy"] or 0), item["name"].lower()))
     for rank, player in enumerate(players, start=1):
         player["rank"] = rank
 
@@ -1221,6 +1266,8 @@ def equip_reward_item():
             update_set["profile_customization.avatar"] = item["avatar_key"]
             applied_avatar = item["avatar_key"]
         elif item.get("category") == "banner" and item.get("banner_key"):
+            if item["banner_key"] == "battlefield":
+                return jsonify({"message": "The arena banner is no longer available. Choose a Sakura banner."}), 409
             update_set["profile_customization.banner_url"] = None
             update_set["profile_customization.banner"] = item["banner_key"]
             applied_banner = item["banner_key"]
@@ -1346,7 +1393,7 @@ def get_security_summary():
         {"user_id": user_oid, "is_active": True}
     ).sort("last_activity", -1).limit(20))
     latest_analysis = game_events.find_one(
-        {"user_id": user_oid, "analysis_type": "game_session", "status": "success"},
+        {"user_id": {"$in": [user_oid, str(user_oid)]}, "analysis_type": "game_session", "status": "success"},
         sort=[("created_at", -1)],
     ) or {}
     latest_result = latest_analysis.get("result") or {}
@@ -1593,6 +1640,59 @@ def submit_appeal():
 # =========================================================================
 # NOTIFICATION CENTER (Item 14)
 # =========================================================================
+
+@player_bp.get("/activity")
+def get_player_activity():
+    user_id = current_user()
+    if not user_id:
+        return jsonify({"message": "Authentication required."}), 401
+    user_oid = ObjectId(user_id)
+    category = request.args.get("category", "")
+    if category not in ("", "matches", "rewards", "appearance", "security"):
+        return jsonify({"message": "Invalid activity category."}), 400
+
+    entries = []
+
+    if category in ("", "matches"):
+        match_filter = {"$or": [{"user_id": user_oid}, {"user_id": user_id}]}
+        for row in game_sessions.find(match_filter).sort("ended_at", -1).limit(30):
+            timestamp = row.get("ended_at") or row.get("started_at")
+            if not isinstance(timestamp, datetime):
+                continue
+            entries.append({
+                "category": "matches",
+                "title": "Match completed",
+                "message": f"{row.get('game') or 'FPS match'} · {row.get('kills', 0)} kills",
+                "created_at": timestamp.isoformat(),
+            })
+
+    if category in ("", "rewards"):
+        user = users.find_one({"_id": user_oid}, {"rewards.activity": 1}) or {}
+        for row in (user.get("rewards") or {}).get("activity", []):
+            timestamp = row.get("timestamp") or row.get("created_at")
+            if isinstance(timestamp, datetime):
+                entries.append({
+                    "category": "rewards",
+                    "title": row.get("title") or "Reward activity",
+                    "message": row.get("description") or "Reward activity was recorded.",
+                    "created_at": timestamp.isoformat(),
+                })
+
+    if category in ("", "security"):
+        security_filter = {"$or": [{"user_id": user_oid}, {"user_id": user_id}]}
+        for row in security_events.find(security_filter).sort("created_at", -1).limit(30):
+            timestamp = row.get("created_at")
+            if not isinstance(timestamp, datetime):
+                continue
+            entries.append({
+                "category": "security",
+                "title": row.get("type") or row.get("event") or "Security activity",
+                "message": row.get("description") or "A security event was recorded.",
+                "created_at": timestamp.isoformat(),
+            })
+
+    entries.sort(key=lambda item: item["created_at"], reverse=True)
+    return jsonify({"activity": entries[:50]})
 
 @player_bp.get("/notifications")
 def get_notifications():

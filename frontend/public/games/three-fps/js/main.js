@@ -667,6 +667,7 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
       const shotsEl = document.getElementById('hud-stat-shots');
       const hitsEl = document.getElementById('hud-stat-hits');
       const headshotsEl = document.getElementById('hud-stat-headshots');
+      const hsRatioEl = document.getElementById('hud-stat-hs-ratio');
       const accEl = document.getElementById('hud-stat-acc');
       const killsEl = document.getElementById('hud-stat-kills');
       const deathsEl = document.getElementById('hud-stat-deaths');
@@ -678,7 +679,8 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
       const shots = Math.max(gameMode?.shotsFired || 0, weapons?.shotsFired || 0);
       const hits = Math.max(gameMode?.shotsHit || 0, weapons?.shotsHit || 0);
       const headshots = Math.max(gameMode?.headshots || 0, weapons?.headshots || 0);
-      const acc = shots > 0 ? ((hits / shots) * 100).toFixed(1) : (weapons?.demoHighAccuracy ? '100.0' : '0');
+      const acc = shots > 0 ? ((hits / shots) * 100).toFixed(1) : '0';
+      const hsRatio = hits > 0 ? ((headshots / hits) * 100).toFixed(1) : '0';
       const kills = gameMode?.kills || 0;
       const deaths = gameMode?.deaths || 0;
       const kdr = (kills / Math.max(1, deaths)).toFixed(2);
@@ -687,6 +689,7 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
       if (shotsEl) shotsEl.textContent = shots;
       if (hitsEl) hitsEl.textContent = hits;
       if (headshotsEl) headshotsEl.textContent = headshots;
+      if (hsRatioEl) hsRatioEl.textContent = `${hsRatio}%`;
       if (accEl) accEl.textContent = `${acc}%`;
       if (killsEl) killsEl.textContent = kills;
       if (deathsEl) deathsEl.textContent = deaths;

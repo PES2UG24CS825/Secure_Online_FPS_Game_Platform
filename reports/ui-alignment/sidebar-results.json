@@ -1,0 +1,28 @@
+{
+  "normal_admin": {
+    "collapsed": {
+      "collapsed": true,
+      "side": "72px",
+      "wrapper": "1279px",
+      "content": "1279px",
+      "overflow": false
+    },
+    "expandedAfterToggle": {
+      "collapsed": false,
+      "width": "250px"
+    }
+  },
+  "super_admin": {
+    "collapsed": {
+      "collapsed": true,
+      "side": "72px",
+      "wrapper": "1279px",
+      "content": "1279px",
+      "overflow": false
+    },
+    "expandedAfterToggle": {
+      "collapsed": false,
+      "width": "250px"
+    }
+  }
+}

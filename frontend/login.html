@@ -6,13 +6,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>SecureFPS | Login</title>
   <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg?v=2">
-  <link rel="stylesheet" href="css/styles.css?v=20261114_0415">
-  <link rel="stylesheet" href="css/ui-polish.css?v=20261114_0415">
+  <link rel="stylesheet" href="css/styles.css?v=20261124_restore9">
+  <link rel="stylesheet" href="css/ui-polish.css?v=20261124_restore9">
 </head>
 <body class="auth-page login-page">
   <div class="login-layout">
   <header class="auth-logo-lockup login-logo-header">
-    <img class="brand-lockup" src="public/securefps-logo-crop.png?v=1" alt="SecureFPS Gaming Security">
+    <img class="brand-lockup" src="public/securefps-logo-crop.png?v=20261124" alt="SecureFPS Gaming Security">
   </header>
   <main class="auth-shell">
     <section class="auth-brand">
@@ -42,8 +42,8 @@
         <p>Access your secure gaming dashboard.</p>
       </div>
       <form id="loginForm" class="form">
-        <label>Email<input id="email" type="email" autocomplete="email" required placeholder="player@example.com"></label>
-        <label>Password<div class="password-field"><input id="password" type="password" autocomplete="current-password" required placeholder="Enter your password"><button class="password-toggle" type="button" data-password-target="password" aria-label="Show password" title="Show password">&#128065;</button></div></label>
+        <label>Email<input id="email" name="email" type="email" autocomplete="email" required placeholder="player@example.com"></label>
+        <label>Password<div class="password-field"><input id="password" name="password" type="password" autocomplete="current-password" required placeholder="Enter your password"><button class="password-toggle" type="button" data-password-target="password" aria-label="Show password" title="Show password">&#128065;</button></div></label>
         <button class="primary-btn" type="submit">Continue to MFA <span>→</span></button>
       </form>
       <div id="message" class="message" aria-live="polite"></div>

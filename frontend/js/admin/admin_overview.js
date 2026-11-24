@@ -1,4 +1,4 @@
-import { openPlayerMatchesModal } from "./admin_players.js";
+import { openPlayerMatchesModal } from "./admin_players.js?v=20261124_datafix1";
 /**
  * SecureFPS Admin Overview Module
  * Cached statistics (30s), server cluster health monitor, and dev fixture toggling.
@@ -79,22 +79,23 @@ async function loadServerClusterHealth() {
         <div class="health-card">
           <div class="health-header">
             <span class="live-pulse-dot"></span>
-            <strong>Database Cluster</strong>
+            <strong>Database</strong>
           </div>
           <div class="health-body">
             <div style="display:flex; align-items:center; gap:6px;">Status: <span class="live-status-pill ${dbConnected ? 'connected' : 'offline'}">${dbConnected ? 'CONNECTED' : 'DISCONNECTED'}</span></div>
             <small class="muted">Users: ${health.database?.total_users ?? '—'} | Sessions: ${health.database?.total_sessions ?? '—'}</small>
+            <small class="muted">Completed matches: ${health.database?.completed_matches ?? '—'}</small>
           </div>
         </div>
 
         <div class="health-card">
           <div class="health-header">
             <span class="live-pulse-dot"></span>
-            <strong>Multiplayer Engine (Node/Socket.IO)</strong>
+            <strong>Multiplayer Server</strong>
           </div>
           <div class="health-body">
             <div style="display:flex; align-items:center; gap:6px;">Status: <span class="live-status-pill ${mpOnline ? 'online' : 'offline'}">${mpOnline ? 'ONLINE' : 'OFFLINE'}</span></div>
-            <small class="muted">Rooms: ${mp.rooms ?? '—'} | Clients: ${mp.clients ?? '—'} ${mp.latency_ms ? `| ${mp.latency_ms}ms` : ''}</small>
+            <small class="muted">Rooms: ${mp.rooms ?? '—'} | Connected players: ${mp.clients ?? '—'} ${mp.latency_ms != null ? `| ${mp.latency_ms}ms` : ''}</small>
           </div>
         </div>
 

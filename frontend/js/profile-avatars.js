@@ -30,7 +30,7 @@ window.profileAvatars = {
       image.hidden = !src;
       if (src) image.src = src;
     }
-    for (const option of document.querySelectorAll("#avatarOptions [data-avatar]")) {
+    for (const option of document.querySelectorAll("#avatarOptions [data-avatar], #ownedAvatarOptions [data-avatar]")) {
       option.setAttribute("aria-pressed", String(option.dataset.avatar === portrait?.key));
     }
   }

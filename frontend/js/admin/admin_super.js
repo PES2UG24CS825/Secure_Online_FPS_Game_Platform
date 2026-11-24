@@ -656,9 +656,10 @@ export async function loadThreatMonitoring() {
         const id = e.currentTarget.dataset.id;
         const name = e.currentTarget.dataset.name;
         const email = e.currentTarget.dataset.email || '';
-        if (window.openPlayerMatchesModal) {
-          window.openPlayerMatchesModal(id, name, email, e.currentTarget.dataset.view === 'violations' ? 'violations' : 'player');
-        }
+        const view = e.currentTarget.dataset.view === 'violations' ? 'violations' : 'player';
+        window.dispatchEvent(new CustomEvent('securefps:open-player-inspection', {
+          detail: { id, name, email, view }
+        }));
       });
     });
 

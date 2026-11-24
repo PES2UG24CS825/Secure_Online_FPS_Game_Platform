@@ -1014,7 +1014,7 @@ class WeaponManager {
     let hitDist = targetCandidate ? targetCandidate.distance : 10.0;
 
     // Cheater Demonstration Overrides (Phases 3 & 7)
-    // When cheater demo player fires, automatically lock onto bot's head (Headshot Aimbot & Impossible Hit)
+    // When cheater demo player fires: 100% headshot on registered hits and optional wall penetration
     const isCheaterDemo = Boolean(
       this.demoHighAccuracy ||
       this.demoImpossibleHit ||
@@ -1029,8 +1029,31 @@ class WeaponManager {
 
     const effectiveBotManager = botManager || this.botManager || window.SecureFPSGame?.botManager;
     let bestBot = null;
+    const canWallPenetrate = Boolean(isCheaterDemo && this.demoImpossibleHit);
 
-    if (isCheaterDemo && effectiveBotManager?.bots) {
+    if (targetCandidate) {
+      if (blocker) {
+        if (canWallPenetrate) {
+          // Wall Penetration active: shot penetrates solid obstacle to hit the target
+          targetHit = targetCandidate;
+          hitThroughObstacle = true;
+          isImpossibleHit = true;
+          hitDist = targetCandidate.distance;
+        } else {
+          // Wall blocks bullet normally
+          targetHit = blocker;
+          hitThroughObstacle = false;
+          isImpossibleHit = false;
+        }
+      } else {
+        // Direct line of sight hit on target
+        targetHit = targetCandidate;
+        hitThroughObstacle = false;
+        isImpossibleHit = false;
+        hitDist = targetCandidate.distance;
+      }
+    } else if (isCheaterDemo && this.demoHighAccuracy && effectiveBotManager?.bots) {
+      // High Accuracy Aim Assist: locks only if bot is in front within forward aim cone (~35 degrees)
       let bestScore = -Infinity;
 
       for (const bot of effectiveBotManager.bots) {
@@ -1043,11 +1066,13 @@ class WeaponManager {
         const dir = toBot.normalize();
         const dot = camDir.dot(dir);
 
-        // Score: prioritize bots in front of player, then closest distance
-        const score = dot * 100.0 - dist * 0.15;
-        if (score > bestScore) {
-          bestScore = score;
-          bestBot = bot;
+        // Target must be in front within forward cone
+        if (dot >= 0.82) {
+          const score = dot * 100.0 - dist * 0.15;
+          if (score > bestScore) {
+            bestScore = score;
+            bestBot = bot;
+          }
         }
       }
 
@@ -1060,7 +1085,7 @@ class WeaponManager {
         targetHit = {
           object: headTarget,
           point: headPos,
-          distance: this.demoImpossibleHit ? Math.max(105.0, dist) : dist,
+          distance: canWallPenetrate ? Math.max(105.0, dist) : dist,
           face: { normal: new THREE.Vector3(0, 0, 1) }
         };
         if (targetHit.object) {
@@ -1071,9 +1096,10 @@ class WeaponManager {
         }
         hitDist = targetHit.distance;
 
-        // Wall penetration & impossible distance flag
-        hitThroughObstacle = true;
-        isImpossibleHit = true;
+        if (canWallPenetrate) {
+          hitThroughObstacle = true;
+          isImpossibleHit = true;
+        }
       }
     }
     let hitPoint = new THREE.Vector3();

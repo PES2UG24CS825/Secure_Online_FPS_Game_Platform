@@ -473,7 +473,7 @@ body.dashboard-page :is(.dashboard-main, .admin-main-wrapper) {
   color: var(--primary-text);
 }
 
-body.dashboard-page :is(.panel, .profile-card, .stat-card, .dashboard-panel,
+body.dashboard-page :is(.panel, .profile-card, .dashboard-panel,
   .game-card, .overview-glance, .overview-risk-card, .leaderboard-card) {
   background: rgb(255 255 255 / 78%);
   border: 1px solid rgb(221 211 237 / 32%);
@@ -482,13 +482,12 @@ body.dashboard-page :is(.panel, .profile-card, .stat-card, .dashboard-panel,
 
 /* Camouflaged dashboard surfaces remain readable but do not form bright
    white edge outlines around every section. */
-body.dashboard-page :is(.topbar, .section-title, .admin-section-heading,
-  .command-center-header, .admin-header-card) {
-  background: rgb(247 243 252 / 72%);
-  border: 1px solid rgb(221 211 237 / 28%);
-  box-shadow: 0 6px 20px rgb(45 28 92 / 5%);
-  backdrop-filter: blur(5px);
-}
+body.dashboard-page :is(.topbar, .section-title) { background:transparent; border:0; box-shadow:none; color:var(--role-text); }
+body.dashboard-page .admin-header-card { background:var(--role-inner); border:1px solid var(--role-border); box-shadow:none; color:var(--role-text); }
+body.dashboard-page :is(.admin-section-heading, .command-center-header) { background:var(--role-accent); border:1px solid var(--role-accent); border-radius:12px; padding:12px 16px; margin:0 0 14px; box-shadow:none; color:#fff; }
+body.dashboard-page .admin-section-heading :is(h2,p), body.dashboard-page .command-center-header :is(h2,p,.command-center-title,.command-center-subtitle) { color:#fff !important; }
+body.dashboard-page .admin-section-heading h2, body.dashboard-page .command-center-title { font-size:18px; line-height:1.25; margin:0; }
+body.dashboard-page .admin-section-heading p, body.dashboard-page .command-center-subtitle { font-size:12px; line-height:1.45; margin:4px 0 0; color:#F7F2FF !important; }
 
 body.dashboard-page :is(.admin-table-wrap, table) {
   background: rgb(255 255 255 / 52%);
@@ -569,8 +568,8 @@ body.admin-page .command-center-header :is(h1,h2,h3,p,small,span) {
 
 /* Final readability pass: remove camouflage from important dashboard data,
    while keeping the Sakura artwork visible at the shell and sidebar edges. */
-body.player-page :is(.topbar, .section-title, .overview-glance,
-  .overview-risk-card, .stat-card, .dashboard-panel, .profile-card) {
+body.player-page :is(.topbar, .overview-risk-card, .stat-card,
+  .dashboard-panel, .profile-card) {
   background: rgb(255 255 255 / 94%) !important;
   border: 1px solid var(--subtle-border) !important;
   box-shadow: 0 8px 24px rgb(45 28 92 / 8%);
@@ -578,15 +577,13 @@ body.player-page :is(.topbar, .section-title, .overview-glance,
   color: var(--primary-text);
 }
 
-body.player-page :is(.topbar h1, .topbar h2, .section-title h1,
-  .section-title h2, .stat-card strong, .overview-risk-card h2,
-  .dashboard-panel h2, .profile-card h3) {
+body.player-page :is(.topbar h1, .topbar h2, .stat-card strong,
+  .overview-risk-card h2, .dashboard-panel h2) {
   color: var(--primary-text) !important;
   text-shadow: none;
 }
 
-body.player-page :is(.stat-card span, .stat-card small,
-  .overview-glance small, .overview-risk-card p,
+body.player-page :is(.stat-card span, .stat-card small, .overview-risk-card p,
   .dashboard-panel-caption, .page-description) {
   color: var(--secondary-text) !important;
   opacity: 1;
@@ -647,35 +644,455 @@ body.admin-page #admin-threats .panel {
   border: 1px solid var(--subtle-border) !important;
 }
 
+/* Role-specific theme tokens for the shared dashboard component system. */
+body.player-page {
+  --role-main: #EDE3F7;
+  --role-inner: #F5EEFC;
+  --role-sidebar: #E2D3F2;
+  --role-table: #E5D7F3;
+  --role-input: #F8F3FC;
+  --role-border: #C9B3E4;
+  --role-text: #241638;
+  --role-secondary: #49385F;
+  --role-muted: #655574;
+  --role-accent: #6D28D9;
+  --role-hover: #DCC8F1;
+}
+
+body.admin-page[data-admin-role="normal"],
+body.admin-page:not([data-admin-role]) {
+  --role-main: #E1EAF8;
+  --role-inner: #F0F5FC;
+  --role-sidebar: #D8E2F3;
+  --role-table: #D3E0F4;
+  --role-input: #F5F8FD;
+  --role-border: #AFC3E2;
+  --role-text: #172B4D;
+  --role-secondary: #354B70;
+  --role-muted: #354B70;
+  --role-accent: #315BA8;
+  --role-hover: #CBDCF3;
+}
+
+body.admin-page[data-admin-role="super"] {
+  --role-main: #F0DFEF;
+  --role-inner: #FAF0F8;
+  --role-sidebar: #E8D3EB;
+  --role-table: #E8D1EB;
+  --role-input: #FCF5FB;
+  --role-border: #D4AFD5;
+  --role-text: #381A40;
+  --role-secondary: #593461;
+  --role-muted: #593461;
+  --role-accent: #862C91;
+  --role-hover: #E4C5E8;
+}
+
+body.dashboard-page :is(.panel, .profile-card, .stat-card, .dashboard-panel,
+  .game-card, .overview-glance, .overview-risk-card, .leaderboard-card,
+  .admin-table-panel, .demo-account-card, .demo-session-card,
+  .gameplay-alert-card, .admin-support-ticket) {
+  background: var(--role-main) !important;
+  border: 1px solid var(--role-border) !important;
+  box-shadow: none !important;
+  color: var(--role-text) !important;
+}
+
+body.dashboard-page :is(.inner-card, .demo-telemetry-summary, .anticheat-meta-card,
+  .feature-bar-list, .admin-support-reply, .demo-session-card, .demo-account-card) {
+  background: var(--role-inner) !important;
+  border-color: var(--role-border) !important;
+  color: var(--role-text) !important;
+}
+
+body.dashboard-page :is(.topbar, .admin-header-card) {
+  background: var(--role-main) !important;
+  border: 1px solid var(--role-border) !important;
+  box-shadow: none !important;
+  backdrop-filter: none;
+  color: var(--role-text) !important;
+}
+
+body.dashboard-page :is(.sidebar, .admin-sidebar) {
+  background: var(--role-sidebar) !important;
+  border-right: 1px solid var(--role-border) !important;
+  backdrop-filter: blur(6px);
+}
+
+body.dashboard-page :is(.sidebar nav a.active, .admin-nav-btn.active) {
+  background: var(--role-accent) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+
+body.dashboard-page :is(.sidebar nav a:hover:not(.active), .admin-nav-btn:hover:not(.active)) {
+  background: var(--role-hover) !important;
+  color: var(--role-text) !important;
+}
+
+body.dashboard-page :is(.sidebar nav a.active, .admin-nav-btn.active) :is(.nav-icon, .admin-nav-icon, svg) {
+  color: #fff !important;
+  stroke: #fff !important;
+}
+
+body.dashboard-page :is(input, select, textarea):not([type="range"]) {
+  background: var(--role-input) !important;
+  color: var(--role-text) !important;
+  border: 1px solid var(--role-border) !important;
+}
+
+body.dashboard-page :is(dialog,.modal-content,.admin-action-modal,.review-note-dialog) { background:var(--role-main); color:var(--role-text); border-color:var(--role-border); }
+body.dashboard-page :is(label,.muted,.empty,small) { color:var(--role-secondary); }
+body.dashboard-page th {
+  background: var(--role-table) !important;
+  color: var(--role-text) !important;
+  border-color: var(--role-border) !important;
+}
+
+body.dashboard-page td {
+  color: var(--role-text) !important;
+  border-color: var(--role-border) !important;
+}
+
+body.dashboard-page :is(.primary-btn, .play-btn) {
+  background: var(--role-accent) !important;
+  color: #fff !important;
+  border: 0;
+}
+
+body.player-page .sidebar,
+body.admin-page[data-admin-role="normal"] .admin-sidebar,
+body.admin-page:not([data-admin-role]) .admin-sidebar,
+body.admin-page[data-admin-role="super"] .admin-sidebar {
+  background-image: none !important;
+  backdrop-filter: blur(6px);
+}
+body.player-page .sidebar { background-color: #E2D3F2 !important; }
+body.admin-page[data-admin-role="normal"] .admin-sidebar,
+body.admin-page:not([data-admin-role]) .admin-sidebar { background-color: #D8E2F3 !important; }
+body.admin-page[data-admin-role="super"] .admin-sidebar { background-color: #E8D3EB !important; }
+body.player-page .sidebar nav a.active { background-color: #6D28D9 !important; }
+body.admin-page[data-admin-role="normal"] .admin-nav-btn.active,
+body.admin-page:not([data-admin-role]) .admin-nav-btn.active { background-color: #315BA8 !important; }
+body.admin-page[data-admin-role="super"] .admin-nav-btn.active { background-color: #862C91 !important; }
+
+/* Shared sidebar geometry and icon rendering */
+body.dashboard-page :is(.sidebar, .admin-sidebar) {
+  width: 250px;
+  min-width: 250px;
+  transition: width .18s ease, min-width .18s ease;
+  overflow-x: hidden;
+}
+body.dashboard-page :is(.sidebar, .admin-sidebar) .brand {
+  position: relative;
+  min-height: 58px;
+  z-index: 3;
+}
+body.dashboard-page .sidebar-collapse-btn {
+  position: static;
+  transform: none;
+  z-index: auto;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--role-border);
+  border-radius: 8px;
+  background: var(--role-inner);
+  color: var(--role-text);
+  cursor: pointer;
+  pointer-events: auto;
+}
+body.dashboard-page :is(.sidebar nav a, .admin-nav-btn) {
+  min-height: 40px;
+  gap: 10px;
+  color: var(--role-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+body.dashboard-page :is(.sidebar nav a, .admin-nav-btn) :is(.nav-icon, .admin-nav-icon) {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  color: inherit;
+  fill: none;
+  stroke: currentColor;
+}
+body.dashboard-page :is(.sidebar nav a, .admin-nav-btn) svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  vector-effect: non-scaling-stroke;
+}
+body.dashboard-page :is(.sidebar nav a.active, .admin-nav-btn.active),
+body.dashboard-page :is(.sidebar nav a.active, .admin-nav-btn.active) :is(svg, .nav-icon, .admin-nav-icon) {
+  color: #fff !important;
+  fill: none !important;
+  stroke: #fff !important;
+}
+body.sidebar-collapsed :is(.sidebar, .admin-sidebar) {
+  width: 72px;
+  min-width: 72px;
+}
+body.sidebar-collapsed.player-page .dashboard-main {
+  margin-left: 72px;
+  width: calc(100% - 72px);
+}
+body.sidebar-collapsed :is(.sidebar, .admin-sidebar) .brand {
+  justify-content: center;
+  padding-inline: 4px;
+}
+body.sidebar-collapsed :is(.sidebar, .admin-sidebar) .sidebar-logo-lockup {
+  width: 42px;
+  height: 42px;
+  max-width: 42px;
+  flex-basis: 42px;
+  object-fit: contain;
+  object-position: center;
+}
+body.sidebar-collapsed :is(.sidebar, .admin-sidebar) .brand small,
+body.sidebar-collapsed :is(.sidebar, .admin-sidebar) .brand .sidebar-brand-text,
+body.sidebar-collapsed :is(.sidebar, .admin-sidebar) .nav-label,
+body.sidebar-collapsed :is(.sidebar, .admin-sidebar) .mini-profile > div:not(.avatar),
+body.sidebar-collapsed :is(.sidebar, .admin-sidebar) #logoutBtn {
+  display: none;
+}
+body.sidebar-collapsed :is(.sidebar, .admin-sidebar) :is(.sidebar nav a, .admin-nav-btn) {
+  justify-content: center;
+  padding-inline: 0;
+}
+body.sidebar-collapsed :is(.sidebar, .admin-sidebar) .sidebar-collapse-btn {
+  margin-inline: auto;
+  transform: none;
+}
+
+/* Unified Profile identity and appearance card */
+body.player-page #profile .profile-layout {
+  max-width: 1180px;
+  margin: 0 auto;
+  gap: 10px;
+}
+body.player-page #profile .profile-preview {
+  position: relative;
+  overflow: hidden;
+  padding: 0 14px 12px;
+  background: var(--role-main) !important;
+  border: 1px solid var(--role-border) !important;
+}
+body.player-page #profile .profile-banner {
+  height: clamp(160px, 18vw, 190px);
+  width: calc(100% + 28px);
+  margin: 0 -14px;
+  background-size: cover;
+  background-position: center 48%;
+}
+body.player-page #profile .profile-identity {
+  position: relative;
+  min-height: 112px;
+  margin: -28px 0 0;
+  display: grid;
+  grid-template-columns: 82px minmax(220px, 1fr) minmax(220px, .65fr);
+  align-items: center;
+  gap: 12px;
+  padding: 0 4px;
+  z-index: 2;
+  overflow: visible;
+}
+body.player-page #profile .profile-avatar {
+  width: 82px;
+  height: 82px;
+  margin: 0;
+  border: 4px solid var(--role-inner);
+  border-radius: 18px;
+  background-color: var(--role-inner);
+  background-size: cover;
+  background-position: center;
+}
+body.player-page #profile .profile-identity-details {
+  min-width: 0;
+  padding-top: 22px;
+}
+body.player-page #profile .profile-identity-details h3 {
+  margin: 0;
+  color: #fff !important;
+  background: transparent !important;
+  font-size: 20px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+body.player-page #profile .profile-progression {
+  max-width: none;
+  padding-top: 22px;
+}
+body.player-page #profile #profileXpRemaining {
+  color: var(--role-muted);
+}
+
+body.player-page #profile .profile-appearance {
+  background: var(--role-main) !important;
+  border: 1px solid var(--role-border) !important;
+}
+body.player-page #profile .profile-appearance .appearance-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Activity History and notifications */
+.activity-timeline {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.activity-item {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--role-border);
+  border-left: 3px solid var(--role-accent);
+  border-radius: 10px;
+  background: var(--role-inner);
+  color: var(--role-text);
+}
+.activity-item p { margin: 0; color: var(--role-secondary); }
+.activity-item small { color: var(--role-muted); }
+
+.combat-career-card {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--role-border);
+  border-radius: 14px;
+  background: var(--role-main);
+}
+.combat-career-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.combat-career-grid article {
+  min-height: 72px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid var(--role-border);
+  border-radius: 10px;
+  background: var(--role-inner);
+}
+.combat-career-grid article span {
+  color: var(--role-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+.combat-career-grid article strong {
+  color: var(--role-text);
+  font-size: 20px;
+}
+@media (max-width: 900px) {
+  .combat-career-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Final Profile and sidebar geometry for restored component markup */
+body.dashboard-page :is(.sidebar, .admin-sidebar) .brand {
+  min-height: 58px;
+  padding: 6px 44px 6px 8px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: visible;
+}
+body.dashboard-page :is(.sidebar, .admin-sidebar) .sidebar-logo-lockup {
+  width: 178px;
+  max-width: 178px;
+  height: 48px;
+  flex-basis: 178px;
+  margin: 0;
+  object-fit: contain;
+  object-position: left center;
+}
+body.sidebar-collapsed :is(.sidebar, .admin-sidebar) .brand {
+  padding: 6px 4px;
+  justify-content: center;
+}
+body.sidebar-collapsed :is(.sidebar, .admin-sidebar) .sidebar-logo-lockup {
+  width: 42px;
+  max-width: 42px;
+  height: 42px;
+  flex-basis: 42px;
+  object-position: center;
+}
+
+body.player-page #profile .profile-preview {
+  padding: 0 14px 12px;
+}
+body.player-page #profile .profile-banner {
+  width: calc(100% + 28px);
+  height: clamp(160px, 18vw, 190px);
+  margin: 0 -14px;
+}
+body.player-page #profile .profile-identity {
+  min-height: 118px;
+  margin: 0;
+  padding: 18px 4px 0;
+  display: grid;
+  grid-template-columns: 98px minmax(220px, 1fr) minmax(220px, .72fr);
+  align-items: center;
+  gap: 10px 14px;
+  position: relative;
+  z-index: 2;
+}
+body.player-page #profile .profile-avatar {
+  width: 88px;
+  height: 88px;
+  margin: -58px 0 0;
+  border: 4px solid var(--role-inner);
+  border-radius: 18px;
+  background-size: cover;
+  background-position: center;
+  align-self: center;
+  grid-row: 1;
+}
+body.player-page #profile .profile-identity-details {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  padding: 0;
+}
+body.player-page #profile .profile-progression {
+  grid-column: 3;
+  grid-row: 1;
+  width: 100%;
+  max-width: none;
+  padding: 0;
+}
+
 /* Final unified lavender UI. Important labels are bold and surfaces use
    subtle lavender/white instead of large contrasting fills. */
 body.dashboard-page {
   font-weight: 650;
 }
 
-body.dashboard-page :is(.leaderboard-hero, .overview-glance,
-  .command-center-header, .admin-tier-banner) {
-  background: rgb(247 243 252 / 96%) !important;
-  background-image: none !important;
-  color: var(--primary-text) !important;
-  border: 1px solid var(--subtle-border) !important;
-  box-shadow: 0 8px 24px rgb(45 28 92 / 8%) !important;
-  backdrop-filter: blur(4px);
+body.player-page :is(.leaderboard-hero, .overview-glance) {
+  background: linear-gradient(115deg, #5B21B6 0%, #6D28D9 58%, #7C3AED 100%) !important;
+  border: 1px solid var(--role-accent) !important;
+  color: #fff !important;
+  box-shadow: none !important;
 }
 
-body.dashboard-page :is(.leaderboard-hero strong,
-  .leaderboard-hero span, .overview-glance strong,
-  .overview-glance small, .command-center-title,
-  .command-center-subtitle) {
-  color: var(--primary-text) !important;
+body.player-page .overview-glance :is(strong,span,small,p,.overview-glance-action),
+body.player-page .leaderboard-hero :is(strong,span,small,p) {
+  color: #fff !important;
   text-shadow: none !important;
   font-weight: 650;
 }
 
-body.dashboard-page :is(h1,h2,h3,h4,strong,th,td,label,
-  .nav-label,.admin-nav-btn) {
+body.dashboard-page :is(h1,h2,h3,h4,strong,th,td,label) {
   font-weight: 650;
-  color: var(--primary-text) !important;
 }
 
 body.dashboard-page :is(.nav-label,.admin-nav-btn) {
@@ -684,8 +1101,7 @@ body.dashboard-page :is(.nav-label,.admin-nav-btn) {
 }
 
 body.dashboard-page :is(.panel, .profile-card, .stat-card,
-  .dashboard-panel, .overview-glance, .overview-risk-card,
-  .leaderboard-card, .leaderboard-hero) {
+  .dashboard-panel, .overview-risk-card, .leaderboard-card) {
   background: rgb(255 255 255 / 94%) !important;
   border: 1px solid rgb(221 211 237 / 70%) !important;
   box-shadow: 0 6px 18px rgb(45 28 92 / 7%) !important;
@@ -748,10 +1164,12 @@ body.dashboard-page .sidebar-logo {
 }
 
 body.dashboard-page .sidebar-logo-lockup {
-  width: 178px;
-  height: 48px;
-  flex-basis: 178px;
-  object-fit: contain;
+  width:178px;
+  max-width:calc(100% - 42px);
+  min-width:0;
+  height:48px;
+  flex:1 1 178px;
+  object-fit:contain;
   object-position: left center;
   filter: drop-shadow(0 3px 6px rgb(76 29 149 / 14%));
 }
@@ -806,10 +1224,6 @@ body.admin-page #playerMatchesModal[data-view="violations"] .modal-violations-se
   border-color: var(--subtle-border);
   border-radius: 10px;
   background: var(--lavender-surface);
-}
-
-body.dashboard-page :is(h1, h2, h3, h4, strong, td, label) {
-  color: var(--primary-text);
 }
 
 body.dashboard-page :is(p, small, .muted, .page-description,
@@ -930,7 +1344,7 @@ body.dashboard-page :is(.primary-btn, .play-btn):hover {
 
 .player-page .profile-layout .profile-banner {
   position: relative;
-  height: clamp(150px, 12vw, 190px);
+  height: clamp(160px, 14vw, 190px);
   border: 1px solid var(--subtle-border);
   background-position: center 48%;
   background-size: cover;
@@ -941,11 +1355,13 @@ body.dashboard-page :is(.primary-btn, .play-btn):hover {
 .player-page .profile-layout .profile-banner::after {
   content: "";
   position: absolute;
-  inset: 62% 0 0;
+  inset: 0;
   z-index: -1;
-  background: linear-gradient(180deg, transparent, rgb(33 26 64 / 12%));
+  background: linear-gradient(90deg, rgb(22 12 34 / 84%) 0%, rgb(22 12 34 / 52%) 50%, transparent 78%);
   pointer-events: none;
 }
+
+.player-page .profile-banner-identity { position: relative; z-index: 1; }
 
 .player-page .profile-layout .profile-identity {
   grid-template-columns: 82px minmax(200px, 1fr) minmax(210px, .7fr);
@@ -1163,4 +1579,122 @@ body.dashboard-page :is(.primary-btn, .play-btn):hover {
   .player-page .profile-layout .profile-banner {
     height: 180px;
   }
+}
+
+/* Shared dashboard surfaces and role palette. */
+body.player-page {
+  --role-main:#EDE3F7; --role-inner:#F5EEFC; --role-sidebar:#E2D3F2;
+  --role-table:#E5D7F3; --role-input:#F8F3FC; --role-border:#C9B3E4;
+  --role-text:#241638; --role-secondary:#49385F; --role-muted:#655574;
+  --role-accent:#6D28D9; --role-hover:#DCC8F1;
+}
+body.admin-page[data-admin-role="normal"], body.admin-page:not([data-admin-role]) {
+  --role-main:#E1EAF8; --role-inner:#F0F5FC; --role-sidebar:#D8E2F3;
+  --role-table:#D3E0F4; --role-input:#F5F8FD; --role-border:#AFC3E2;
+  --role-text:#172B4D; --role-secondary:#354B70; --role-muted:#354B70;
+  --role-accent:#315BA8; --role-hover:#CBDCF3;
+}
+body.admin-page[data-admin-role="super"] {
+  --role-main:#F0DFEF; --role-inner:#FAF0F8; --role-sidebar:#E8D3EB;
+  --role-table:#E8D1EB; --role-input:#FCF5FB; --role-border:#D4AFD5;
+  --role-text:#381A40; --role-secondary:#593461; --role-muted:#593461;
+  --role-accent:#862C91; --role-hover:#E4C5E8;
+}
+body.dashboard-page { color:var(--role-text); min-width:0; overflow-x:hidden; }
+body.dashboard-page :is(.panel,.profile-card,.dashboard-panel,.game-card,
+  .overview-risk-card,.overview-breakdown,.overview-leaderboard,.leaderboard-card,
+  .admin-table-panel,.demo-account-card,.demo-session-card,
+  .gameplay-alert-card,.admin-support-ticket,.admin-subpanel,.modal-stat-box) {
+  background:var(--role-main) !important; border:1px solid var(--role-border) !important;
+  color:var(--role-text) !important; box-shadow:none !important;
+}
+body.dashboard-page :is(.stat-card,.admin-header-card,.simulator-box,.admin-modal-input) {
+  background:var(--role-inner) !important; border:1px solid var(--role-border) !important;
+  color:var(--role-text) !important;
+}
+body.dashboard-page :is(.topbar,.section-title) {
+  background:transparent; border:0; box-shadow:none; color:var(--role-text);
+}
+body.dashboard-page .topbar > div:first-child {
+  background:var(--role-accent); border-radius:11px; padding:10px 14px;
+}
+body.dashboard-page .topbar > div:first-child :is(h1,.eyebrow,.muted) { color:#fff !important; }
+body.dashboard-page .topbar > div:first-child .muted { color:#F7F2FF !important; }
+body.dashboard-page .section-title {
+  background:var(--role-accent); border:1px solid var(--role-accent);
+  border-radius:9px; padding:8px 10px; color:#fff;
+}
+body.dashboard-page .section-title :is(h1,h2,p,.eyebrow,.muted) { color:#fff !important; }
+body.dashboard-page .section-title .muted { color:#F7F2FF !important; }
+body.dashboard-page .admin-section-heading,
+body.dashboard-page .command-center-header {
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  background:var(--role-accent); border:1px solid var(--role-accent);
+  border-radius:11px; padding:11px 14px; margin:0 0 14px;
+  box-shadow:none; color:#fff;
+}
+body.dashboard-page .admin-section-heading :is(h2,p),
+body.dashboard-page .command-center-header :is(h2,p,.command-center-title,.command-center-subtitle) {
+  color:#fff !important;
+}
+body.dashboard-page .admin-section-heading h2,
+body.dashboard-page .command-center-title { font-size:18px; line-height:1.25; margin:0; }
+body.dashboard-page .admin-section-heading p,
+body.dashboard-page .command-center-subtitle {
+  font-size:12px; line-height:1.45; margin:4px 0 0; color:#F7F2FF !important;
+}
+body.dashboard-page :is(dialog,.modal-content,.admin-action-modal,.review-note-dialog) {
+  background:var(--role-main); color:var(--role-text); border-color:var(--role-border);
+}
+body.dashboard-page :is(.sidebar,.admin-sidebar) {
+  background:
+    linear-gradient(color-mix(in srgb,var(--role-sidebar) 84%,transparent),
+                    color-mix(in srgb,var(--role-sidebar) 84%,transparent)),
+    url("../public/backgrounds/SecureFPS_Sakura_Anime_Background.png") center / cover fixed !important;
+  border-right:1px solid var(--role-border) !important; backdrop-filter:blur(6px);
+}
+body.dashboard-page :is(.sidebar nav a,.admin-nav-btn) { color:var(--role-text); opacity:1; }
+body.dashboard-page :is(.sidebar nav a.active,.admin-nav-btn.active) {
+  background:var(--role-accent) !important; color:#fff !important;
+  border-color:transparent !important; box-shadow:none !important;
+}
+body.dashboard-page :is(.sidebar nav a.active,.admin-nav-btn.active) :is(svg,.nav-icon,.admin-nav-icon) {
+  color:#fff !important; stroke:#fff !important;
+}
+body.dashboard-page :is(.sidebar nav a:hover:not(.active),.admin-nav-btn:hover:not(.active)) {
+  background:var(--role-hover) !important; color:var(--role-text) !important;
+}
+body.dashboard-page :is(input,select,textarea):not([type="range"]) {
+  background:var(--role-input) !important; color:var(--role-text) !important;
+  border:1px solid var(--role-border) !important;
+}
+body.dashboard-page :is(.admin-table-wrap,table) {
+  background:var(--role-inner); border-color:var(--role-border);
+}
+body.dashboard-page th { background:var(--role-table) !important; color:var(--role-text) !important; border-color:var(--role-border) !important; }
+body.dashboard-page td { color:var(--role-text) !important; border-color:var(--role-border) !important; }
+body.dashboard-page :is(label,.muted,.empty,small) { color:var(--role-secondary); }
+body.dashboard-page :is(.primary-btn,.play-btn) { background:var(--role-accent) !important; color:#fff !important; border:0; }
+body.player-page .overview-glance {
+  background:var(--role-accent) !important; border-color:var(--role-accent) !important; color:#fff !important;
+}
+body.player-page .overview-glance :is(strong,small,button) { color:#fff; }
+.admin-page .admin-nav-btn.active .admin-nav-icon { color:#fff !important; background:transparent; }
+.admin-page .admin-nav-btn.active .admin-nav-icon svg { stroke:#fff; }
+.admin-page .admin-tier-badge.level-2 { background:#FCE7A8; color:#714500; border:1px solid #C69A36; }
+.admin-page .admin-sidebar .brand { justify-content:space-between; }
+body.sidebar-collapsed.admin-page .admin-sidebar .brand { justify-content:center; padding-inline:0; }
+body.sidebar-collapsed.admin-page .admin-sidebar .sidebar-logo-lockup { display:none; }
+body.sidebar-collapsed.admin-page .admin-sidebar .admin-nav-btn { justify-content:center; gap:0; padding-inline:0; font-size:0; }
+body.sidebar-collapsed.admin-page .admin-sidebar .admin-nav-btn .admin-nav-icon { flex-basis:24px; }
+body.sidebar-collapsed.admin-page .admin-sidebar .admin-nav-category { display:none; }
+@media(max-width:900px) {
+  body.sidebar-collapsed.admin-page .admin-sidebar { width:100% !important; max-width:none !important; }
+  body.sidebar-collapsed.admin-page .admin-sidebar .sidebar-logo-lockup { display:block; }
+  body.sidebar-collapsed.admin-page .admin-sidebar .brand { justify-content:space-between; }
+  body.sidebar-collapsed.admin-page .admin-sidebar .admin-nav-btn { justify-content:flex-start; font-size:13px; padding-inline:10px; }
+  body.sidebar-collapsed.admin-page .admin-sidebar .admin-nav-category { display:block; }
+  body.sidebar-collapsed.player-page .sidebar { width:100%; }
+  body.sidebar-collapsed.player-page .sidebar .sidebar-logo-lockup { display:block; }
+  body.sidebar-collapsed.player-page .sidebar .brand { justify-content:space-between; padding-inline:1rem; }
 }

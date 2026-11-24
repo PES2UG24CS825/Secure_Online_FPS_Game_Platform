@@ -221,7 +221,7 @@ export async function loadAntiCheatDecisions() {
       <div class="anticheat-meta-card">
         <div class="meta-row">
           <div>
-            <strong>Inference Model:</strong> <span class="badge badge-cyan">${escapeHtml(meta.version || 'Unavailable')}</span>
+            <strong>Active Model:</strong> <span class="badge badge-cyan">${escapeHtml(meta.version || 'Unavailable')}</span>
             <small class="muted" style="margin-left:8px;">Trained: ${escapeHtml(meta.trained_at ? formatTimeAgo(meta.trained_at) : 'Unavailable')}</small>
           </div>
           <div>
