@@ -3,7 +3,7 @@ import { loadRewardOperations } from './admin/admin_rewards.js?v=20261125_player
  * SecureFPS Admin Dashboard Coordinator
  * Coordinates section modules, tab navigation, responsive polling, and manual refresh.
  */
-import { PollingManager, connectAdminLiveEvents, escapeHtml, formatTimeAgo } from './admin/admin_core.js?v=20261125_demo_visibility';
+import { PollingManager, connectAdminLiveEvents, escapeHtml, formatTimeAgo } from './admin/admin_core.js?v=20261125_live_alert';
 import { loadAdminOverview } from './admin/admin_overview.js?v=20261125_demo_visibility';
 import { initPlayersSection, loadPlayersTable } from './admin/admin_players.js?v=20261125_superonly';
 import { initSecuritySection, loadBanAppeals, loadAntiCheatDecisions, loadAuditLogTable, loadRecentLoginsTable } from './admin/admin_security.js?v=20261125_demo_visibility';

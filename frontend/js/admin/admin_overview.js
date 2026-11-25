@@ -3,7 +3,7 @@ import { openPlayerMatchesModal } from "./admin_players.js?v=20261125_superonly"
  * SecureFPS Admin Overview Module
  * Cached statistics (30s), server cluster health monitor, and dev fixture toggling.
  */
-import { escapeHtml, formatTimeAgo, incidentLabel, PollingManager } from './admin_core.js?v=20261125_demo_visibility';
+import { escapeHtml, formatTimeAgo, incidentLabel, PollingManager } from './admin_core.js?v=20261125_live_alert';
 
 export async function loadAdminOverview(forceRefresh = false) {
   try {

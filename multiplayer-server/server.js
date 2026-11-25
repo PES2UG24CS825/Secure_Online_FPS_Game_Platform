@@ -92,14 +92,14 @@ function releaseRoomIpQuota(room) {
 
 const LobbyCreateSchema = z.object({
   preferredCode: z.string().trim().regex(/^[A-Za-z0-9]{4,8}$/).optional(),
-  name: z.string().trim().min(1).max(24).default('Operator_Host'),
+  name: z.string().trim().min(1).max(48).default('Operator_Host'),
   operator: z.enum(['vanguard', 'valkyrie']).default('vanguard'),
   honour_score: z.number().int().min(0).max(100).optional().default(100)
 }).passthrough();
 
 const LobbyJoinSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
-  name: z.string().trim().min(1).max(24).default('Operator'),
+  name: z.string().trim().min(1).max(48).default('Operator'),
   operator: z.enum(['vanguard', 'valkyrie']).default('vanguard'),
   userId: z.string().optional(),
   honour_score: z.number().int().min(0).max(100).optional().default(100)
@@ -1112,6 +1112,9 @@ io.on('connection', (socket) => {
       };
 
       room.players.set(socket.id, playerState);
+      if (socket.isDemoCheater) {
+        room.isDemoRoom = true;
+      }
       currentRoom = room;
       socket.join(targetCode);
 

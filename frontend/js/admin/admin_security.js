@@ -2,8 +2,8 @@
  * SecureFPS Admin Security Module
  * Ban appeals queue, anti-cheat decisions review panel, and audit log viewer.
  */
-import { escapeHtml, formatTimeAgo, incidentLabel, promptAdminAction } from './admin_core.js?v=20261125_demo_visibility';
-import { initCheaterDemoControls, loadCheaterDemoState } from './admin_demo_cheater.js?v=20261124_live_views';
+import { escapeHtml, formatTimeAgo, incidentLabel, promptAdminAction } from './admin_core.js?v=20261125_live_alert';
+import { initCheaterDemoControls, loadCheaterDemoState } from './admin_demo_cheater.js?v=20261125_live_alert';
 
 let appealsFilter = 'pending';
 let auditPage = 0;

@@ -560,6 +560,7 @@ class GameModeManager {
     if (this.isMatchCompleted && !serverResult) return;
     this.matchActive = false;
     this.isMatchCompleted = true;
+    this.isDead = false;
     this.respawnCountdown = 0;
     this.respawnController = null;
     this.deathOverlay?.classList.remove('active');

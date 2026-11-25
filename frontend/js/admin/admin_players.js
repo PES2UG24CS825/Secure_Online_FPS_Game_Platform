@@ -2,7 +2,7 @@
  * SecureFPS Admin Players Module
  * Server-side pagination, sorting, search, bulk actions, soft delete, and CSV export.
  */
-import { escapeHtml, formatTimeAgo, incidentLabel, promptAdminAction } from './admin_core.js?v=20261125_demo_visibility';
+import { escapeHtml, formatTimeAgo, incidentLabel, promptAdminAction } from './admin_core.js?v=20261125_live_alert';
 import { openRequestApprovalModal } from './admin_super.js?v=20261125_demo_visibility';
 
 let currentPlayersPage = 0;
