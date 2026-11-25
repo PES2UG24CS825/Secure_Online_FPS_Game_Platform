@@ -1,4 +1,4 @@
-import { escapeHtml } from './admin_core.js?v=20261125_demo_visibility';
+import { escapeHtml } from './admin_core.js?v=20261125_live_alert';
 
 const status = document.getElementById('adminRewardsStatus');
 const search = document.getElementById('adminRewardSearch');

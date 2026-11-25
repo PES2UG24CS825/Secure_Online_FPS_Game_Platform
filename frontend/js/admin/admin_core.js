@@ -139,7 +139,7 @@ class AdminPollingManager {
   }
 }
 
-export const PollingManager = new AdminPollingManager(45000);
+export const PollingManager = new AdminPollingManager(10000);
 
 const _liveAlertDedup = new Map();
 

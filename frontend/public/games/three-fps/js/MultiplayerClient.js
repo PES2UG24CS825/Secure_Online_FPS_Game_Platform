@@ -763,19 +763,16 @@ class MultiplayerClient {
       console.log(`[Match Lifecycle] Match ended (${data.reason}). Final scoreboard received:`, data.scoreboard);
       this.clearRemotePlayers();
       const gameMode = window.SecureFPSGame?.gameMode;
-      if (gameMode?.currentMode !== 'multiplayer') return;
+      if (!gameMode || (gameMode.currentMode !== 'multiplayer' && !this.isInRoom)) return;
 
-      const myId = this.localPlayerId || sock.id;
+      const myId = sock.id || this.localPlayerId;
       const myName = (typeof sessionStorage !== 'undefined' && sessionStorage?.getItem('securefps_player_name')) || this.playerName;
-      let local = data.scoreboard?.find(row => row.id === myId);
+      let local = data.scoreboard?.find(row => row.id === sock.id || row.id === this.localPlayerId);
       if (!local && myName) {
         local = data.scoreboard?.find(row => row.name === myName);
       }
-      if (!local && data.scoreboard?.length > 0) {
-        local = data.scoreboard[0];
-      }
       const winner = data.scoreboard?.find(row => row.isWinner) || data.scoreboard?.[0];
-      const isVictory = local ? Boolean(local.isWinner) : (winner?.name === myName);
+      const isVictory = local ? Boolean(local.isWinner) : (Boolean(winner?.isWinner) && winner?.name === myName);
 
       gameMode.completeMatch(data.reason, {
         winner: winner?.name ?? (isVictory ? myName : 'Draw'),

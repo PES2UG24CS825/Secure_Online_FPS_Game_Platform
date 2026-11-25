@@ -1627,6 +1627,9 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
     const detail = e.detail || {};
     const mcOverlay = document.getElementById('match-complete-overlay');
     if (!mcOverlay) return;
+    document.getElementById('pause-overlay')?.classList.remove('active');
+    document.getElementById('death-overlay')?.classList.remove('active');
+    mcOverlay.style.zIndex = '10000';
 
     // Immediately unlock controls and exit pointer lock so cursor is available
     if (document.exitPointerLock) {

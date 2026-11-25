@@ -3,7 +3,7 @@
  * Powers Phase 8 Admin Demonstration View with live SSE security alerts.
  */
 
-import { escapeHtml } from './admin_core.js?v=20261125_demo_visibility';
+import { escapeHtml } from './admin_core.js?v=20261125_live_alert';
 
 export async function loadCheaterDemoState() {
   const container = document.getElementById('cheaterDemoSection');

@@ -5061,17 +5061,28 @@ def internal_anti_cheat_report():
 
             if risk >= 65:
                 action_taken = "alert"
+                player_name_val = payload.get("playerName") or "Operator"
+                is_demo_account = str(player_name_val).lower() in {"cheater_demo", "demo_cheater"} or "cheater" in str(player_name_val).lower()
                 publish_live_update(
                     user_id=user_id_str or "admin",
                     session_id=payload.get("sessionId"),
                     event_type="security_alert",
                     force=True,
                     payload={
+                        "is_demo": is_demo_account,
+                        "is_demo_account": is_demo_account,
+                        "account_type": "Demo" if is_demo_account else "Genuine",
+                        "alert_type": "gameplay_anomaly",
+                        "severity": "high" if risk >= 65 else "medium",
                         "risk_score": risk,
-                        "player_name": payload.get("playerName"),
+                        "player_name": player_name_val,
+                        "player_display_name": player_name_val,
+                        "violation": f"Multiplayer AI anti-cheat risk {risk:.1f}/100",
+                        "source": "Authoritative multiplayer anti-cheat",
                         "detected_in": "1.52s",
                         "detection_latency_ms": 25.4,
-                        "features": features
+                        "features": features,
+                        "timestamp": now.isoformat(),
                     }
                 )
 

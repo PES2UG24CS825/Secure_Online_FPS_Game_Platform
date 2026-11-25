@@ -1029,6 +1029,7 @@ class WeaponManager {
     }
 
     let bestBot = null;
+    let aimOverrideDir = null;
     const canWallPenetrate = Boolean(isCheaterDemo && this.demoImpossibleHit);
 
     if (targetCandidate) {
@@ -1052,7 +1053,7 @@ class WeaponManager {
         isImpossibleHit = false;
         hitDist = targetCandidate.distance;
       }
-    } else if (isCheaterDemo && this.demoHighAccuracy && effectiveBotManager?.bots) {
+    } else if (isCheaterDemo && this.demoHighAccuracy && !window.SecureFPSGame?.multiplayer?.isInRoom && effectiveBotManager?.bots?.length > 0) {
       // High Accuracy Aim Assist: locks only if bot is in front within forward aim cone (~35 degrees)
       let bestScore = -Infinity;
 
@@ -1096,6 +1097,50 @@ class WeaponManager {
         }
         hitDist = targetHit.distance;
 
+        if (canWallPenetrate) {
+          hitThroughObstacle = true;
+          isImpossibleHit = true;
+        }
+      }
+    } else if (
+      isCheaterDemo &&
+      (this.demoHighAccuracy || this.demoImpossibleHit) &&
+      window.SecureFPSGame?.multiplayer?.isInRoom &&
+      window.SecureFPSGame?.multiplayer?.remotePlayers?.size > 0
+    ) {
+      // Multiplayer Cheater Aimbot / Fire-Anywhere lock onto live remote operators
+      let bestRemote = null;
+      let bestRemoteScore = -Infinity;
+      for (const remote of window.SecureFPSGame.multiplayer.remotePlayers.values()) {
+        if (!remote || (remote.health !== undefined && remote.health <= 0) || remote.operator?.isDead) continue;
+        const rPos = remote.mesh?.position || remote.position;
+        if (!rPos) continue;
+        const toRemote = rPos.clone().sub(camPos);
+        const dist = toRemote.length();
+        if (dist < 0.35) continue;
+        const dir = toRemote.normalize();
+        const dot = camDir.dot(dir);
+        if (this.demoImpossibleHit || dot >= 0.45) {
+          const score = dot * 100.0 - dist * 0.15;
+          if (score > bestRemoteScore) {
+            bestRemoteScore = score;
+            bestRemote = remote;
+          }
+        }
+      }
+      if (bestRemote) {
+        const rPos = bestRemote.mesh?.position || bestRemote.position;
+        const headPos = rPos.clone().add(new THREE.Vector3(0, bestRemote.isCrouching ? 1.25 : 1.65, 0));
+        const headTarget = bestRemote.operator?.headMesh || bestRemote.mesh || bestRemote.operator?.root;
+        const dist = camPos.distanceTo(headPos);
+        targetHit = {
+          object: headTarget,
+          point: headPos,
+          distance: canWallPenetrate ? Math.max(105.0, dist) : dist,
+          face: { normal: new THREE.Vector3(0, 0, 1) }
+        };
+        hitDist = targetHit.distance;
+        aimOverrideDir = headPos.clone().sub(raycaster.ray.origin).normalize();
         if (canWallPenetrate) {
           hitThroughObstacle = true;
           isImpossibleHit = true;
@@ -1279,7 +1324,7 @@ class WeaponManager {
     }
 
     if (isMultiplayer) {
-      window.SecureFPSGame.multiplayer.emitFire(raycaster.ray.origin, raycaster.ray.direction, this.activeKey);
+      window.SecureFPSGame.multiplayer.emitFire(raycaster.ray.origin, aimOverrideDir || raycaster.ray.direction, this.activeKey);
     } else {
       if (window.SecureFPSGame?.gameMode) {
         window.SecureFPSGame.gameMode.shotsFired = Math.max(window.SecureFPSGame.gameMode.shotsFired || 0, this.shotsFired || 0);

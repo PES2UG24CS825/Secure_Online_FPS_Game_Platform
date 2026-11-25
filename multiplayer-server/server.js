@@ -1112,6 +1112,9 @@ io.on('connection', (socket) => {
       };
 
       room.players.set(socket.id, playerState);
+      if (socket.isDemoCheater) {
+        room.isDemoRoom = true;
+      }
       currentRoom = room;
       socket.join(targetCode);
 

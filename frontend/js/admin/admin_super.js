@@ -3,7 +3,7 @@
  * Handles privileged administrator management, role permissions, ML tuning & rollback,
  * risk engine simulation, emergency lockdown, system control metrics, and backups.
  */
-import { escapeHtml, formatTimeAgo, incidentLabel } from './admin_core.js?v=20261125_demo_visibility';
+import { escapeHtml, formatTimeAgo, incidentLabel } from './admin_core.js?v=20261125_live_alert';
 
 export function initSuperAdminModules() {
   setupSuperEventListeners();

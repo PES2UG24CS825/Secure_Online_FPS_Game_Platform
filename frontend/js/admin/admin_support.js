@@ -2,7 +2,7 @@
  * SecureFPS Admin Customer Support Module
  * Enhanced support tickets with pagination, status/priority filtering, and macro reply templates.
  */
-import { escapeHtml, formatTimeAgo } from './admin_core.js?v=20261125_demo_visibility';
+import { escapeHtml, formatTimeAgo } from './admin_core.js?v=20261125_live_alert';
 
 let supportStatusFilter = '';
 let supportPriorityFilter = '';
