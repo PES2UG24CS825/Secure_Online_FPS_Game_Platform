@@ -360,6 +360,163 @@ def get_admin_me():
 # ADMIN OVERVIEW (Cached 30s, count_documents used)
 # =========================================================================
 
+# These markers identify disposable automated test fixtures (never the designated cheater_demo account).
+NON_LIVE_EMAIL = r"(^temp_admin_[a-f0-9]{6}@securefps\.io$)|(@(?:test\.(?:com|local|lan)|securefps\.local|test\.invalid)$)"
+NON_LIVE_ACCOUNTS = {
+    "$and": [
+        {"username": {"$ne": "cheater_demo"}},
+        {"email": {"$ne": "cheater_demo@example.test"}},
+        {"$or": [
+            {"email": {"$regex": NON_LIVE_EMAIL, "$options": "i"}},
+            {"role": {"$in": ["demo_admin", "demo_player"]}},
+            {"name": "Test Soldier"},
+        ]},
+    ]
+}
+
+
+PLAYER_ROLES = ["player", "demo_player"]
+DEMO_ACCOUNT = {"$or": [
+    {"demo": True}, {"is_demo": True}, {"role": {"$in": ["demo_player", "demo_admin"]}},
+    {"account_type": {"$in": ["demo_test", "demo_normal"]}},
+    {"username": "cheater_demo"}, {"email": "cheater_demo@example.test"},
+]}
+
+
+def administrative_accounts(scope="all"):
+    if scope == "demo":
+        return DEMO_ACCOUNT
+    if scope == "player":
+        return {"$nor": [NON_LIVE_ACCOUNTS, DEMO_ACCOUNT]}
+    return {"$or": [{"$nor": [NON_LIVE_ACCOUNTS]}, DEMO_ACCOUNT]}
+
+
+def demo_account_ids():
+    return {str(value) for value in account_ids(DEMO_ACCOUNT)}
+
+
+def monitoring_records(*, allow_system=False, scope="all"):
+    ids = account_ids(administrative_accounts(scope))
+    owners = [{"user_id": {"$in": ids}}, {"user_id": None, "player_id": {"$in": ids}}]
+    if allow_system and scope != "demo":
+        owners.append({"user_id": None, "player_id": None})
+    return {"$and": [{"$or": owners}]}
+
+
+ANTI_CHEAT_TYPES = [
+    "gameplay_anomaly", "gameplay_alert", "hard_rule_violation", "impossible_hit",
+    "abnormal_fire_rate", "abnormal_speed", "movement_anomaly", "aim_anomaly", "headshot_anomaly",
+]
+CLEARED_REVIEWS = ["false_positive", "cleared", "dismissed", "confirmed_clean"]
+
+
+def anti_cheat_events():
+    return {
+        "$or": [{key: {"$in": ANTI_CHEAT_TYPES}} for key in ("event_type", "type")],
+        **{key: {"$nin": CLEARED_REVIEWS} for key in ("review_status", "admin_review_status", "status")},
+    }
+
+
+def detection_source(event):
+    source = str(event.get("source") or "").lower()
+    event_type = event.get("event_type") or event.get("type")
+    if "server" in source or event_type in {"hard_rule_violation", "abnormal_fire_rate", "abnormal_speed", "impossible_hit"}:
+        return "Server rule"
+    if event.get("model_version") or source in {"ml", "model"}:
+        return "Detection model"
+    return "Detection source unavailable"
+
+
+def owner_id(record):
+    return str(record.get("user_id") or record.get("player_id") or "")
+
+
+def account_ids(query):
+    return [value for row in users.find(query, {"_id": 1}) for value in (row["_id"], str(row["_id"]))]
+
+
+def non_live_ids():
+    return account_ids(NON_LIVE_ACCOUNTS)
+
+
+def live_records(*, allow_system=False, scope=None):
+    if scope is None:
+        try:
+            scope = (request.args.get("account_type") or request.args.get("scope") or "all").strip().lower()
+        except RuntimeError:
+            scope = "all"
+    if scope not in ("all", "player", "demo"):
+        scope = "all"
+
+    live_ids = account_ids(administrative_accounts(scope))
+    owners = [{"user_id": {"$in": live_ids}}, {"user_id": None, "player_id": {"$in": live_ids}}]
+    if allow_system and scope != "demo":
+        owners.append({"user_id": None, "player_id": None})
+
+    base = {"$and": [{"$or": owners}]}
+    if scope == "player":
+        base.update({
+            "demo": {"$ne": True},
+            "is_demo": {"$ne": True},
+            "demo_mode": {"$ne": True},
+            "demo_label": {"$in": [None, ""]},
+            "session_id": {"$not": {"$regex": r"^(?:normal-demo-|demo-cheater-like-fixture$|test_demo_session$)"}},
+        })
+    elif scope == "demo":
+        demo_ids = account_ids(DEMO_ACCOUNT)
+        base["$and"].append({
+            "$or": [
+                {"demo": True}, {"is_demo": True}, {"demo_mode": True},
+                {"user_id": {"$in": demo_ids}},
+                {"player_id": {"$in": demo_ids}},
+            ]
+        })
+    else:
+        base["session_id"] = {"$not": {"$regex": r"^(?:normal-demo-|demo-cheater-like-fixture$|test_demo_session$)"}}
+    return base
+
+
+def live_completed_matches(live):
+    from routes.player_routes import completed_player_matches
+
+    return completed_player_matches({"$and": [
+        live, {"$or": [{"user_id": {"$ne": None}}, {"player_id": {"$ne": None}}]},
+    ]})
+
+
+def account_names(values):
+    stored_ids = {str(value) for value in values if value}
+    oid_list = [ObjectId(value) for value in stored_ids if ObjectId.is_valid(value)]
+    str_list = list(stored_ids)
+    found = {}
+    for row in users.find({"$or": [{"_id": {"$in": oid_list}}, {"_id": {"$in": str_list}}]}, {"username": 1, "name": 1, "email": 1}):
+        display_name = row.get("username") or row.get("name") or row.get("email")
+        if display_name:
+            found[str(row["_id"])] = display_name
+    return found
+
+
+def _kick_multiplayer_player(user_id, reason="Platform security enforcement action."):
+    """Notify authoritative multiplayer server to immediately terminate match and disconnect banned player."""
+    try:
+        mp_url = os.getenv("MULTIPLAYER_INTERNAL_URL", os.getenv("GAME_SERVER_URL", "http://127.0.0.1:4001"))
+        secret = os.getenv("GAME_SERVER_SECRET", "securefps-multiplayer-secret-key-2026")
+        import urllib.request
+        import json as _json
+        req = urllib.request.Request(
+            f"{mp_url}/internal/kick",
+            data=_json.dumps({"userId": str(user_id), "reason": reason}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Game-Server-Secret": secret},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=1.0)
+    except Exception as e:
+        try:
+            current_app.logger.debug("Multiplayer live kick skipped or offline: %s", e)
+        except Exception:
+            pass
+
+
 @admin_bp.get("/overview")
 def overview():
     global _OVERVIEW_CACHE
@@ -384,119 +541,75 @@ def overview():
         cached_resp["admin"] = admin_info
         return jsonify(cached_resp)
 
-    # Compute stats using server-side count_documents strictly for genuine players
-    genuine_filter = {
-        "role": "player",
-        "email": {"$not": {"$regex": r"(@example\.com|@test\.local|@example\.test|@test\.com|@test\.lan|@securefps\.local|@deleted\.securefps\.local)"}},
-        "name": {"$not": {"$regex": r"^(Test Player|Test Soldier|Demo Player|Deleted Player)"}}
+    # Count all eligible players (including genuine players and designated cheater_demo account)
+    player_count_filter = {
+        "role": {"$in": PLAYER_ROLES},
+        "$and": [administrative_accounts("all")],
     }
-    total_players = users.count_documents({**genuine_filter, "account_status": {"$ne": "deleted"}})
+    total_players = users.count_documents({**player_count_filter, "account_status": {"$ne": "deleted"}})
     active_players = users.count_documents({
-        **genuine_filter,
+        **player_count_filter,
         "account_status": "active",
         "revoked": {"$ne": True}
     })
     suspended_players = users.count_documents({
-        **genuine_filter,
+        **player_count_filter,
         "$or": [{"account_status": "suspended"}, {"revoked": True}]
     })
     banned_players = users.count_documents({
-        **genuine_filter,
+        **player_count_filter,
         "account_status": "banned"
     })
-    completed_session_ids = set(game_sessions.distinct("session_id", {"status": "completed"}))
-    legacy_session_ids = set(matches.distinct("session_id"))
-    telemetry_session_ids = set(game_telemetry.distinct(
-        "session_id", {"event_type": "game_completed"}
-    ))
-    total_matches_count = len(
-        {sid for sid in completed_session_ids | legacy_session_ids | telemetry_session_ids if sid}
-    )
-    total_matches_count += game_sessions.count_documents({
-        "status": "completed", "$or": [{"session_id": {"$exists": False}}, {"session_id": None}]
-    })
-    total_matches_count += matches.count_documents({
-        "$or": [{"session_id": {"$exists": False}}, {"session_id": None}]
-    })
-    high_severity_count = security_events.count_documents({"severity": {"$in": ["high", "critical"]}})
-    active_sessions_count = sessions_db.count_documents({"is_active": True})
-    pending_appeals_count = ban_appeals.count_documents({"status": "pending"})
+    live = live_records()
+    security_live = live_records(allow_system=True)
+    completed = live_completed_matches(live)
+    total_matches_count = len(completed)
+    high_severity_count = security_events.count_documents({**security_live, "severity": {"$in": ["high", "critical"]}})
+    active_sessions_count = sessions_db.count_documents({**live, "is_active": True})
+    pending_appeals_count = ban_appeals.count_documents({**live, "status": "pending"})
 
     # Fetch latest 20 security events
-    recent_events = list(security_events.find().sort("created_at", -1).limit(20))
-    affected_ids = [ObjectId(row["user_id"]) for row in recent_events if ObjectId.is_valid(row.get("user_id"))]
-    affected_players = {str(row["_id"]): row.get("name") for row in users.find({"_id": {"$in": affected_ids}}, {"name": 1})}
+    recent_events = list(security_events.find(monitoring_records(allow_system=True)).sort("created_at", -1).limit(20))
+    demo_ids = demo_account_ids()
+    affected_players = account_names(owner_id(row) for row in recent_events)
     formatted_events = [
         {
             "id": str(e["_id"]),
-            "type": e.get("type", "unknown"),
+            "type": e.get("event_type") or e.get("type", "unknown"),
             "severity": e.get("severity", "low"),
             "timestamp": format_iso(e.get("created_at")),
-            "player_id": str(e["user_id"]) if ObjectId.is_valid(e.get("user_id")) else None,
-            "player_name": affected_players.get(str(e.get("user_id"))) or e.get("player_name"),
+            "player_id": owner_id(e) or None,
+            "player_name": affected_players.get(owner_id(e)) or e.get("player_name"),
             "status": e.get("status") or "open",
             "acknowledged": bool(e.get("acknowledged_at")),
-            "description": e.get("description", ""),
+            "description": e.get("description") or e.get("alert_reason") or e.get("reason"),
+            "is_demo": owner_id(e) in demo_ids or bool(e.get("is_demo") or e.get("demo")),
         }
         for e in recent_events
     ]
 
-    # Fetch latest 20 game sessions
-    recent_game_sessions = list(
-        game_sessions.find({"status": "completed"}).sort("created_at", -1).limit(20)
-    )
-    recent_session_ids = {row.get("session_id") for row in recent_game_sessions if row.get("session_id")}
-    for event in game_telemetry.find({"event_type": "game_completed"}).sort("created_at", -1).limit(50):
-        sid = event.get("session_id")
-        if not sid or sid in recent_session_ids:
-            continue
-        recent_session_ids.add(sid)
-        recent_game_sessions.append({
-            "_id": event.get("_id"),
-            "session_id": sid,
-            "user_id": event.get("user_id"),
-            "game": event.get("game", "CyberStrike 3D"),
-            "started_at": event.get("created_at"),
-            "created_at": event.get("created_at"),
-            "status": "completed",
-        })
-    recent_game_sessions.sort(
-        key=lambda row: row.get("started_at") or row.get("created_at") or datetime.min,
-        reverse=True,
-    )
-    recent_game_sessions = recent_game_sessions[:20]
-    user_ids = []
-    for s in recent_game_sessions:
-        uid = s.get("user_id")
-        if uid:
-            user_ids.append(uid)
-            try:
-                user_ids.append(ObjectId(uid))
-            except Exception:
-                pass
-    user_docs = list(users.find({"_id": {"$in": user_ids}}, {"name": 1}))
-    user_name_map = {}
-    for u in user_docs:
-        user_name_map[str(u["_id"])] = u.get("name", "Operator")
-        user_name_map[u["_id"]] = u.get("name", "Operator")
-
+    recent_game_sessions = live_completed_matches(monitoring_records())[:40]
+    names = account_names(row.get("user_id") or row.get("player_id") for row in recent_game_sessions)
     formatted_matches = []
-    for s in recent_game_sessions:
-        raw_uid = s.get("user_id", "")
-        uid = str(raw_uid)
-        pname = user_name_map.get(raw_uid, user_name_map.get(uid, s.get("player_name", "Operator")))
-        started_dt = s.get("started_at") or s.get("created_at")
-        risk = s.get("risk_score")
+    for row in recent_game_sessions:
+        uid = str(row.get("user_id") or row.get("player_id") or "")
+        resolved_name = names.get(uid) or row.get("player_name") or row.get("username")
+        if not resolved_name:
+            continue
+        risk = clamp_risk_score(row.get("risk_score"))
         formatted_matches.append({
-            "session_id": s.get("session_id", str(s["_id"])),
+            "session_id": row.get("session_id") or str(row.get("_id", "")),
             "player_id": uid,
-            "player_name": pname,
-            "game": s.get("game", "CyberStrike 3D"),
-            "started_at": format_iso(started_dt),
-            "status": s.get("status", "completed"),
-            "risk_score": clamp_risk_score(risk) if risk is not None else None,
-            "risk_category": classify_risk_score(risk)["category"] if risk is not None else "Normal",
+            "is_demo": uid in demo_ids or bool(row.get("is_demo") or row.get("demo")),
+            "player_name": resolved_name,
+            "game": row.get("game"),
+            "started_at": format_iso(row.get("started_at") or row.get("created_at")),
+            "status": "completed",
+            "risk_score": risk,
+            "risk_category": (row.get("risk_category") or classify_risk_score(risk)["category"]) if risk is not None else "Pending",
         })
+        if len(formatted_matches) >= 20:
+            break
 
     stats_dict = {
         "total_players": total_players,
@@ -506,8 +619,8 @@ def overview():
         "active_sessions": active_sessions_count,
         "matches_analyzed": total_matches_count,
         "high_severity_events": high_severity_count,
-        "total_security_events": security_events.count_documents({}),
-        "unresolved_critical": security_events.count_documents({"severity": "critical", "status": {"$nin": ["resolved", "closed"]}}),
+        "total_security_events": security_events.count_documents(security_live),
+        "unresolved_critical": security_events.count_documents({**security_live, "severity": "critical", "status": {"$nin": ["resolved", "closed"]}}),
         "pending_appeals": pending_appeals_count,
     }
 
@@ -519,8 +632,8 @@ def overview():
         "summary": stats_dict,
         "admin": admin_info,
         "players": [
-            {"id": str(u["_id"]), "name": u.get("name", "Operator")}
-            for u in user_docs[:10]
+            {"id": str(u["_id"]), "name": u.get("username") or u.get("name")}
+            for u in users.find(player_count_filter, {"username": 1, "name": 1}).limit(10)
         ],
         "matches": formatted_matches,
         "events": formatted_events,
@@ -548,20 +661,15 @@ def list_players():
     limit = max(1, min(request.args.get("limit", 25, type=int), 100))
     offset = max(0, request.args.get("offset", 0, type=int))
 
-    query = {
-        "role": "player",
-        "email": {"$not": {"$regex": r"(@example\.com|@test\.local|@example\.test|@test\.com|@test\.lan|@securefps\.local|@deleted\.securefps\.local)"}},
-        "name": {"$not": {"$regex": r"^(Test Player|Test Soldier|Demo Player|Deleted Player)"}}
-    }
+    scope = request.args.get("account_type", "all")
+    query = {"role": {"$in": PLAYER_ROLES}, "$and": [administrative_accounts(scope)]}
 
     if search:
-        query["$or"] = [
-            {"name": {"$regex": search, "$options": "i"}},
-            {"email": {"$regex": search, "$options": "i"}}
-        ]
+        literal = {"$regex": re.escape(search), "$options": "i"}
+        query["$and"].append({"$or": [{field: literal} for field in ("username", "name", "email")]})
 
     if status_filter == "suspended":
-        query["$or"] = [{"account_status": "suspended"}, {"revoked": True}]
+        query["$and"].append({"$or": [{"account_status": "suspended"}, {"revoked": True, "account_status": {"$ne": "banned"}}]})
     elif status_filter == "banned":
         query["account_status"] = "banned"
     elif status_filter == "deleted":
@@ -583,6 +691,7 @@ def list_players():
     }
     actual_sort_field = sort_field_map.get(sort_by, "created_at")
 
+    demo_ids = demo_account_ids()
     total_count = users.count_documents(query)
 
     player_cursor = users.find(
@@ -626,6 +735,18 @@ def list_players():
         kdr = round(kills / max(deaths, 1), 2)
 
         raw_score = p.get("risk_score")
+        if raw_score is None:
+            latest_ge = game_events.find_one(
+                {"user_id": {"$in": player_ids}, "analysis_type": "game_session", "risk_score": {"$ne": None}},
+                {"risk_score": 1},
+                sort=[("created_at", -1)],
+            )
+            latest_gs = game_sessions.find_one(
+                {"user_id": {"$in": player_ids}, "risk_score": {"$ne": None}},
+                {"risk_score": 1},
+                sort=[("created_at", -1)],
+            ) if not latest_ge else None
+            raw_score = (latest_ge or latest_gs or {}).get("risk_score")
         if raw_score is not None:
             clamped = clamp_risk_score(raw_score)
             risk_score = clamped
@@ -661,8 +782,10 @@ def list_players():
         player_rows.append({
             "id": str(pid),
             "name": p.get("name", "Unknown"),
+            "username": p.get("username"),
             "email": p.get("email", ""),
             "role": p.get("role", "player"),
+            "is_demo": str(p["_id"]) in demo_ids,
             "account_status": acc_status,
             "suspended_until": format_iso(p.get("suspended_until")),
             "ban_reason": p.get("ban_reason"),
@@ -713,38 +836,9 @@ def get_player_details(player_id):
         {"user_id": {"$in": player_ids}},
         {"player_id": {"$in": player_ids}},
     ]}
-    p_sessions = list(game_sessions.find({
-        "$and": [player_id_filter, {"status": "completed"}]
-    }).sort("created_at", -1))
-    legacy_matches = list(matches.find(player_id_filter).sort("created_at", -1))
-    completion_events = list(game_telemetry.find({
-        "$and": [player_id_filter, {"event_type": "game_completed"}]
-    }).sort("created_at", -1))
-    known_session_ids = {
-        row.get("session_id") for row in p_sessions + legacy_matches if row.get("session_id")
-    }
-    for event in completion_events:
-        sid = event.get("session_id")
-        if not sid or sid in known_session_ids:
-            continue
-        known_session_ids.add(sid)
-        telemetry = event.get("telemetry") or {}
-        p_sessions.append({
-            "session_id": sid, "user_id": event.get("user_id"), "status": "completed",
-            "game": event.get("game", "CyberStrike 3D"),
-            "kills": telemetry.get("kills"), "deaths": telemetry.get("deaths"),
-            "shots_fired": telemetry.get("shots"), "shots_hit": telemetry.get("hits"),
-            "accuracy": telemetry.get("accuracy"), "headshots": telemetry.get("headshots"),
-            "kdr": telemetry.get("kdr"), "winner": telemetry.get("winner"),
-            "started_at": event.get("created_at"), "created_at": event.get("created_at"),
-            "stats_source": "completed_telemetry",
-        })
-    known_session_ids = {row.get("session_id") for row in p_sessions if row.get("session_id")}
-    legacy_matches = [
-        row for row in legacy_matches
-        if not row.get("session_id") or row["session_id"] not in known_session_ids
-    ]
-    combat_matches = p_sessions + legacy_matches
+    from routes.player_routes import completed_player_matches
+
+    combat_matches = completed_player_matches(player_id_filter)
     combat_session_ids = [row["session_id"] for row in combat_matches if row.get("session_id")]
     telemetry_rows = list(game_telemetry.find(
         {
@@ -753,9 +847,9 @@ def get_player_details(player_id):
                 {"player_id": {"$in": player_ids}},
             ],
             "session_id": {"$in": combat_session_ids},
-            "event_type": {"$in": ["enemy_killed", "player_death", "weapon_fire", "enemy_hit", "game_completed"]},
+            "event_type": {"$in": ["enemy_killed", "player_death", "weapon_fire", "enemy_hit", "headshot", "game_completed"]},
         },
-        {"session_id": 1, "event_type": 1},
+        {"session_id": 1, "event_type": 1, "telemetry": 1, "seq": 1},
     )) if combat_session_ids else []
     combat_totals, resolved_matches = summarize_combat_stats(
         combat_matches,
@@ -966,19 +1060,16 @@ def get_player_violations(player_id):
     if not users.find_one({"_id": pid}, {"_id": 1}):
         return jsonify({"message": "Player not found."}), 404
 
-    anti_cheat_types = [
-        "gameplay_anomaly", "gameplay_alert", "hard_rule_violation", "impossible_hit",
-        "abnormal_fire_rate", "abnormal_speed", "movement_anomaly", "aim_anomaly", "headshot_anomaly",
-    ]
+    demo = str(pid) in demo_account_ids()
     events = list(security_events.find({
         "$and": [
-            {"$or": [{"event_type": {"$in": anti_cheat_types}}, {"type": {"$in": anti_cheat_types}}]},
+            anti_cheat_events(),
             {"$or": [
                 {"user_id": {"$in": [pid, str(pid)]}},
-                {"player_id": {"$in": [pid, str(pid)]}},
+                {"user_id": None, "player_id": {"$in": [pid, str(pid)]}},
             ]},
         ],
-    }).sort("created_at", -1).limit(50))
+    }).sort([("created_at", -1), ("_id", -1)]))
     return jsonify({"security_events": [{
         "id": str(event.get("_id")),
         "type": event.get("event_type") or event.get("type", "gameplay_anomaly"),
@@ -994,6 +1085,10 @@ def get_player_violations(player_id):
             or event.get("reason") or "Server-verified anti-cheat finding."
         ),
         "risk_score": event.get("risk_score"),
+        "session_id": event.get("session_id"),
+        "source": detection_source(event),
+        "is_demo": demo or bool(event.get("is_demo") or event.get("demo")),
+        "review_status": event.get("admin_review_status") or event.get("review_status"),
         "created_at": format_iso(event.get("created_at")),
     } for event in events]})
 
@@ -1067,7 +1162,7 @@ def suspend_player(player_id):
     users.update_one({"_id": pid}, {"$set": update_doc})
 
     # Revoke all active sessions
-    sessions_db.update_many({"user_id": pid}, {"$set": {"is_active": False, "revoked_at": now}})
+    sessions_db.update_many({"user_id": {"$in": [pid, str(pid)]}}, {"$set": {"is_active": False, "revoked_at": now}})
 
     # Create security event and audit log
     restriction_event = security_events.insert_one({
@@ -1189,7 +1284,7 @@ def ban_player(player_id):
         }
     )
 
-    sessions_db.update_many({"user_id": pid}, {"$set": {"is_active": False, "revoked_at": now}})
+    sessions_db.update_many({"user_id": {"$in": [pid, str(pid)]}}, {"$set": {"is_active": False, "revoked_at": now}})
 
     restriction_event = security_events.insert_one({
         "type": "account_banned",
@@ -1207,6 +1302,8 @@ def ban_player(player_id):
         "ban_player",
         details={"reason": reason_or_msg, "ip": request.remote_addr}
     )
+
+    _kick_multiplayer_player(pid, reason_or_msg)
 
     return jsonify({
         "success": True,
@@ -1309,7 +1406,7 @@ def soft_delete_player(player_id):
     )
 
     # Invalidate sessions
-    sessions_db.update_many({"user_id": pid}, {"$set": {"is_active": False, "revoked_at": now}})
+    sessions_db.update_many({"user_id": {"$in": [pid, str(pid)]}}, {"$set": {"is_active": False, "revoked_at": now}})
 
     log_admin_action(
         admin["_id"],
@@ -1472,7 +1569,14 @@ def get_approvals():
     is_super = raw_role == "super_admin" or admin.get("is_super_admin") is True
 
     # Super admin sees all requests; normal admin sees only requests they submitted
-    query = {} if is_super else {"requested_by_id": str(admin["_id"])}
+    fixture_email = {"$not": {"$regex": NON_LIVE_EMAIL, "$options": "i"}}
+    queue_filter = {
+        "player_id": {"$in": account_ids({"role": "player", "$nor": [NON_LIVE_ACCOUNTS]})},
+        "requested_by_email": fixture_email, "player_email": fixture_email,
+    }
+    query = dict(queue_filter)
+    if not is_super:
+        query["requested_by_id"] = str(admin["_id"])
     status_filter = request.args.get("status")
     if status_filter in ["pending", "approved", "rejected"]:
         query["status"] = status_filter
@@ -1485,7 +1589,7 @@ def get_approvals():
         it["updated_at"] = format_iso(it.get("updated_at"))
         it["reviewed_at"] = format_iso(it.get("reviewed_at"))
 
-    pending_count = admin_approvals.count_documents({"status": "pending"})
+    pending_count = admin_approvals.count_documents({**queue_filter, "status": "pending"})
 
     return jsonify({
         "approvals": items,
@@ -1537,7 +1641,7 @@ def process_approval(approval_id):
                     "ban_reason": f"[Approved Request] {approval_req['reason']}"
                 }}
             )
-            sessions_db.update_many({"user_id": pid}, {"$set": {"is_active": False, "revoked_at": now}})
+            sessions_db.update_many({"user_id": {"$in": [pid, str(pid)]}}, {"$set": {"is_active": False, "revoked_at": now}})
             security_events.insert_one({
                 "type": "account_banned",
                 "user_id": pid,
@@ -1545,6 +1649,7 @@ def process_approval(approval_id):
                 "description": f"Permanent ban approved by Super Admin ({admin['email']}) following request by ({approval_req['requested_by_email']}).",
                 "created_at": now
             })
+            _kick_multiplayer_player(pid, approval_req.get("reason", "Approved permanent ban"))
         elif action == "delete":
             anon_email = f"deleted_{pid}@deleted.securefps.local"
             users.update_one(
@@ -1559,7 +1664,7 @@ def process_approval(approval_id):
                     "revoked": True
                 }, "$unset": {"password_hash": "", "mfa_secret": ""}}
             )
-            sessions_db.update_many({"user_id": pid}, {"$set": {"is_active": False, "revoked_at": now}})
+            sessions_db.update_many({"user_id": {"$in": [pid, str(pid)]}}, {"$set": {"is_active": False, "revoked_at": now}})
 
         admin_approvals.update_one(
             {"_id": aid},
@@ -1820,7 +1925,7 @@ def list_appeals():
     limit = max(1, min(request.args.get("limit", 25, type=int), 100))
     offset = max(0, request.args.get("offset", 0, type=int))
 
-    query = {}
+    query = monitoring_records()
     if status_filter in {"pending", "approved", "rejected"}:
         query["status"] = status_filter
 
@@ -1829,11 +1934,13 @@ def list_appeals():
 
     appeals_list = []
     for a in appeals_cursor:
-        u = users.find_one({"_id": a.get("user_id")}, {"name": 1, "email": 1, "account_status": 1}) or {}
+        owner = a.get("user_id")
+        u = users.find_one({"_id": ObjectId(owner)}, {"username": 1, "name": 1, "email": 1, "account_status": 1}) if ObjectId.is_valid(owner) else None
+        u = u or {}
         appeals_list.append({
             "id": str(a["_id"]),
             "user_id": str(a.get("user_id")),
-            "player_name": u.get("name", "Unknown"),
+            "player_name": u.get("username") or u.get("name") or "Account unavailable",
             "player_email": u.get("email", ""),
             "account_status": u.get("account_status", "unknown"),
             "ban_reason": a.get("ban_reason", ""),
@@ -1966,11 +2073,11 @@ def bulk_player_action():
 
         if action == "suspend":
             users.update_one({"_id": pid}, {"$set": {"account_status": "suspended", "revoked": True, "suspended_at": now, "ban_reason": reason}})
-            sessions_db.update_many({"user_id": pid}, {"$set": {"is_active": False, "revoked_at": now}})
+            sessions_db.update_many({"user_id": {"$in": [pid, str(pid)]}}, {"$set": {"is_active": False, "revoked_at": now}})
             affected_count += 1
         elif action == "ban":
             users.update_one({"_id": pid}, {"$set": {"account_status": "banned", "revoked": True, "banned_at": now, "ban_reason": reason}})
-            sessions_db.update_many({"user_id": pid}, {"$set": {"is_active": False, "revoked_at": now}})
+            sessions_db.update_many({"user_id": {"$in": [pid, str(pid)]}}, {"$set": {"is_active": False, "revoked_at": now}})
             affected_count += 1
         elif action == "unsuspend":
             users.update_one({"_id": pid}, {"$set": {"account_status": "active", "revoked": False, "unsuspended_at": now}, "$unset": {"ban_reason": "", "suspended_until": ""}})
@@ -2004,7 +2111,8 @@ def export_players_csv():
     writer.writerow(["ID", "Name", "Email", "Status", "Role", "Honour Score", "MFA Enabled", "Created At"])
 
     players = users.find(
-        {"role": {"$nin": ["admin", "normal_admin", "demo_admin", "super_admin"]}},
+        {"role": {"$nin": ["admin", "normal_admin", "demo_admin", "super_admin"]},
+         "$nor": [NON_LIVE_ACCOUNTS]},
         {"name": 1, "email": 1, "account_status": 1, "revoked": 1, "role": 1, "honour_score": 1, "mfa_enabled": 1, "created_at": 1}
     ).sort("created_at", -1)
 
@@ -2035,18 +2143,20 @@ def export_sessions_csv():
     writer = csv.writer(output)
     writer.writerow(["Session ID", "Player Name", "Game", "Started At", "Risk Score", "Category", "Status"])
 
-    sessions_list = game_sessions.find().sort("created_at", -1).limit(500)
+    sessions_list = list(game_sessions.find(live_records()).sort("created_at", -1).limit(500))
+    names = account_names(row.get("user_id") or row.get("player_id") for row in sessions_list)
     for s in sessions_list:
-        risk = s.get("risk_score")
-        cat = classify_risk_score(risk)["category"] if risk is not None else "Normal"
+        risk = clamp_risk_score(s.get("risk_score"))
+        owner = str(s.get("user_id") or s.get("player_id"))
+        cat = (s.get("risk_category") or classify_risk_score(risk)["category"]) if risk is not None else "Unavailable"
         writer.writerow([
             s.get("session_id", str(s["_id"])),
-            s.get("player_name", "Operator"),
-            s.get("game", "CyberStrike 3D"),
+            names.get(owner),
+            s.get("game"),
             format_iso(s.get("started_at") or s.get("created_at")),
             risk if risk is not None else "N/A",
             cat,
-            s.get("status", "completed")
+            s.get("status")
         ])
 
     return Response(
@@ -2063,7 +2173,7 @@ def export_audit_log_csv():
     writer = csv.writer(output)
     writer.writerow(["Timestamp", "Admin Email", "Action", "Target User ID", "Details"])
 
-    logs = admin_audit_log.find().sort("timestamp", -1).limit(500)
+    logs = admin_audit_log.find(live_audit_query()).sort("timestamp", -1).limit(500)
     for l in logs:
         writer.writerow([
             format_iso(l.get("timestamp")),
@@ -2086,17 +2196,32 @@ def list_recent_logins():
     offset = max(0, request.args.get("offset", 0, type=int))
     role_filter = request.args.get("role", "player").strip().lower()
 
-    query = {}
-    if role_filter in {"player", "admin"}:
-        admin_roles = ["admin", "normal_admin", "super_admin", "demo_admin"]
-        role = "player" if role_filter == "player" else {"$in": admin_roles}
-        accounts = list(users.find({"role": role}, {"_id": 1, "email": 1}))
-        account_ids = [value for account in accounts for value in (account["_id"], str(account["_id"]))]
-        emails = [account["email"].lower() for account in accounts if account.get("email")]
+    scope = request.args.get("account_type", "all")
+    accounts_query = {"$and": [administrative_accounts(scope)], "account_status": {"$ne": "deleted"}}
+    if role_filter == "player":
+        accounts_query["role"] = {"$in": PLAYER_ROLES}
+    elif role_filter == "admin":
+        accounts_query["role"] = {"$in": ["admin", "normal_admin", "super_admin", "demo_admin"]}
+    accounts = list(users.find(accounts_query, {"_id": 1, "email": 1, "username": 1}))
+    ids = [value for account in accounts for value in (account["_id"], str(account["_id"]))]
+    identifiers = {
+        value.casefold(): str(account["_id"])
+        for account in accounts for value in (account.get("email"), account.get("username")) if value
+    }
+    query = {"$or": [
+        {"user_id": {"$in": ids}},
+        {"user_id": None, "player_id": {"$in": ids}},
+        {"user_id": None, "player_id": None, "identifier": {"$in": list(identifiers)}},
+    ]}
+    if request.args.get("player_id"):
+        selected = request.args["player_id"]
+        selected_ids = [value for value in ids if str(value) == selected]
         query["$or"] = [
-            {"user_id": {"$in": account_ids}},
-            {"identifier": {"$in": emails}},
+            {"user_id": {"$in": selected_ids}},
+            {"user_id": None, "player_id": {"$in": selected_ids}},
+            {"user_id": None, "player_id": None, "identifier": {"$in": [key for key, uid in identifiers.items() if uid == selected]}},
         ]
+    demo_ids = demo_account_ids()
 
     docs = list(login_history.find(query).sort("created_at", -1).skip(offset).limit(limit))
     user_ids = {ObjectId(d["user_id"]) for d in docs if ObjectId.is_valid(d.get("user_id"))}
@@ -2108,7 +2233,7 @@ def list_recent_logins():
 
     formatted = []
     for d in docs:
-        uid = d.get("user_id")
+        uid = owner_id(d) or identifiers.get(str(d.get("identifier") or "").casefold())
         pname = user_map.get(uid, user_map.get(str(uid) if uid else None, d.get("identifier", "Player")))
         ip = d.get("ip_address") or "Unknown"
         status = d.get("status")
@@ -2129,6 +2254,7 @@ def list_recent_logins():
         formatted.append({
             "id": str(d["_id"]),
             "user_id": str(uid) if uid else "",
+            "is_demo": uid in demo_ids,
             "player_name": pname,
             "identifier": d.get("identifier", ""),
             "status": "success" if is_succ else ("failed" if status == "failed" or d.get("type") == "login_failed" else "unknown"),
@@ -2140,7 +2266,7 @@ def list_recent_logins():
             "time": format_iso(d.get("created_at"))
         })
 
-    target_role_query = {"role": role} if role_filter in {"player", "admin"} else {}
+    target_role_query = accounts_query
 
     accounts_list = []
     for u in users.find({**target_role_query, "account_status": {"$ne": "deleted"}}).sort("created_at", 1):
@@ -2159,11 +2285,12 @@ def list_recent_logins():
         )
         accounts_list.append({
             "id": str(u_id),
-            "name": u.get("name") or u_email.split("@")[0],
+            "name": u.get("username") or u.get("name") or u_email.split("@")[0],
             "email": u.get("email"),
             "role": u.get("role", "player"),
-            "honour_score": u.get("honour_score", 100),
-            "risk_score": round(float(u.get("risk_score") or 0), 2),
+            "is_demo": str(u_id) in demo_ids,
+            "honour_score": u.get("honour_score"),
+            "risk_score": clamp_risk_score(u.get("risk_score")),
             "mfa_enabled": bool(u.get("mfa_enabled")),
             "account_status": u.get("account_status", "active"),
             "login_count": cnt,
@@ -2188,25 +2315,15 @@ def server_health():
     database_counts = {"total_users": None, "total_sessions": None, "completed_matches": None}
     try:
         db.command("ping")
+        live = live_records()
         database_counts = {
             "total_users": users.count_documents({
-                "role": "player",
+                "role": {"$in": PLAYER_ROLES},
                 "account_status": {"$ne": "deleted"},
-                "email": {"$not": {"$regex": r"(@example\.com|@test\.local|@example\.test|@test\.com|@test\.lan|@securefps\.local|@deleted\.securefps\.local)"}},
-                "name": {"$not": {"$regex": r"^(Test Player|Test Soldier|Demo Player|Deleted Player)"}}
+                "$and": [administrative_accounts("all")],
             }),
-            "total_sessions": game_sessions.count_documents({}),
-            "completed_matches": len({
-                sid for sid in (
-                    set(game_sessions.distinct("session_id", {"status": "completed"}))
-                    | set(matches.distinct("session_id"))
-                    | set(game_telemetry.distinct("session_id", {"event_type": "game_completed"}))
-                ) if sid
-            }) + game_sessions.count_documents({
-                "status": "completed", "$or": [{"session_id": {"$exists": False}}, {"session_id": None}]
-            }) + matches.count_documents({
-                "$or": [{"session_id": {"$exists": False}}, {"session_id": None}]
-            })
+            "total_sessions": game_sessions.count_documents(live),
+            "completed_matches": len(live_completed_matches(live)),
         }
         db_ok = True
     except Exception:
@@ -2353,13 +2470,17 @@ def acknowledge_security_event(event_id):
 @admin_bp.get("/anticheat/decisions")
 def get_anticheat_decisions():
     metadata = deployed_model_metadata(active_model_version())
+    scope = request.args.get("account_type", "all")
+    demo_ids = demo_account_ids()
     # High risk sessions in need of review or recently reviewed
     flagged_sessions = list(
-        game_sessions.find({"risk_score": {"$gte": 50}})
+        game_sessions.find({**monitoring_records(scope=scope), "risk_score": {"$gte": 50},
+                            "admin_review_status": {"$nin": CLEARED_REVIEWS}})
         .sort("created_at", -1)
         .limit(30)
     )
 
+    names = account_names(owner_id(row) for row in flagged_sessions)
     results = []
     for s in flagged_sessions:
         sid = s.get("session_id", str(s["_id"]))
@@ -2367,8 +2488,9 @@ def get_anticheat_decisions():
         raw_feat = ana.get("raw_features") or {}
         results.append({
             "session_id": sid,
-            "player_id": str(s.get("user_id", "")),
-            "player_name": s.get("player_name", "Operator"),
+            "player_id": owner_id(s),
+            "player_name": names.get(owner_id(s)) or "Account unavailable",
+            "is_demo": owner_id(s) in demo_ids,
             "risk_score": s.get("risk_score"),
             "risk_category": classify_risk_score(s.get("risk_score"))["category"],
             "model_version": ana.get("model_version"),
@@ -2387,7 +2509,22 @@ def get_anticheat_decisions():
             "created_at": format_iso(s.get("started_at") or s.get("created_at"))
         })
 
+    evidence = list(security_events.find({"$and": [
+        monitoring_records(scope=scope), anti_cheat_events(),
+    ]}).sort([("created_at", -1), ("_id", -1)]).limit(30))
+    evidence_names = account_names(owner_id(event) for event in evidence)
     return jsonify({
+        "detections": [{
+            "player_id": owner_id(event),
+            "player_name": evidence_names.get(owner_id(event)) or event.get("player_name"),
+            "session_id": event.get("session_id"),
+            "is_demo": owner_id(event) in demo_ids or bool(event.get("is_demo") or event.get("demo")),
+            "violation": determine_security_incident_label(event),
+            "source": detection_source(event),
+            "reason": event.get("description") or event.get("alert_reason") or event.get("reason"),
+            "risk_score": event.get("risk_score"),
+            "created_at": format_iso(event.get("created_at")),
+        } for event in evidence],
         "model_metadata": metadata,
         "flagged_sessions": results,
         "can_finalize_review": has_operational_permission(current_admin(), "alerts:review", write=True)
@@ -2406,6 +2543,11 @@ def get_demo_cheater_status():
     - Server-verified hard-rule violations
     Accessible by Admin and Super Admin.
     """
+    from routes.game_routes import demo_runtime_enabled
+
+    if not demo_runtime_enabled():
+        return jsonify({"account": None, "active_session": None, "alerts": []})
+
     demo_user = users.find_one(
         {"$or": [{"username": "cheater_demo"}, {"email": "cheater_demo@example.test"}]},
         {"password_hash": 0, "mfa_secret": 0}
@@ -2426,37 +2568,18 @@ def get_demo_cheater_status():
             "updated_at": format_iso(demo_user.get("updated_at")),
         }
 
-    # Find currently active demo session or latest demo session
+    # The demo view shows events from the designated account's latest demo run.
     demo_uid = demo_user["_id"] if demo_user else None
-    active_session_doc = None
-    if demo_uid:
-        active_session_doc = game_sessions.find_one({
-            "$or": [
-                {"user_id": demo_uid, "status": "active"},
-                {"demo_mode": True, "status": "active"},
-                {"is_demo": True, "status": "active"},
-            ]
-        }, sort=[("started_at", -1)])
-
-    latest_session_doc = None
-    if demo_uid:
-        latest_session_doc = game_sessions.find_one({
-            "$or": [
-                {"user_id": demo_uid},
-                {"demo_mode": True},
-                {"is_demo": True},
-            ]
-        }, sort=[("started_at", -1)])
-
-    # Recent security alerts where is_demo: true
+    demo_sessions = {
+        "user_id": {"$in": [demo_uid, str(demo_uid)]},
+        "$or": [{"is_demo": True}, {"demo": True}, {"demo_mode": True}],
+    }
+    latest_session_doc = game_sessions.find_one(demo_sessions, sort=[("started_at", -1)]) if demo_uid else None
+    active_session_doc = latest_session_doc if latest_session_doc and latest_session_doc.get("status") == "active" else None
+    session_id = (latest_session_doc or {}).get("session_id")
     alerts_cursor = security_events.find({
-        "$or": [
-            {"is_demo": True},
-            {"demo": True},
-            {"environment": "DEMONSTRATION"},
-            {"player_name": "cheater_demo"},
-        ]
-    }).sort("created_at", -1).limit(40)
+        "session_id": session_id, "$or": [{"is_demo": True}, {"demo": True}],
+    }).sort("created_at", -1).limit(40) if session_id else []
 
     alerts_list = []
     violation_counts = {"total": 0, "impossible_hit": 0, "abnormal_speed": 0, "abnormal_fire_rate": 0}
@@ -2470,7 +2593,7 @@ def get_demo_cheater_status():
             "observed_value": a.get("observed_value", "—"),
             "allowed_value": a.get("allowed_value", "—"),
             "evidence": a.get("evidence", {}),
-            "source": a.get("source", "Server-verified demo event"),
+            "source": a.get("source"),
             "environment": a.get("environment", "DEMONSTRATION"),
             "player_name": a.get("player_name", "cheater_demo"),
             "session_id": a.get("session_id") or a.get("demo_session_id"),
@@ -2482,12 +2605,9 @@ def get_demo_cheater_status():
 
     # Latest ML analysis for demo session
     latest_analysis_doc = game_events.find_one({
-        "$or": [
-            {"demo": True, "analysis_type": "game_session"},
-            {"is_demo": True, "analysis_type": "game_session"},
-            {"user_id": demo_uid, "analysis_type": "game_session"} if demo_uid else {"_id": None},
-        ]
-    }, sort=[("created_at", -1)])
+        "session_id": session_id, "user_id": {"$in": [demo_uid, str(demo_uid)]},
+        "analysis_type": "game_session",
+    }, sort=[("created_at", -1)]) if session_id else None
 
     analysis_info = None
     if latest_analysis_doc:
@@ -2613,6 +2733,37 @@ def audit_display_details(details):
     return {key: value for key, value in details.items() if key in visible and isinstance(value, (str, bool, int, float))}
 
 
+def live_audit_query():
+    # Older integration tests wrote audit rows using the real admin identity.
+    # Match the exact test messages so audit history stays intact.
+    fixture_messages = [
+        "Observed erratic flick speed in round 4, flag for further review.",
+        "Excessive packet jitter detected during competitive match.",
+        "Operational safety rollback test.", "Routine security rotation check.",
+        "Test incident resolved successfully.", "Player requested GDPR account erasure",
+        "Aimbot detection verified by telemetry review", "Rapid flick detection telemetry flagged",
+        "Replay verified as high sensitivity mouse, account restored.",
+        "Toxic behavior in match voice chat", "Repeated wallhack and speedhack telemetry flags",
+        "Verified telemetry and aim flick distributions",
+    ]
+    fixture_email = {"$regex": NON_LIVE_EMAIL, "$options": "i"}
+    fixture_targets = admin_audit_log.distinct("target_user_id", {
+        "$or": [{"details.created_email": fixture_email}, {"details.deleted_email": fixture_email}],
+    })
+    excluded = non_live_ids() + [value for target in fixture_targets if ObjectId.is_valid(target)
+                                 for value in (ObjectId(target), str(target))]
+    exclusion = {"$nor": [
+        {"admin_email": fixture_email}, {"target_user_id": {"$in": excluded}},
+        *[{f"details.{key}": {"$in": fixture_messages}} for key in ("reason", "note", "ban_reason", "warning_message")],
+    ]}
+    live_targets = {"$or": [
+        {"target_user_id": {"$in": account_ids({"$nor": [NON_LIVE_ACCOUNTS]})}},
+        {"target_user_id": {"$in": [None, ""]}},
+        {"details.deleted_email": {"$type": "string", "$not": fixture_email}},
+    ]}
+    return {"$and": [exclusion, live_targets]}
+
+
 @admin_bp.get("/audit-log")
 def get_audit_log():
     limit = max(1, min(request.args.get("limit", 50, type=int), 100))
@@ -2621,7 +2772,15 @@ def get_audit_log():
     admin_filter = (request.args.get("admin") or "").strip()[:160]
     search = (request.args.get("q") or "").strip()[:160]
 
-    query = {}
+    scope = request.args.get("account_type", "all")
+    demo_targets = {"target_user_id": {"$in": account_ids(DEMO_ACCOUNT)}}
+    live_audit = live_audit_query()
+    if scope == "demo":
+        live_audit = demo_targets
+    elif scope != "player":
+        live_audit = {"$or": [live_audit, demo_targets]}
+    demo_ids = demo_account_ids()
+    query = {"$and": [live_audit]}
     if action_filter:
         query["action"] = action_filter
     if admin_filter:
@@ -2629,6 +2788,10 @@ def get_audit_log():
     if search:
         literal = {"$regex": re.escape(search), "$options": "i"}
         query["$or"] = [{field: literal} for field in ("action", "admin_email", "details.reason", "details.note")]
+        matched_accounts = users.find({"$or": [{"username": literal}, {"name": literal}]}, {"_id": 1}).limit(100)
+        target_ids = [value for row in matched_accounts for value in (row["_id"], str(row["_id"]))]
+        if target_ids:
+            query["$or"].append({"target_user_id": {"$in": target_ids}})
         if ObjectId.is_valid(search):
             query["$or"].append({"target_user_id": {"$in": [search, ObjectId(search)]}})
     date_filter = {}
@@ -2645,15 +2808,50 @@ def get_audit_log():
     severity = request.args.get("severity")
     if severity in {"low", "medium", "high", "critical"}:
         query["details.severity"] = severity
+    result_filter = (request.args.get("result") or "").strip().lower()
+    if result_filter == "success":
+        query["$and"].append({"$or": [{"details.result": {"$regex": "success|ok|approved|completed", "$options": "i"}}, {"details.status": {"$regex": "success|ok|approved|completed", "$options": "i"}}]})
+    elif result_filter == "failed":
+        query["$and"].append({"$or": [{"details.result": {"$regex": "fail|error|denied|reject", "$options": "i"}}, {"details.status": {"$regex": "fail|error|denied|reject", "$options": "i"}}]})
 
     total = admin_audit_log.count_documents(query)
     logs = list(admin_audit_log.find(query).sort([("timestamp", -1), ("_id", -1)]).skip(offset).limit(limit))
+
+    names = account_names(l.get("target_user_id") for l in logs)
+    actor_ids = [ObjectId(str(l["admin_id"])) for l in logs if ObjectId.is_valid(str(l.get("admin_id") or ""))]
+    actor_docs = {
+        str(u["_id"]): {
+            "name": u.get("username") or u.get("name") or u.get("email"),
+            "role": u.get("role") or "admin",
+        }
+        for u in users.find({"_id": {"$in": actor_ids}}, {"username": 1, "name": 1, "email": 1, "role": 1})
+    }
+
+    def target_name(row):
+        details = row.get("details") or {}
+        saved_name = (details.get("target_name") or details.get("deleted_name") or details.get("created_name")) if isinstance(details, dict) else None
+        if not row.get("target_user_id") and not saved_name:
+            return "Entire platform"
+        return names.get(str(row.get("target_user_id"))) or saved_name or "Account not recorded"
+
+    def actor_display(row):
+        aid = str(row.get("admin_id") or "")
+        if aid in actor_docs and actor_docs[aid]["name"]:
+            return actor_docs[aid]["name"], actor_docs[aid]["role"]
+        email = (row.get("admin_email") or "").strip()
+        if not email or email.lower() in ("system", "securefps"):
+            return "SecureFPS System", "system"
+        return email, "admin"
 
     return jsonify({
         "audit_logs": [
             {
                 "id": str(l["_id"]),
                 "admin_email": l.get("admin_email"),
+                "admin_name": actor_display(l)[0],
+                "admin_role": actor_display(l)[1],
+                "target_name": target_name(l),
+                "is_demo": str(l.get("target_user_id")) in demo_ids,
                 "target_user_id": str(l.get("target_user_id", "")),
                 "action": l.get("action"),
                 "details": audit_display_details(l.get("details")),
@@ -2662,7 +2860,7 @@ def get_audit_log():
             for l in logs
         ],
         "total": total,
-        "actions": sorted(action for action in admin_audit_log.distinct("action") if isinstance(action, str) and action),
+        "actions": sorted(action for action in admin_audit_log.distinct("action", live_audit) if isinstance(action, str) and action),
         "limit": limit,
         "offset": offset
     })
@@ -2797,9 +2995,21 @@ def record_investigation_note(player_id):
 @admin_bp.get("/threats")
 def get_threat_monitoring():
     """Normal Admin & Super Admin: Real-time active threats and suspicious activity."""
-    # 1. High risk players (risk >= 65)
+    live = live_records()
+    demo_cheater_doc = users.find_one({"$or": [{"username": "cheater_demo"}, {"email": "cheater_demo@example.test"}]}, {"_id": 1})
+    demo_cheater_ids = [demo_cheater_doc["_id"], str(demo_cheater_doc["_id"])] if demo_cheater_doc else []
+
+    # 1. High risk players (risk >= 65), including cheater_demo
     high_risk_cursor = users.find(
-        {"role": "player", "risk_score": {"$gte": 65}},
+        {
+            "role": "player",
+            "risk_score": {"$gte": 65},
+            "$or": [
+                {"$nor": [NON_LIVE_ACCOUNTS]},
+                {"username": "cheater_demo"},
+                {"email": "cheater_demo@example.test"},
+            ],
+        },
         {"name": 1, "email": 1, "risk_score": 1, "account_status": 1}
     ).limit(15)
     high_risk_players = [
@@ -2816,7 +3026,8 @@ def get_threat_monitoring():
     # 2. Suspicious Logins
     suspicious_logins = list(
         login_history.find(
-            {"$or": [{"status": "failed"}, {"risk": "High"}]},
+            {**live_records(allow_system=True), "identifier": {"$not": {"$regex": NON_LIVE_EMAIL, "$options": "i"}},
+             "$or": [{"status": "failed"}, {"risk": "High"}]},
             {"identifier": 1, "player_name": 1, "ip_address": 1, "device": 1, "created_at": 1, "reason": 1}
         ).sort("created_at", -1).limit(10)
     )
@@ -2824,17 +3035,12 @@ def get_threat_monitoring():
     # 3. Repeated anti-cheat violators. Keep this list aligned with the
     # violations inspection endpoint; counting unrelated security events here
     # produced rows whose View action legitimately had no anti-cheat records.
-    anti_cheat_types = [
-        "gameplay_anomaly", "gameplay_alert", "hard_rule_violation", "impossible_hit",
-        "abnormal_fire_rate", "abnormal_speed", "movement_anomaly", "aim_anomaly", "headshot_anomaly",
-    ]
+    scope = request.args.get("account_type", "all")
+    demo_ids = demo_account_ids()
     repeated_counts = {}
-    for event in security_events.find({
-        "$and": [
-            {"$or": [{"event_type": {"$in": anti_cheat_types}}, {"type": {"$in": anti_cheat_types}}]},
-            {"$or": [{"user_id": {"$ne": None}}, {"player_id": {"$ne": None}}]},
-        ],
-    }, {"user_id": 1, "player_id": 1}):
+    for event in security_events.find({"$and": [
+        monitoring_records(scope=scope), anti_cheat_events(),
+    ]}, {"user_id": 1, "player_id": 1}):
         raw_uid = event.get("user_id") or event.get("player_id")
         if raw_uid is None:
             continue
@@ -2845,7 +3051,7 @@ def get_threat_monitoring():
         repeated_counts[normalized] = repeated_counts.get(normalized, 0) + 1
 
     repeated = sorted(
-        ((uid, count) for uid, count in repeated_counts.items() if count >= 2),
+        repeated_counts.items(),
         key=lambda item: item[1],
         reverse=True,
     )[:10]
@@ -2860,12 +3066,26 @@ def get_threat_monitoring():
             pass
         u = users.find_one(user_lookup, {"name": 1, "email": 1, "risk_score": 1})
         if u:
+            resolved_risk = u.get("risk_score")
+            if resolved_risk is None or resolved_risk == 0:
+                latest_ge = game_events.find_one(
+                    {"user_id": u["_id"], "analysis_type": "game_session", "risk_score": {"$ne": None}},
+                    {"risk_score": 1},
+                    sort=[("created_at", -1)],
+                )
+                latest_gs = game_sessions.find_one(
+                    {"user_id": u["_id"], "risk_score": {"$ne": None}},
+                    {"risk_score": 1},
+                    sort=[("created_at", -1)],
+                ) if not latest_ge else None
+                resolved_risk = (latest_ge or latest_gs or {}).get("risk_score", 0)
             violator_list.append({
                 "id": str(u["_id"]),
                 "name": u.get("name") or u.get("email") or "Operator",
                 "email": u.get("email"),
                 "violations": count,
-                "risk_score": u.get("risk_score", 0)
+                "is_demo": uid in demo_ids,
+                "risk_score": round(float(resolved_risk or 0), 2)
             })
 
     total_active_threats = len(high_risk_players) + len(violator_list)
@@ -2891,22 +3111,23 @@ def get_threat_monitoring():
 @admin_bp.get("/analytics/reports")
 def get_analytics_reports():
     """Normal Admin & Super Admin: Summary reports and security trend analytics."""
-    total_players = users.count_documents({"role": "player", "account_status": {"$ne": "deleted"}})
-    active_players = users.count_documents({"role": "player", "account_status": "active"})
-    suspended_players = users.count_documents({"role": "player", "account_status": "suspended"})
-    banned_players = users.count_documents({"role": "player", "account_status": "banned"})
+    players = {"role": "player", "$nor": [NON_LIVE_ACCOUNTS]}
+    live = live_records()
+    total_players = users.count_documents({**players, "account_status": {"$ne": "deleted"}})
+    active_players = users.count_documents({**players, "account_status": "active"})
+    suspended_players = users.count_documents({**players, "account_status": "suspended"})
+    banned_players = users.count_documents({**players, "account_status": "banned"})
 
-    total_matches = game_sessions.count_documents({"status": "completed"})
-    analyzed_sessions = game_events.count_documents({"analysis_type": "game_session"})
-    flagged_sessions = game_events.count_documents({"analysis_type": "game_session", "risk_score": {"$gte": 70}})
-
-    # False positive calculations based on resolved appeals
-    total_appeals = ban_appeals.count_documents({"status": {"$in": ["approved", "rejected"]}})
-    approved_appeals = ban_appeals.count_documents({"status": "approved"})
+    total_matches = len(live_completed_matches(live))
+    analyzed_sessions = game_events.count_documents({**live, "analysis_type": "game_session", "risk_score": {"$type": "number"}})
+    flagged_sessions = game_events.count_documents({**live, "analysis_type": "game_session", "risk_score": {"$gte": 70}})
+    total_appeals = ban_appeals.count_documents({**live, "status": {"$in": ["approved", "rejected"]}})
+    approved_appeals = ban_appeals.count_documents({**live, "status": "approved"})
+    system_live = live_records(allow_system=True)
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     trend_dates = [today - timedelta(days=n) for n in range(6, -1, -1)]
     trend_counts = [
-        security_events.count_documents({"created_at": {"$gte": day, "$lt": day + timedelta(days=1)}})
+        security_events.count_documents({**system_live, "created_at": {"$gte": day, "$lt": day + timedelta(days=1)}})
         for day in trend_dates
     ]
 
@@ -2927,7 +3148,7 @@ def get_analytics_reports():
         "false_positive_metrics": {
             "total_appeals_reviewed": total_appeals,
             "false_positives_overturned": approved_appeals,
-            "model_precision_estimate": round((1.0 - (approved_appeals / total_appeals)) * 100, 1) if total_appeals > 0 else 97.6
+            "model_precision_estimate": round((1.0 - (approved_appeals / total_appeals)) * 100, 1) if total_appeals > 0 else None
         },
         "trend_days": [day.strftime("%a %d") for day in trend_dates],
         "trend_events": trend_counts
@@ -2944,7 +3165,7 @@ def get_analytics_reports():
 def list_super_admins():
     """Super Admin: View all administrator accounts with live session counts."""
     admin_cursor = users.find(
-        {"role": {"$in": ["admin", "normal_admin", "super_admin", "demo_admin"]}},
+        {"role": {"$in": ["admin", "normal_admin", "super_admin"]}, "$nor": [NON_LIVE_ACCOUNTS]},
         {"password_hash": 0, "mfa_secret": 0}
     ).sort("created_at", -1)
 
@@ -3462,6 +3683,7 @@ def get_security_command_status():
 
     recent_critical = list(
         security_events.find({
+            **monitoring_records(allow_system=True),
             "$or": [
                 {"severity": "high"},
                 {"type": {"$in": ["gameplay_anomaly", "hard_rule_violation", "account_suspended"]}}
@@ -3562,7 +3784,7 @@ def get_security_command_status():
         "lockdown_at": format_iso(policies.get("lockdown_at")),
         "lockdown_by": policies.get("lockdown_initiated_by", ""),
         "maintenance_mode": bool(policies.get("maintenance_mode")),
-        "critical_events_count": security_events.count_documents({"severity": "high"}),
+        "critical_events_count": security_events.count_documents({**live_records(allow_system=True), "severity": "high"}),
         "recent_critical_incidents": incidents_list
     })
 
@@ -3774,40 +3996,146 @@ def update_platform_config():
 
 @admin_bp.get("/rewards/shop")
 def reward_shop_review():
-    import re
-    from routes.player_routes import REWARD_STORE
+    from routes.player_routes import REWARD_STORE, profile_avatar
+    from services.admin_reward_activity import (
+        CATEGORIES, load_reward_activity, load_reward_player_totals, reward_date_bounds,
+    )
     from services.reward_catalog import reward_catalog
 
-    search = request.args.get("q", "").strip()[:120]
-    condition = {"description": {"$regex": re.escape(search), "$options": "i"}} if search else {}
-    rows = list(reward_transactions.find(condition).sort("created_at", -1).limit(40))
-    for field in ("purchase_history", "adjustments"):
-        rows.extend(users.aggregate([
-            {"$project": {"entries": f"$rewards.{field}"}},
-            {"$unwind": "$entries"},
-            {"$set": {"entries.user_id": "$_id"}},
-            {"$replaceRoot": {"newRoot": "$entries"}},
-            {"$match": condition},
-            {"$sort": {"created_at": -1}},
-            {"$limit": 40},
-        ]))
-    rows.sort(key=lambda row: format_iso(row.get("created_at")) or "", reverse=True)
-    pending = game_sessions.find(
-        {"reward_credit.status": {"$in": ["failed", "pending"]}},
-        {"session_id": 1, "user_id": 1, "reward_credit.status": 1},
-    ).sort("started_at", -1).limit(40)
+    view = request.args.get("view", "")
+    account_type = request.args.get("account_type", "all")
+    search = request.args.get("q", "").strip().casefold()[:120]
+    player_filter = request.args.get("player_id", "").strip()
+    category = request.args.get("category", "all").strip().lower()
+    if category == "reward":
+        category = "other"
+    if category not in (*CATEGORIES, "all", "other"):
+        return jsonify({"message": "Choose a valid transaction category."}), 400
+    try:
+        dates = reward_date_bounds(request.args.get("date_from"), request.args.get("date_to"))
+    except (ValueError, OverflowError):
+        return jsonify({"message": "Choose a valid date range in IST."}), 400
+    page = min(2_000_000_000, max(1, request.args.get("page", 1, type=int)))
+    requested_limit = request.args.get("limit", 10, type=int)
+    limit = requested_limit if requested_limit in (10, 25, 50) else 10
+
+    user_query = {"role": {"$in": ["player", "demo_player"]}, "account_status": {"$ne": "deleted"}}
+    if view == "history":
+        if not player_filter:
+            return jsonify({"message": "Choose a player to see their transaction history."}), 400
+        keys = [player_filter, ObjectId(player_filter)] if ObjectId.is_valid(player_filter) else [player_filter]
+        user_query["_id"] = {"$in": keys}
+    valid_users = list(users.find(
+        user_query,
+        {"username": 1, "name": 1, "email": 1, "demo": 1, "is_demo": 1, "role": 1,
+         "profile_customization.avatar": 1, "profile_customization.avatar_url": 1},
+    ))
+    user_map = {}
+    matching_players = []
+    for user in valid_users:
+        player_id = str(user["_id"])
+        username = user.get("username")
+        name = username or user.get("name") or user.get("email") or "Player"
+        user_map[player_id] = {
+            "name": name, "username": username,
+            "is_demo": bool(user.get("demo") or user.get("is_demo") or user["role"] == "demo_player"
+                            or username == "cheater_demo" or user.get("email") == "cheater_demo@example.test"),
+            "avatar": profile_avatar(user.get("profile_customization") or {})["src"],
+        }
+        if search and any(search in str(value or "").casefold()
+                          for value in (username, user.get("name"), user.get("email"))):
+            matching_players.append(player_id)
+    player_options = sorted(
+        ({"id": key, "name": info["name"], "is_demo": info["is_demo"]} for key, info in user_map.items()),
+        key=lambda option: option["name"].casefold(),
+    )
+    valid_uid_values = [user["_id"] for user in valid_users] + list(user_map)
+    player_groups = []
+    if view == "players":
+        if account_type not in ("player", "demo", "all"):
+            return jsonify({"message": "Choose a valid account type."}), 400
+        visible = [option for option in player_options
+                   if (account_type == "all" or option["is_demo"] == (account_type == "demo"))]
+        visible_ids = {option["id"] for option in visible}
+        totals = load_reward_player_totals(
+            [value for value in valid_uid_values if str(value) in visible_ids],
+        )
+        zero = dict.fromkeys(("transactions", "coins_distributed", "coins_spent", "xp_awarded", "honour_earned"), 0)
+        summary = {
+            **{key: sum(row[key] for row in totals.values()) for key in
+               ("coins_distributed", "coins_spent", "xp_awarded")},
+            "recipients": sum(any(row[key] for key in ("coins_distributed", "xp_awarded", "honour_earned"))
+                              for row in totals.values()),
+        }
+        player_groups = [
+            {"id": option["id"], **user_map[option["id"]], **totals.get(option["id"], zero)}
+            for option in visible if not search or option["id"] in matching_players
+        ]
+        total = len(player_groups)
+        pages = max(1, (total + limit - 1) // limit)
+        page = min(page, pages)
+        player_groups = player_groups[(page - 1) * limit:page * limit]
+        rows = []
+    else:
+        rows, summary, total, page, pages = load_reward_activity(
+            valid_uid_values, player_filter or None, matching_players, search, category, dates, page, limit,
+        )
+    page_rows = []
+    for row in rows:
+        player_id = row["player"]
+        player = user_map[player_id]
+        created = row.get("created_at")
+        page_rows.append({
+            "id": f"{player_id}:{row['source']}:{row['record_key']}",
+            "player": player_id,
+            "player_name": player["name"],
+            "username": player["username"],
+            "avatar": player["avatar"],
+            "is_demo": player["is_demo"],
+            "type": row.get("type") or row["category"],
+            "category": row["category"],
+            "description": row.get("description"),
+            "coins": row.get("coins"),
+            "xp": row.get("xp"),
+            "honour": row.get("honour"),
+            "created_at": created.replace(tzinfo=timezone.utc).isoformat() if created else None,
+            "details": {
+                "match": str(row["session_id"]) if row.get("session_id") else None,
+                "item": str(row["item_id"]) if row.get("item_id") else None,
+            },
+        })
+
+    if view == "history":
+        if player_filter not in user_map:
+            return jsonify({"message": "Player account unavailable."}), 404
+        return jsonify({"transactions": page_rows, "total": total, "page": page, "pages": pages, "limit": limit})
+
+    pending = [
+        row for row in game_sessions.find(
+            {"user_id": {"$in": valid_uid_values}, "reward_credit.status": {"$in": ["failed", "pending"]}},
+            {"session_id": 1, "user_id": 1, "reward_credit.status": 1},
+        ).sort("started_at", -1).limit(40)
+        if str(row.get("user_id")) in user_map
+    ]
+
     return jsonify({
         "can_manage": current_admin().get("role") != "demo_admin" and (
             current_admin().get("role") == "super_admin" or current_admin().get("is_super_admin") is True
         ),
         "items": [{"id": key, **item} for key, item in reward_catalog(REWARD_STORE).items()],
-        "transactions": [{
-            "player": str(row.get("user_id", "")), "type": row.get("type"),
-            "description": row.get("description"), "coins": row.get("coins", 0),
-            "xp": row.get("xp", 0), "created_at": format_iso(row.get("created_at")),
-        } for row in rows[:40]],
+        "players": player_options,
+        "player_groups": player_groups,
+        "transactions": page_rows,
+        "summary": summary,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": pages,
         "pending": [{
-            "id": str(row["_id"]), "session_id": row.get("session_id"), "player": str(row["user_id"]),
+            "id": str(row["_id"]),
+            "session_id": row.get("session_id"),
+            "player": str(row["user_id"]),
+            "player_name": user_map[str(row["user_id"])]["name"],
             "status": row["reward_credit"]["status"],
         } for row in pending],
     })

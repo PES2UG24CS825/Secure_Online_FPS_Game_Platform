@@ -448,12 +448,38 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
   const hudOpName = document.getElementById('hud-operator-name');
   if (hudOpName) hudOpName.textContent = savedName.toUpperCase();
 
+  const isDemoCallsign = (name) => {
+    const s = String(name || '').toLowerCase();
+    return s.includes('cheater') || s.includes('demo');
+  };
+
+  // Global F8 shortcut to toggle Cheater Demo Panel & ensure initialization
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'F8' || e.code === 'F8') {
+      e.preventDefault();
+      const panel = document.getElementById('demo-cheater-panel');
+      if (panel) {
+        const isHidden = (panel.style.display === 'none' || !panel.style.display);
+        initDemoControlPanel({ showPanel: false });
+        panel.style.display = isHidden ? 'block' : 'none';
+        if (isHidden && document.pointerLockElement && document.exitPointerLock) {
+          try { document.exitPointerLock(); } catch (_) {}
+        }
+      } else {
+        initDemoControlPanel();
+      }
+    }
+  });
+
   if (playerNameInput) {
     playerNameInput.addEventListener('input', () => {
       const val = playerNameInput.value.trim();
       if (val) {
         sessionStorage.setItem('securefps_player_name', val);
         if (hudOpName) hudOpName.textContent = val.toUpperCase();
+        if (isDemoCallsign(val)) {
+          initDemoControlPanel();
+        }
       }
     });
   }
@@ -475,6 +501,9 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
           if (playerNameInput) playerNameInput.value = data.name;
           const hudOpName = document.getElementById('hud-operator-name');
           if (hudOpName) hudOpName.textContent = data.name.toUpperCase();
+          if (isDemoCallsign(data.name)) {
+            initDemoControlPanel();
+          }
         }
         if (data && typeof data.honour_score === 'number') {
           window.localPlayerHonour = data.honour_score;
@@ -501,11 +530,80 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
   }
   syncAuthenticatedProfile();
 
-  function initDemoControlPanel() {
-    const panel = document.getElementById('demo-cheater-panel');
-    if (!panel) return;
-    panel.style.display = 'block';
+  // If savedName or URL matches demo/cheater operator, activate immediately on startup
+  if (isDemoCallsign(savedName) || window.location.search.includes('demo') || window.location.hash.includes('demo')) {
+    initDemoControlPanel();
+  }
 
+  let _alertCollapseTimer = null;
+  window.updateSecurityAlertBanner = function(mode, customMessage = null) {
+    const banner = document.getElementById('cheat-alert-banner');
+    const titleEl = document.getElementById('cheat-alert-title');
+    const subEl = document.getElementById('cheat-alert-sub');
+    if (!banner) return;
+
+    if (_alertCollapseTimer) {
+      clearTimeout(_alertCollapseTimer);
+      _alertCollapseTimer = null;
+    }
+
+    if (mode === 'hide') {
+      delete banner.dataset.serverEnforced;
+      banner.classList.remove('visible', 'collapsed');
+      return;
+    }
+
+    if (mode === 'server') {
+      banner.dataset.serverEnforced = '1';
+      if (titleEl) titleEl.textContent = 'SECURITY WARNING';
+      if (subEl) subEl.textContent = customMessage || 'Suspicious gameplay activity detected.';
+    } else {
+      return;
+    }
+
+    banner.classList.remove('collapsed');
+    banner.classList.add('visible');
+
+    _alertCollapseTimer = setTimeout(() => {
+      if (banner.classList.contains('visible')) {
+        banner.classList.add('collapsed');
+      }
+    }, 5000);
+  };
+
+  function initDemoControlPanel(options = {}) {
+    const panel = document.getElementById('demo-cheater-panel');
+    const launcherBtn = document.getElementById('btn-demo-hud-launcher');
+    if (!panel) return;
+    if (launcherBtn) launcherBtn.style.display = 'inline-flex';
+    if (options.showPanel !== false && (!panel.style.display || panel.style.display === 'none')) {
+      panel.style.display = 'block';
+    }
+
+    if (window._demoControlPanelInitialized) return;
+    window._demoControlPanelInitialized = true;
+
+    const toggleDemoPanel = () => {
+      const isHidden = panel.style.display === 'none';
+      panel.style.display = isHidden ? 'block' : 'none';
+      if (isHidden && document.pointerLockElement && document.exitPointerLock) {
+        try { document.exitPointerLock(); } catch (_) {}
+      }
+    };
+
+    if (launcherBtn) {
+      launcherBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+      launcherBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleDemoPanel();
+      });
+    }
+    panel.addEventListener('mousedown', (e) => e.stopPropagation());
+    panel.addEventListener('click', (e) => e.stopPropagation());
+
+    const panelBody = document.getElementById('demo-cheater-panel-body');
+    const btnCollapse = document.getElementById('btn-demo-collapse');
+    const overallStatus = document.getElementById('demo-overall-status');
     const btnImpossibleHit = document.getElementById('btn-demo-impossible-hit');
     const statusImpossibleHit = document.getElementById('status-demo-impossible-hit');
     const btnSpeed = document.getElementById('btn-demo-speed');
@@ -514,141 +612,161 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
     const statusFireRate = document.getElementById('status-demo-firerate');
     const btnAim = document.getElementById('btn-demo-aim');
     const statusAim = document.getElementById('status-demo-aim');
-    const btnGodMode = document.getElementById('btn-demo-godmode');
-    const statusGodMode = document.getElementById('status-demo-godmode');
+    const btnActivateAll = document.getElementById('btn-demo-activate-all');
     const btnReset = document.getElementById('btn-demo-reset');
     const btnStartMatch = document.getElementById('btn-demo-start-match');
     const btnEndMatch = document.getElementById('btn-demo-end-match');
 
-    // Default ON for all demonstration features (Requested: "defaulty on all features")
-    weapons.demoImpossibleHit = true;
-    controller.speedMultiplier = 4.0;
-    weapons.fireRateMultiplier = 3.0;
-    weapons.demoHighAccuracy = true;
     window.SecureFPSGame = window.SecureFPSGame || {};
-    window.SecureFPSGame.isCheaterDemoActive = true;
-    window.isDemoGodModeActive = true;
-    if (gameMode) gameMode.demoGodMode = true;
+    let demoToggleState = { speed: false, headshot: false, wallhack: false, rapidfire: false };
 
-    // Toggle Impossible Hit Demonstration
-    if (btnImpossibleHit) {
-      btnImpossibleHit.addEventListener('click', () => {
-        weapons.demoImpossibleHit = !weapons.demoImpossibleHit;
-        if (statusImpossibleHit) {
-          statusImpossibleHit.textContent = weapons.demoImpossibleHit ? 'ACTIVE' : 'OFF';
-          statusImpossibleHit.style.color = weapons.demoImpossibleHit ? '#ef4444' : '#94a3b8';
+    function applyToggleState(state) {
+      const speed = Boolean(state.speed);
+      const headshot = Boolean(state.headshot);
+      const wallhack = Boolean(state.wallhack);
+      const rapidfire = Boolean(state.rapidfire);
+      demoToggleState = { speed, headshot, wallhack, rapidfire };
+
+      const ctrl = window.SecureFPSGame?.controller;
+      const weap = window.SecureFPSGame?.weapons;
+      const gm = window.SecureFPSGame?.gameMode;
+
+      if (ctrl) ctrl.speedMultiplier = speed ? 4.0 : 1.0;
+      if (weap) {
+        weap.demoHighAccuracy = headshot;
+        weap.demoImpossibleHit = wallhack;
+        weap.fireRateMultiplier = rapidfire ? 3.0 : 1.0;
+      }
+
+      const activeCount = [speed, headshot, wallhack, rapidfire].filter(Boolean).length;
+      window.SecureFPSGame.isCheaterDemoActive = activeCount > 0;
+      window.SecureFPSGame.demoToggles = demoToggleState;
+      window.isDemoGodModeActive = false;
+      if (gm) gm.demoGodMode = false;
+
+      const setBtnStyle = (btn, statusEl, isOn, onLabel = 'ON') => {
+        if (statusEl) {
+          statusEl.textContent = isOn ? onLabel : 'OFF';
+          statusEl.style.color = isOn ? '#ef4444' : '#94a3b8';
         }
-        btnImpossibleHit.style.borderColor = weapons.demoImpossibleHit ? '#ef4444' : '#475569';
-        btnImpossibleHit.style.background = weapons.demoImpossibleHit ? 'rgba(239, 68, 68, 0.25)' : 'rgba(30, 41, 59, 0.9)';
+        if (btn) {
+          btn.style.borderColor = isOn ? '#ef4444' : '#475569';
+          btn.style.background = isOn ? 'rgba(239, 68, 68, 0.25)' : 'rgba(30, 41, 59, 0.9)';
+        }
+      };
+
+      setBtnStyle(btnSpeed, statusSpeed, speed, '4× ON');
+      setBtnStyle(btnAim, statusAim, headshot, 'ON');
+      setBtnStyle(btnImpossibleHit, statusImpossibleHit, wallhack, 'ON');
+      setBtnStyle(btnFireRate, statusFireRate, rapidfire, '3× ON');
+
+      if (overallStatus) {
+        overallStatus.textContent = activeCount > 0 ? `ACTIVE (${activeCount}/4)` : 'NORMAL (ALL OFF)';
+        overallStatus.style.color = activeCount > 0 ? '#ef4444' : '#94a3b8';
+      }
+
+      if (window.SecureFPSGame?.multiplayer?.emitDemoToggles) {
+        window.SecureFPSGame.multiplayer.emitDemoToggles({ speed, headshot, wallhack, rapidfire });
+      }
+    }
+
+    function getCurrentState() {
+      return { ...demoToggleState };
+    }
+
+    // Default: ALL demonstration options OFF on login / initialization
+    applyToggleState({ speed: false, headshot: false, wallhack: false, rapidfire: false });
+
+    // Collapsible panel toggle
+    if (btnCollapse && panelBody) {
+      btnCollapse.addEventListener('click', () => {
+        const isCollapsed = panelBody.style.display === 'none';
+        panelBody.style.display = isCollapsed ? 'block' : 'none';
+        btnCollapse.textContent = isCollapsed ? '−' : '+';
       });
     }
 
-    // Toggle 4x Movement Speed Demonstration
+    // Independent toggles
     if (btnSpeed) {
       btnSpeed.addEventListener('click', () => {
-        controller.speedMultiplier = controller.speedMultiplier === 4.0 ? 1.0 : 4.0;
-        const isActive = controller.speedMultiplier > 1.0;
-        if (statusSpeed) {
-          statusSpeed.textContent = isActive ? '4× ACTIVE' : 'OFF';
-          statusSpeed.style.color = isActive ? '#ef4444' : '#94a3b8';
-        }
-        btnSpeed.style.borderColor = isActive ? '#ef4444' : '#475569';
-        btnSpeed.style.background = isActive ? 'rgba(239, 68, 68, 0.25)' : 'rgba(30, 41, 59, 0.9)';
+        const st = getCurrentState();
+        applyToggleState({ ...st, speed: !st.speed });
       });
     }
-
-    // Toggle 3x Fire Rate Demonstration
-    if (btnFireRate) {
-      btnFireRate.addEventListener('click', () => {
-        weapons.fireRateMultiplier = weapons.fireRateMultiplier === 3.0 ? 1.0 : 3.0;
-        const isActive = weapons.fireRateMultiplier > 1.0;
-        if (statusFireRate) {
-          statusFireRate.textContent = isActive ? '3× ACTIVE' : 'OFF';
-          statusFireRate.style.color = isActive ? '#ef4444' : '#94a3b8';
-        }
-        btnFireRate.style.borderColor = isActive ? '#ef4444' : '#475569';
-        btnFireRate.style.background = isActive ? 'rgba(239, 68, 68, 0.25)' : 'rgba(30, 41, 59, 0.9)';
-      });
-    }
-
-    // Toggle High Accuracy Demonstration
     if (btnAim) {
       btnAim.addEventListener('click', () => {
-        weapons.demoHighAccuracy = !weapons.demoHighAccuracy;
-        if (statusAim) {
-          statusAim.textContent = weapons.demoHighAccuracy ? 'ACTIVE' : 'OFF';
-          statusAim.style.color = weapons.demoHighAccuracy ? '#ef4444' : '#94a3b8';
-        }
-        btnAim.style.borderColor = weapons.demoHighAccuracy ? '#ef4444' : '#475569';
-        btnAim.style.background = weapons.demoHighAccuracy ? 'rgba(239, 68, 68, 0.25)' : 'rgba(30, 41, 59, 0.9)';
+        const st = getCurrentState();
+        applyToggleState({ ...st, headshot: !st.headshot });
+      });
+    }
+    if (btnImpossibleHit) {
+      btnImpossibleHit.addEventListener('click', () => {
+        const st = getCurrentState();
+        applyToggleState({ ...st, wallhack: !st.wallhack });
+      });
+    }
+    if (btnFireRate) {
+      btnFireRate.addEventListener('click', () => {
+        const st = getCurrentState();
+        applyToggleState({ ...st, rapidfire: !st.rapidfire });
       });
     }
 
-    // Toggle God Mode / Damage Immunity
-    if (btnGodMode) {
-      btnGodMode.addEventListener('click', () => {
-        window.isDemoGodModeActive = !window.isDemoGodModeActive;
-        if (gameMode) gameMode.demoGodMode = window.isDemoGodModeActive;
-        const isActive = window.isDemoGodModeActive;
-        if (statusGodMode) {
-          statusGodMode.textContent = isActive ? 'ACTIVE' : 'OFF';
-          statusGodMode.style.color = isActive ? '#ef4444' : '#94a3b8';
-        }
-        btnGodMode.style.borderColor = isActive ? '#ef4444' : '#475569';
-        btnGodMode.style.background = isActive ? 'rgba(239, 68, 68, 0.25)' : 'rgba(30, 41, 59, 0.9)';
+    // Activate All
+    if (btnActivateAll) {
+      btnActivateAll.addEventListener('click', () => {
+        applyToggleState({ speed: true, headshot: true, wallhack: true, rapidfire: true });
       });
     }
 
-    // Reset Demo Abilities
+    // Reset to Normal
     if (btnReset) {
       btnReset.addEventListener('click', () => {
-        weapons.demoImpossibleHit = false;
-        weapons.demoHighAccuracy = false;
-        weapons.fireRateMultiplier = 1.0;
-        controller.speedMultiplier = 1.0;
-        window.isDemoGodModeActive = false;
-        if (gameMode) gameMode.demoGodMode = false;
-
-        if (statusImpossibleHit) { statusImpossibleHit.textContent = 'OFF'; statusImpossibleHit.style.color = '#94a3b8'; }
-        if (statusSpeed) { statusSpeed.textContent = 'OFF'; statusSpeed.style.color = '#94a3b8'; }
-        if (statusFireRate) { statusFireRate.textContent = 'OFF'; statusFireRate.style.color = '#94a3b8'; }
-        if (statusAim) { statusAim.textContent = 'OFF'; statusAim.style.color = '#94a3b8'; }
-        if (statusGodMode) { statusGodMode.textContent = 'OFF'; statusGodMode.style.color = '#94a3b8'; }
-
-        [btnImpossibleHit, btnSpeed, btnFireRate, btnAim, btnGodMode].forEach(btn => {
-          if (btn) {
-            btn.style.borderColor = '#475569';
-            btn.style.background = 'rgba(30, 41, 59, 0.9)';
-          }
-        });
+        applyToggleState({ speed: false, headshot: false, wallhack: false, rapidfire: false });
       });
     }
+
+    // Reset on disconnect, room leave, ban, or new game session
+    window.addEventListener('fps:demo_reset', () => {
+      applyToggleState({ speed: false, headshot: false, wallhack: false, rapidfire: false });
+    });
 
     // Start Demo Match
     if (btnStartMatch) {
       btnStartMatch.addEventListener('click', () => {
-        deployLocalMatch('bots', 'normal');
+        if (window.SecureFPSGame?.deployLocalMatch) {
+          window.SecureFPSGame.deployLocalMatch('bots', 'normal');
+        } else if (typeof deployLocalMatch === 'function') {
+          deployLocalMatch('bots', 'normal');
+        }
       });
     }
 
     // End Demo Match
     if (btnEndMatch) {
       btnEndMatch.addEventListener('click', async () => {
-        if (telemetry?.isSessionActive) {
-          const shots = gameMode?.shotsFired || weapons?.shotsFired || 0;
-          const hits = gameMode?.shotsHit || weapons?.shotsHit || 0;
-          const headshots = gameMode?.headshots || 0;
-          await telemetry.endGameSession(true, {
-            kills: gameMode?.kills || 0,
-            deaths: gameMode?.deaths || 0,
+        const tel = window.SecureFPSGame?.telemetry;
+        const gm = window.SecureFPSGame?.gameMode;
+        const weap = window.SecureFPSGame?.weapons;
+        if (tel?.isSessionActive) {
+          const shots = gm?.shotsFired || weap?.shotsFired || 0;
+          const hits = gm?.shotsHit || weap?.shotsHit || 0;
+          const headshots = gm?.headshots || 0;
+          await tel.endGameSession(true, {
+            kills: gm?.kills || 0,
+            deaths: gm?.deaths || 0,
             shots: shots,
             hits: hits,
             headshots: headshots,
             accuracy: shots > 0 ? hits / shots : 0,
-            kdr: (gameMode?.kills || 0) / Math.max(1, gameMode?.deaths || 1)
+            kdr: (gm?.kills || 0) / Math.max(1, gm?.deaths || 1)
           });
         }
-        returnToMainMenu();
+        if (window.SecureFPSGame?.returnToMainMenu) {
+          window.SecureFPSGame.returnToMainMenu();
+        } else if (typeof returnToMainMenu === 'function') {
+          returnToMainMenu();
+        }
       });
     }
 
@@ -676,15 +794,19 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
       const spdEl = document.getElementById('hud-stat-speed');
       const smEl = document.getElementById('hud-stat-smooth');
 
-      const shots = Math.max(gameMode?.shotsFired || 0, weapons?.shotsFired || 0);
-      const hits = Math.max(gameMode?.shotsHit || 0, weapons?.shotsHit || 0);
-      const headshots = Math.max(gameMode?.headshots || 0, weapons?.headshots || 0);
+      const gm = window.SecureFPSGame?.gameMode;
+      const weap = window.SecureFPSGame?.weapons;
+      const ctrl = window.SecureFPSGame?.controller;
+
+      const shots = Math.max(gm?.shotsFired || 0, weap?.shotsFired || 0);
+      const hits = Math.max(gm?.shotsHit || 0, weap?.shotsHit || 0);
+      const headshots = Math.max(gm?.headshots || 0, weap?.headshots || 0);
       const acc = shots > 0 ? ((hits / shots) * 100).toFixed(1) : '0';
       const hsRatio = hits > 0 ? ((headshots / hits) * 100).toFixed(1) : '0';
-      const kills = gameMode?.kills || 0;
-      const deaths = gameMode?.deaths || 0;
+      const kills = gm?.kills || 0;
+      const deaths = gm?.deaths || 0;
       const kdr = (kills / Math.max(1, deaths)).toFixed(2);
-      const horizSpeed = Math.hypot(controller?.velocity?.x || 0, controller?.velocity?.z || 0);
+      const horizSpeed = Math.hypot(ctrl?.velocity?.x || 0, ctrl?.velocity?.z || 0);
 
       if (shotsEl) shotsEl.textContent = shots;
       if (hitsEl) hitsEl.textContent = hits;
@@ -696,12 +818,12 @@ function initTacticalMenu(controller, gameMode, botManager, telemetry, multiplay
       if (kdrEl) kdrEl.textContent = kdr;
       if (spdEl) spdEl.textContent = `${horizSpeed.toFixed(1)}m/s`;
       if (frEl) {
-        const mult = weapons?.fireRateMultiplier || 1.0;
-        const estRps = (1.0 / (weapons?.activeWeapon?.fireRate || 0.13)) * mult;
+        const mult = weap?.fireRateMultiplier || 1.0;
+        const estRps = (1.0 / (weap?.activeWeapon?.fireRate || 0.13)) * mult;
         frEl.textContent = `${estRps.toFixed(1)}/s`;
       }
       if (smEl) {
-        smEl.textContent = weapons?.demoHighAccuracy ? '0.98' : '0.85';
+        smEl.textContent = weap?.demoHighAccuracy ? '0.98' : '0.85';
       }
     }, 200);
   }
@@ -1677,6 +1799,7 @@ function initWindowEvents(controller, gameMode, telemetry, multiplayer) {
   }
 
   function returnToMainMenu({ keepRoom = false } = {}) {
+    window.SecureFPSGame.returnToMainMenu = returnToMainMenu;
     const loadingOverlay = document.getElementById("loading-overlay");
     const pauseOverlay = document.getElementById("pause-overlay");
     const mcOverlay = document.getElementById("match-complete-overlay");

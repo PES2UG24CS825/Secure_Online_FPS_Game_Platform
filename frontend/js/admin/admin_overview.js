@@ -1,9 +1,9 @@
-import { openPlayerMatchesModal } from "./admin_players.js?v=20261124_datafix1";
+import { openPlayerMatchesModal } from "./admin_players.js?v=20261125_superonly";
 /**
  * SecureFPS Admin Overview Module
  * Cached statistics (30s), server cluster health monitor, and dev fixture toggling.
  */
-import { escapeHtml, formatTimeAgo, incidentLabel, PollingManager } from './admin_core.js';
+import { escapeHtml, formatTimeAgo, incidentLabel, PollingManager } from './admin_core.js?v=20261125_demo_visibility';
 
 export async function loadAdminOverview(forceRefresh = false) {
   try {
@@ -45,10 +45,10 @@ function renderOverviewStats(stats) {
   const eCount = document.getElementById('eventCount');
   const hCount = document.getElementById('highCount');
 
-  if (pCount) pCount.textContent = stats.total_players ?? 0;
-  if (mCount) mCount.textContent = stats.matches_analyzed ?? 0;
+  if (pCount) pCount.textContent = stats.total_players ?? "Unavailable";
+  if (mCount) mCount.textContent = stats.matches_analyzed ?? "Unavailable";
   if (eCount) eCount.textContent = stats.total_security_events ?? '—';
-  if (hCount) hCount.textContent = stats.high_severity_events ?? '0';
+  if (hCount) hCount.textContent = stats.high_severity_events ?? 'Unavailable';
 
   for (const [id, field] of Object.entries({
     activePlayerCount: 'active_players',
@@ -180,44 +180,45 @@ function renderRecentMatches(matches) {
   }
 
   tbody.innerHTML = matches.map(m => {
-    const risk = m.risk_score !== null && m.risk_score !== undefined ? m.risk_score : '—';
-    const riskClass = (m.risk_score >= 70) ? 'risk-high' : ((m.risk_score >= 40) ? 'risk-med' : 'risk-low');
+    const risk = m.risk_score == null ? 'Unavailable' : [m.risk_score, m.risk_category].filter(value => value != null).join(' · ');
+    const riskClass = m.risk_score == null ? '' : (m.risk_score >= 70) ? 'risk-high' : ((m.risk_score >= 40) ? 'risk-med' : 'risk-low');
     return `
       <tr>
         <td><code>${escapeHtml(m.session_id ? m.session_id.substring(0, 8) : '—')}</code></td>
-        <td><strong>${escapeHtml(m.player_name || 'Operator')}</strong></td>
-        <td>${escapeHtml(m.game || 'CyberStrike 3D')}</td>
+        <td><strong>${escapeHtml(m.player_name || 'Account unavailable')}${m.is_demo ? ' · Demo' : ''}</strong></td>
+        <td>${escapeHtml(m.game || '—')}</td>
         <td>${formatTimeAgo(m.started_at)}</td>
         <td><span class="badge">${escapeHtml(m.status || 'completed')}</span></td>
-        <td><span class="risk-pill ${riskClass}">${escapeHtml(risk)} (${escapeHtml(m.risk_category || 'Normal')})</span></td>
+        <td><span class="risk-pill ${riskClass}">${escapeHtml(risk)}</span></td>
       </tr>
     `;
   }).join('');
 }
 
-function renderRecentEvents(events) {
-  const container = document.getElementById('events');
-  if (!container) return;
-  if (!events || events.length === 0) {
-    container.innerHTML = '<div class="empty">No security events.</div>';
-    return;
-  }
+const eventsContainer = document.getElementById('events');
+const renderSecurityPage = eventsContainer && window.createRecordPager(eventsContainer, 'Security event pages', 5);
 
-  container.innerHTML = `<div class="admin-table-wrap"><table>
-    <thead><tr><th>Incident</th><th>Player</th><th>Severity</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
-    <tbody>${events.map(e => `
-      <tr>
-        <td><details><summary>${escapeHtml(incidentLabel(e.type))}</summary>${escapeHtml(e.description || 'No additional detail.')}</details></td>
-        <td>${escapeHtml(e.player_name || '—')}</td>
-        <td><span class="badge ${e.severity === 'critical' ? 'badge-danger' : ''}">${escapeHtml(e.severity || 'Unknown')}</span></td>
-        <td><time>${formatTimeAgo(e.timestamp)}</time></td>
-        <td>${escapeHtml(e.acknowledged && e.status === 'open' ? 'Acknowledged' : incidentLabel(e.status))}</td>
-        <td><div class="event-actions">
-          ${e.player_id ? `<button type="button" class="ghost-btn" data-investigate="${escapeHtml(e.player_id)}" data-name="${escapeHtml(e.player_name || 'Player')}">Investigate</button>` : ''}
-          ${e.severity === 'critical' && !e.acknowledged && !['closed', 'resolved'].includes(e.status) ? `<button type="button" class="ghost-btn" data-acknowledge="${escapeHtml(e.id)}">Acknowledge</button>` : ''}
-        </div></td>
-      </tr>`).join('')}</tbody>
-    </table></div>`;
+function renderRecentEvents(events) {
+  if (!renderSecurityPage) return;
+  renderSecurityPage(events, rows => renderSecurityEvents(eventsContainer, rows));
+}
+
+function renderSecurityEvents(container, rows) {
+  container.innerHTML = rows.map(event => `
+    <article class="admin-security-event">
+      <details>
+        <summary><strong>${escapeHtml(incidentLabel(event.type))}</strong></summary>
+        <p>${escapeHtml(event.description || 'No additional detail.')}</p>
+      </details>
+      <small>${escapeHtml(event.player_name || 'Platform event')}${event.is_demo ? ' · Demo' : ''}</small>
+      <span class="badge ${event.severity === 'critical' ? 'badge-danger' : ''}">${escapeHtml(event.severity || 'Unknown')}</span>
+      <small>${escapeHtml(event.acknowledged && event.status === 'open' ? 'Acknowledged' : incidentLabel(event.status))} · ${formatTimeAgo(event.timestamp)}</small>
+      <div class="event-actions">
+        ${event.player_id ? `<button type="button" class="ghost-btn" data-investigate="${escapeHtml(event.player_id)}" data-name="${escapeHtml(event.player_name || 'Player')}">Investigate</button>` : ''}
+        ${event.severity === 'critical' && !event.acknowledged && !['closed', 'resolved'].includes(event.status) ? `<button type="button" class="ghost-btn" data-acknowledge="${escapeHtml(event.id)}">Acknowledge</button>` : ''}
+      </div>
+    </article>
+  `).join('') || '<div class="empty">No security events.</div>';
   container.querySelectorAll('[data-investigate]').forEach(button => {
     button.onclick = () => openPlayerMatchesModal(button.dataset.investigate, button.dataset.name, '');
   });

@@ -120,11 +120,11 @@ class AdminPollingManager {
     }
   }
 
-  triggerAll() {
+  triggerAll(force = false) {
     this.lastUpdated = Date.now();
     for (const cb of this.subscribers) {
       try {
-        cb();
+        cb(force);
       } catch (err) {
         console.error('[AdminPolling] Subscriber error:', err);
       }
@@ -147,11 +147,11 @@ export function connectAdminLiveEvents() {
     let sse = new EventSource('/api/live/events', { withCredentials: true });
     sse.addEventListener('update', (e) => {
       try {
-        PollingManager.triggerAll();
+        PollingManager.triggerAll(true);
         if (e.data) {
           const payload = JSON.parse(e.data);
           if (payload.type === 'security_alert' || payload.alert_type) {
-            import('./admin_demo_cheater.js').then(m => m.handleLiveDemoAlert(payload)).catch(() => {});
+            import('./admin_demo_cheater.js?v=20261125_demo_visibility').then(m => m.handleLiveDemoAlert(payload)).catch(() => {});
           }
         }
       } catch (err) {}

@@ -187,6 +187,27 @@ def test_legacy_match_summaries_and_telemetry_resolve_once_in_isolated_database(
     assert stats["shots_hit_coverage"] == "complete"
 
 
+def test_local_completion_persists_metrics_and_retry_counts_once():
+    app, game_sessions, game_telemetry, _, _, sessions_db, users = _isolated_backend()
+    client, user_id = _authenticated_client(app, users, sessions_db, uuid4().hex)
+    start = client.post("/api/game/start", json={"mode": "bots"}).get_json()
+    session_id = start["session_id"]
+    payload = {
+        "session_id": session_id, "game_token": start["game_token"], "event_type": "game_completed",
+        "telemetry": {"kills": 2, "deaths": 0, "shots": 4, "hits": 2, "headshots": 1},
+    }
+    assert client.post("/api/game-events", json=payload).status_code == 201
+    assert client.post("/api/game-events", json=payload).status_code == 200
+    assert client.post("/api/game/end", json={"session_id": session_id, "completed": True}).status_code == 200
+    stored = game_sessions.find_one({"session_id": session_id, "user_id": user_id})
+    assert (stored["status"], stored["stats_source"], stored["kills"], stored["accuracy"]) == (
+        "completed", "local_client", 2, 0.5,
+    )
+    assert game_telemetry.count_documents({"session_id": session_id, "event_type": "game_completed"}) == 1
+    stats = client.get("/api/player/stats").get_json()
+    assert (stats["total_matches"], stats["accuracy"], stats["headshot_percentage"]) == (1, 50.0, 50.0)
+
+
 def test_server_confirmed_shot_telemetry_is_idempotent():
     app, game_sessions, game_telemetry, _, _, sessions_db, users = _isolated_backend()
     suffix = uuid4().hex

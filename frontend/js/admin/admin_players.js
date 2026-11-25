@@ -2,11 +2,11 @@
  * SecureFPS Admin Players Module
  * Server-side pagination, sorting, search, bulk actions, soft delete, and CSV export.
  */
-import { escapeHtml, formatTimeAgo, promptAdminAction } from './admin_core.js';
-import { openRequestApprovalModal } from './admin_super.js?v=20261124_datafix1';
+import { escapeHtml, formatTimeAgo, incidentLabel, promptAdminAction } from './admin_core.js?v=20261125_demo_visibility';
+import { openRequestApprovalModal } from './admin_super.js?v=20261125_demo_visibility';
 
 let currentPlayersPage = 0;
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 10;
 let currentSearch = '';
 let currentStatusFilter = '';
 let currentSortBy = 'created_at';
@@ -28,6 +28,10 @@ export async function initPlayersSection() {
     });
   }
 
+  document.getElementById('adminPlayerAccountType')?.addEventListener('change', () => {
+    currentPlayersPage = 0;
+    void loadPlayersTable();
+  });
   const statusSelect = document.getElementById('playerStatusFilter');
   if (statusSelect) {
     statusSelect.addEventListener('change', (e) => {
@@ -153,6 +157,7 @@ export async function loadPlayersTable() {
       offset: currentPlayersPage * PAGE_SIZE,
       sort_by: currentSortBy,
       sort_dir: currentSortDir,
+      account_type: document.getElementById("adminPlayerAccountType")?.value || "all",
     });
     if (currentSearch) params.set('q', currentSearch);
     if (currentStatusFilter) params.set('status', currentStatusFilter);
@@ -209,7 +214,7 @@ function renderPlayersRows(players, tbody) {
       <tr data-player-id="${escapeHtml(p.id)}">
         <td>
           <div class="player-cell">
-            <strong>${escapeHtml(p.name)}</strong>
+            <strong>${escapeHtml(p.name)}${p.is_demo ? ' <span class="badge badge-danger" style="font-size:10px; padding:1px 6px; margin-left:4px;">DEMO</span>' : ''}</strong>
             <small class="muted">${escapeHtml(p.email)}</small>
           </div>
         </td>
@@ -230,10 +235,10 @@ function renderPlayersRows(players, tbody) {
           ${isSuper ? (
             status === 'active' ? `
               <button class="action-btn suspend-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Suspend</button>
-              <button class="action-btn ban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">${isSuper ? 'Ban' : 'Request Ban'}</button>
+              <button class="action-btn ban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Ban</button>
             ` : (status === 'suspended' ? `
               <button class="action-btn unsuspend-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Unsuspend</button>
-              <button class="action-btn ban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">${isSuper ? 'Ban' : 'Request Ban'}</button>
+              <button class="action-btn ban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Ban</button>
             ` : (status === 'banned' ? `
               <button class="action-btn unban-btn" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">Unban</button>
             ` : ''))
@@ -379,27 +384,53 @@ function handleUnban(id, name) {
   });
 }
 
+const plainViolationLabels = {
+  'Rapid Fire Violation': 'Shooting Too Fast',
+  'Excessive Movement Speed': 'Moving Too Fast',
+  'Angle Snap / Aimbot': 'Sudden Aim Changes',
+  'Abnormal Accuracy': 'Unusually High Accuracy',
+  'Gameplay Anomaly': 'Unusual Gameplay',
+  'Server Hard-Rule Violation': 'Game Rule Violation',
+};
+
+const violationRows = document.getElementById('modalViolationsTableBody');
+const renderViolationPage = violationRows && window.createRecordPager(violationRows, 'Violation pages');
+const matchRows = document.getElementById('modalMatchesTableBody');
+const renderAdminMatchPage = matchRows && window.createRecordPager(matchRows, 'Player match pages');
+
 function renderPlayerViolations(events) {
   const tableBody = document.getElementById('modalViolationsTableBody');
   const badge = document.getElementById('modalViolationsCountBadge');
   const records = Array.isArray(events) ? events : [];
   if (badge) {
-    badge.textContent = `${records.length} Infraction${records.length === 1 ? '' : 's'}`;
+    badge.textContent = `${records.length} violation${records.length === 1 ? '' : 's'}`;
     badge.className = `badge ${records.length ? 'badge-danger' : 'badge-success'}`;
   }
   if (!tableBody) return;
+  renderViolationPage(records, rows => paintViolations(tableBody, rows), activePlayerModalId);
+}
+
+function paintViolations(tableBody, records) {
   if (!records.length) {
-    tableBody.innerHTML = '<tr><td colspan="4" class="empty">No anti-cheat violations recorded for this player.</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="4" class="empty">No violations recorded for this player.</td></tr>';
     return;
   }
   tableBody.innerHTML = records.map(event => {
     const severity = (event.severity || 'medium').toLowerCase();
     const badgeClass = severity === 'high' ? 'badge-danger' : (severity === 'medium' ? 'badge-warning' : 'badge-cyan');
-    const details = event.description || [event.observed_value, event.allowed_value].filter(Boolean).join(' / ') || 'Server-verified anti-cheat finding.';
+    const label = event.violation || incidentLabel(event.incident_type || event.event_type || event.type || 'game_rule_violation');
+    const details = event.description || 'This event was flagged by the system.';
+    const observed = event.observed_value;
+    const allowed = event.allowed_value;
     return `<tr>
-      <td><span class="badge ${badgeClass}">${escapeHtml(event.violation || event.incident_type || event.event_type || event.type || 'Infraction')}</span></td>
+      <td><span class="badge ${badgeClass}">${escapeHtml(Object.hasOwn(plainViolationLabels, label) ? plainViolationLabels[label] : label)}</span></td>
       <td><strong class="violation-severity ${escapeHtml(severity)}">${escapeHtml(severity)}</strong></td>
-      <td><div class="violation-details">${escapeHtml(details)}</div></td>
+      <td><details class="violation-details"><summary>See what happened</summary>${escapeHtml(details)}
+        <small>${event.is_demo ? 'Demo evidence · ' : ''}${escapeHtml(event.source || 'Source unavailable')}</small>
+        <small>Match: ${escapeHtml(event.session_id || 'Unavailable')} · Risk: ${escapeHtml(event.risk_score ?? 'Unavailable')}</small>
+        ${observed != null && observed !== '' ? `<small><b>Recorded:</b> ${escapeHtml(observed)}</small>` : ''}
+        ${allowed != null && allowed !== '' ? `<small><b>Allowed:</b> ${escapeHtml(allowed)}</small>` : ''}
+      </details></td>
       <td><small class="muted">${formatTimeAgo(event.created_at || event.timestamp)}</small></td>
     </tr>`;
   }).join('');
@@ -428,7 +459,9 @@ export async function openPlayerMatchesModal(id, name, email, view = 'player') {
   const tbody = document.getElementById('modalMatchesTableBody');
   if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="loading-cell">Loading combat sessions…</td></tr>';
   const violationsTbodyPre = document.getElementById('modalViolationsTableBody');
-  if (violationsTbodyPre) violationsTbodyPre.innerHTML = '<tr><td colspan="4" class="loading-cell">Loading security infractions…</td></tr>';
+  renderViolationPage?.([], () => {}, id);
+  renderAdminMatchPage?.([], () => {}, id);
+  if (violationsTbodyPre) violationsTbodyPre.innerHTML = '<tr><td colspan="4" class="loading-cell">Loading violations…</td></tr>';
 
   if (!modal.open) modal.showModal();
 
@@ -522,26 +555,28 @@ export async function openPlayerMatchesModal(id, name, email, view = 'player') {
     if (matches.length === 0) {
       tbody.innerHTML = '<tr><td colspan="12" class="empty">No completed combat sessions found for this player.</td></tr>';
     } else {
-      tbody.innerHTML = matches.map(m => {
-      const riskScore = m.risk_score != null ? `${Number(m.risk_score).toFixed(1)} / 100` : 'Normal';
-      const riskClass = (m.risk_score >= 70) ? 'risk-high' : ((m.risk_score >= 40) ? 'risk-med' : 'risk-low');
-      return `
-        <tr>
-          <td><code style="background:#EDE9FE; color:#5B21B6; padding:2px 8px; border-radius:4px; font-weight:700;">${escapeHtml(m.session_id ? (String(m.session_id).startsWith('#') ? m.session_id : '#' + m.session_id) : '—')}</code></td>
-          <td><strong>${escapeHtml(m.game || 'CyberStrike 3D')}</strong></td>
-          <td>${formatTimeAgo(m.started_at)}</td>
-          <td><strong style="color:#059669;">${m.kills == null ? '—' : m.kills}</strong></td>
-          <td><strong style="color:#DC2626;">${m.deaths == null ? '—' : m.deaths}</strong></td>
-          <td><span style="font-weight:700; color:#4C1D95;">${m.kdr == null ? '—' : Number(m.kdr).toFixed(2)}</span></td>
-          <td>${m.shots_fired == null ? '—' : Number(m.shots_fired).toLocaleString()}</td>
-          <td>${m.shots_hit == null ? '—' : Number(m.shots_hit).toLocaleString()}</td>
-          <td>${m.headshots == null ? '—' : Number(m.headshots).toLocaleString()}</td>
-          <td>${m.accuracy == null ? '—' : `${Number(m.accuracy).toFixed(1)}%`}</td>
-          <td><span class="risk-pill ${riskClass}">${riskScore}</span></td>
-          <td><span class="badge badge-success">${escapeHtml(m.status || 'completed')}</span></td>
-        </tr>
-      `;
-    }).join('');
+      renderAdminMatchPage(matches, rows => {
+        tbody.innerHTML = rows.map(m => {
+          const riskScore = m.risk_score != null ? `${Number(m.risk_score).toFixed(1)} / 100` : 'Normal';
+          const riskClass = (m.risk_score >= 70) ? 'risk-high' : ((m.risk_score >= 40) ? 'risk-med' : 'risk-low');
+          return `
+            <tr>
+              <td><code style="background:#EDE9FE; color:#5B21B6; padding:2px 8px; border-radius:4px; font-weight:700;">${escapeHtml(m.session_id ? (String(m.session_id).startsWith('#') ? m.session_id : '#' + m.session_id) : '—')}</code></td>
+              <td><strong>${escapeHtml(m.game || 'CyberStrike 3D')}</strong></td>
+              <td>${formatTimeAgo(m.started_at)}</td>
+              <td><strong style="color:#059669;">${m.kills == null ? '—' : m.kills}</strong></td>
+              <td><strong style="color:#DC2626;">${m.deaths == null ? '—' : m.deaths}</strong></td>
+              <td><span style="font-weight:700; color:#4C1D95;">${m.kdr == null ? '—' : Number(m.kdr).toFixed(2)}</span></td>
+              <td>${m.shots_fired == null ? '—' : Number(m.shots_fired).toLocaleString()}</td>
+              <td>${m.shots_hit == null ? '—' : Number(m.shots_hit).toLocaleString()}</td>
+              <td>${m.headshots == null ? '—' : Number(m.headshots).toLocaleString()}</td>
+              <td>${m.accuracy == null ? '—' : `${Number(m.accuracy).toFixed(1)}%`}</td>
+              <td><span class="risk-pill ${riskClass}">${riskScore}</span></td>
+              <td><span class="badge badge-success">${escapeHtml(m.status || 'completed')}</span></td>
+            </tr>
+          `;
+        }).join('');
+      }, id);
     }
 
     renderPlayerViolations(data.security_events);
@@ -558,7 +593,7 @@ export async function openPlayerMatchesModal(id, name, email, view = 'player') {
     }
     if (tbody) tbody.innerHTML = `<tr><td colspan="12" class="error-cell">Error: ${escapeHtml(err.message)}</td></tr>`;
     const violationsTbody = document.getElementById('modalViolationsTableBody');
-    if (violationsTbody) violationsTbody.innerHTML = '<tr><td colspan="4" class="error-cell">Failed to load infraction records.</td></tr>';
+    if (violationsTbody) violationsTbody.innerHTML = '<tr><td colspan="4" class="error-cell">Could not load violations.</td></tr>';
     ['modalTotalMatches','modalTotalKills','modalTotalDeaths','modalCareerKdr','modalTotalShots','modalTotalHits','modalCareerAccuracy','modalTotalHeadshots','modalHonourScore','modalRiskScore'].forEach(metricId => {
       const metric = document.getElementById(metricId);
       if (metric) metric.textContent = 'Unavailable';

@@ -168,12 +168,27 @@ function matchCard(match) {
     ? `Rewards: +${Number(reward.xp || 0)} XP · +${Number(reward.coins || 0)} Coins`
     : rewardStatus === "credited" ? "Rewards: credited" : "Rewards: pending";
   const analysisStatus = String(match.analysis_status || "pending").replaceAll("_", " ");
+  const riskCat = String(match.risk_category || "").toLowerCase();
+  const riskNum = match.risk_score == null ? null : Number(match.risk_score);
+  const reviewSt = String(match.review_status || "").toLowerCase();
+  let securityBadgeHtml;
+  if (state === "terminated_banned" || riskCat.includes("violation") || riskCat.includes("high") || riskCat.includes("critical") || (riskNum !== null && riskNum >= 70)) {
+    securityBadgeHtml = `<span style="background:rgba(239,68,68,0.12); color:#dc2626; padding:4px 10px; border-radius:6px; font-weight:600;">🚨 Suspicious activity detected</span>`;
+  } else if (reviewSt === "cleared" || reviewSt === "false_positive" || reviewSt === "confirmed_clean") {
+    securityBadgeHtml = `<span style="background:rgba(16,185,129,0.12); color:#059669; padding:4px 10px; border-radius:6px; font-weight:600;">✅ Cleared after review</span>`;
+  } else if (riskCat === "monitoring" || riskCat.includes("review") || riskCat.includes("suspicious") || (riskNum !== null && riskNum >= 40)) {
+    securityBadgeHtml = `<span style="background:rgba(245,158,11,0.12); color:#d97706; padding:4px 10px; border-radius:6px; font-weight:600;">⚠️ Under review</span>`;
+  } else if (analysisStatus === "pending" || analysisStatus.includes("incomplete") || match.timeline_incomplete) {
+    securityBadgeHtml = `<span style="background:rgba(148,163,184,0.14); color:#64748b; padding:4px 10px; border-radius:6px; font-weight:600;">⏳ ${analysisStatus === "pending" ? "Analysis pending" : "Evidence incomplete"}</span>`;
+  } else {
+    securityBadgeHtml = `<span style="background:rgba(14,165,233,0.1); color:#0284c7; padding:4px 10px; border-radius:6px; font-weight:600;">🛡️ No suspicious activity detected</span>`;
+  }
   return `<article class="match-card" data-session-id="${escapeHtml(match.session_id || match.id || match.match_id)}">
     <div class="match-card-head"><div><span class="match-card-kicker">${escapeHtml(match.game || "CyberStrike 3D")}${match.demo_test ? ` · ${playerText(match.hacker_profile || "hacker demo")}` : ""}</span><h3>Match ${playerText(match.match_id || "—")}</h3><div class="match-card-date">${playerText(playerDate(match.date))}</div></div><div style="display:flex; align-items:center; gap:8px;"><button type="button" class="match-drilldown-btn ghost-btn" data-session-id="${escapeHtml(match.session_id || match.id || match.match_id)}" style="background:transparent; border:1px solid var(--player-border,#38bdf8); border-radius:4px; padding:3px 8px; color:var(--player-blue,#38bdf8); cursor:pointer; font-size:11px;">Details</button><span class="badge ${badge}">${playerText(state === "terminated_banned" ? "PERMANENTLY BANNED" : state)}</span></div></div>
     <div class="match-stat-grid"><div class="match-stat"><span>Kills</span><strong>${value("kills")}</strong></div><div class="match-stat"><span>Deaths</span><strong>${value("deaths")}</strong></div><div class="match-stat"><span>K/D</span><strong>${match.kd == null ? "—" : Number(match.kd).toFixed(2)}</strong></div><div class="match-stat"><span>Total Shots Fired</span><strong>${value("shots_fired")}</strong></div><div class="match-stat"><span>Successful Hits</span><strong>${value("shots_hit")}</strong></div><div class="match-stat"><span>Accuracy</span><strong>${accuracyStr}</strong></div><div class="match-stat"><span>Duration</span><strong>${duration}</strong></div><div class="match-stat"><span>Analysis</span><strong>${playerText(analysisStatus)}</strong></div></div>
     <div class="match-risk"><span>Security risk score</span><strong>${playerText(playerRisk(match.risk_score))} ${match.risk_category ? `<span class="badge ${match.risk_category === 'Normal' ? 'good' : match.risk_category === 'Monitoring' ? 'warn' : 'bad'}">${escapeHtml(match.risk_category)}</span>` : ''}</strong></div>
     <div class="match-features-strip" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid rgba(148,163,184,0.18); font-size:11px;">
-      <span style="background:rgba(14,165,233,0.1); color:#0284c7; padding:4px 10px; border-radius:6px; font-weight:600;">🛡️ Fair Play Verified</span>
+      ${securityBadgeHtml}
       <span style="background:rgba(245,158,11,0.1); color:#d97706; padding:4px 10px; border-radius:6px; font-weight:600;">⭐ ${escapeHtml(rewardText)}</span>
     </div>
   </article>`;
@@ -200,6 +215,32 @@ async function prepareProfileImage(file, kind) {
   throw new Error("This image could not be compressed enough. Try a smaller image.");
 }
 
+function renderFairplay(data) {
+  const score = data?.honour_score;
+  document.getElementById("fairplayHonourScore").textContent = score ?? "—";
+  document.getElementById("honourRingProgress").setAttribute("stroke-dashoffset", 440 * (1 - (score ?? 0) / 100));
+  document.getElementById("fairplayTierBadge").textContent = data?.honour_tier ?? "Unavailable";
+  document.getElementById("fairplayTierDescription").textContent = data?.honour_description ?? "";
+
+  const renderRows = (id, rows, columns, empty) => {
+    document.getElementById(id).innerHTML = rows?.length
+      ? rows.map(row => `<tr>${columns.map(column => `<td>${playerText(column(row))}</td>`).join("")}</tr>`).join("")
+      : `<tr><td colspan="${columns.length}">${data ? empty : "Unavailable"}</td></tr>`;
+  };
+  renderRows("fairplaySessionsRows", data?.reviewed_sessions, [
+    row => row.session_id, row => row.game, row => playerDate(row.date),
+    row => row.status.replaceAll("_", " "), row => row.reason
+  ], "No completed sessions to review.");
+  renderRows("fairplayHonourRows", data?.history, [
+    row => playerDate(row.date, true), row => row.change_display, row => row.reason, row => row.resulting_score
+  ], "No recorded Honour changes.");
+  document.getElementById("appealStatusContent").textContent = data?.appeal
+    ? [data.appeal.status, data.appeal.reviewer_notes].filter(Boolean).join(" · ")
+    : data ? "No appeal on record." : "Appeal status unavailable.";
+}
+
+const renderMatchPage = window.createRecordPager(document.getElementById("matchesList"), "Match history pages");
+
 async function loadPlayerDashboard() {
   if (playerDashboardLoading || document.visibilityState === "hidden") return;
   playerDashboardLoading = true;
@@ -218,6 +259,8 @@ async function loadPlayerDashboard() {
     const avatar = document.getElementById("avatar");
     const miniProfile = avatar?.closest(".mini-profile");
     const handle = document.getElementById("profileUsername");
+    const overviewPlayerName = document.getElementById("overviewPlayerName");
+    if (overviewPlayerName) overviewPlayerName.textContent = user.username || user.name || "Player";
     handle.hidden = !user.username;
     handle.textContent = user.username ? "@" + user.username : "";
     if (sideName) sideName.textContent = user.username ? "@" + user.username : name;
@@ -239,13 +282,15 @@ async function loadPlayerDashboard() {
         return null;
       }
     };
-    const [matchesData, securityData, profileData, statsData, rewardsData] = await Promise.all([
+    const [matchesData, securityData, profileData, statsData, rewardsData, fairplayData] = await Promise.all([
       loadSection("matches", "/player/matches"),
       loadSection("account security", "/player/security"),
       loadSection("profile", "/player/profile"),
       loadSection("stats", "/player/stats"),
-      loadSection("rewards", "/player/rewards")
+      loadSection("rewards", "/player/rewards"),
+      loadSection("fair play", "/player/fairplay")
     ]);
+    renderFairplay(fairplayData);
 
     const matches = Array.isArray(matchesData?.matches) ? matchesData.matches : [];
     const completedMatches = matches;
@@ -371,7 +416,9 @@ async function loadPlayerDashboard() {
     }
     if (topFactor) topFactor.textContent = latestScoredMatch?.human_evaluation?.explanation
       ? `Server assessment: ${latestScoredMatch.human_evaluation.explanation}`
-      : "Server assessment: awaiting completed match analysis";
+      : (latestScoredMatch?.risk_score != null || risk != null)
+        ? `Server assessment: Normal telemetry patterns across recent completed matches (Risk score ${(Number(latestScoredMatch?.risk_score ?? risk)).toFixed(1)}/100).`
+        : "Server assessment: awaiting completed match analysis";
 
     const matchesCountEl = document.getElementById("matchesCount");
     if (matchesCountEl) matchesCountEl.textContent = matchesData ? Number(matchesData.total_matches ?? completedMatches.length) : "Unavailable";
@@ -380,24 +427,13 @@ async function loadPlayerDashboard() {
       ? `${analyzedMatches.length} analyzed · ${Math.max(0, completedMatches.length - analyzedMatches.length)} awaiting review`
       : "Match history unavailable";
 
-    // Populate Combat Career Lifetime Overview Statistics
-    const sumRecorded = (key) => {
-      const values = completedMatches.map(match => match[key]).filter(value => value != null && Number.isFinite(Number(value)));
-      if (values.length) return values.reduce((sum, value) => sum + Number(value), 0);
-      return matchesData && Number(matchesData.total_matches) === 0 ? 0 : null;
-    };
-    const totalKills = statsData?.kills ?? sumRecorded("kills");
-    const totalDeaths = statsData?.deaths ?? sumRecorded("deaths");
-    const careerKd = totalKills == null || totalDeaths == null
-      ? null : Number(totalDeaths) > 0 ? Number(totalKills) / Number(totalDeaths) : Number(totalKills);
-    const shotValues = completedMatches.map(match => match.shots_fired).filter(value => value != null);
-    const hitValues = completedMatches.map(match => match.shots_hit).filter(value => value != null);
-    const totalShots = statsData?.shots_fired ?? (shotValues.length ? shotValues.reduce((sum, value) => sum + Number(value), 0) : null);
-    const totalHits = statsData?.shots_hit ?? (hitValues.length ? hitValues.reduce((sum, value) => sum + Number(value), 0) : null);
-    const careerAcc = totalShots != null && totalHits != null && Number(totalShots) > 0
-      ? (Number(totalHits) / Number(totalShots)) * 100
-      : null;
-    const totalMatchesCount = statsData?.total_matches ?? Number(matchesData?.total_matches ?? completedMatches.length);
+    const totalKills = statsData?.kills;
+    const totalDeaths = statsData?.deaths;
+    const careerKd = statsData?.kdr;
+    const totalShots = statsData?.shots_fired;
+    const totalHits = statsData?.shots_hit;
+    const careerAcc = statsData?.accuracy;
+    const totalMatchesCount = statsData?.total_matches ?? matchesData?.total_matches ?? "Unavailable";
 
     const careerKillsEl = document.getElementById("careerTotalKills");
     if (careerKillsEl) careerKillsEl.textContent = totalKills == null ? "—" : Number(totalKills).toLocaleString();
@@ -412,8 +448,8 @@ async function loadPlayerDashboard() {
     if (careerAccEl) careerAccEl.textContent = careerAcc == null ? "—" : `${careerAcc.toFixed(1)}%`;
 
     const careerShotsEl = document.getElementById("careerShotsSummary");
-    if (careerShotsEl) careerShotsEl.textContent = careerAcc == null
-      ? "Shot totals unavailable or zero"
+    if (careerShotsEl) careerShotsEl.textContent = totalShots == null || totalHits == null
+      ? "Shot totals unavailable"
       : `${totalHits.toLocaleString()} / ${totalShots.toLocaleString()} recorded hits / shots`;
     const careerShotsCountEl = document.getElementById("careerTotalShots");
     if (careerShotsCountEl) careerShotsCountEl.textContent = totalShots == null ? "—" : Number(totalShots).toLocaleString();
@@ -446,7 +482,7 @@ async function loadPlayerDashboard() {
     }
     const careerHeadshotRateEl = document.getElementById("careerHeadshotRate");
     if (careerHeadshotRateEl) careerHeadshotRateEl.textContent = statsData?.headshot_percentage == null
-      ? "Verified matches" : `${statsData.headshot_percentage}% of verified hits`;
+      ? "Headshot rate unavailable" : `${statsData.headshot_percentage}% of recorded hits`;
     const playtimeMinutes = Math.floor((statsData?.total_playtime_seconds ?? 0) / 60);
     const careerPlaytimeEl = document.getElementById("careerPlaytime");
     if (careerPlaytimeEl) careerPlaytimeEl.textContent = statsData ? `${Math.floor(playtimeMinutes / 60)}h ${playtimeMinutes % 60}m` : "—";
@@ -470,9 +506,11 @@ async function loadPlayerDashboard() {
 
     const matchesList = document.getElementById("matchesList");
     if (matchesList) {
-      matchesList.innerHTML = !matchesData
+      renderMatchPage(completedMatches, rows => {
+        matchesList.innerHTML = !matchesData
         ? '<div class="match-empty"><strong>Match history unavailable</strong><span>The match service could not be reached. Retry after the API and database are available.</span></div>'
-        : completedMatches.slice(0, 10).map(matchCard).join("") || '<div class="match-empty"><strong>No completed matches yet</strong><span>Finish a match to see your results and security review here.</span><a class="play-btn" href="#games" data-section="games">Play FPS Microgame</a></div>';
+        : rows.map(matchCard).join("") || '<div class="match-empty"><strong>No completed matches yet</strong><span>Finish a match to see your results and security review here.</span><a class="play-btn" href="#games" data-section="games">Play FPS Microgame</a></div>';
+      });
     }
 
     const recentRows = document.getElementById("overviewRecentRows");
@@ -523,7 +561,8 @@ async function loadPlayerDashboard() {
 
     const securityStatus = document.getElementById("securityStatus");
     if (securityStatus && securityData) {
-      const loginHistoryOpen = document.getElementById("playerLoginHistory")?.open || false;
+      const existingLoginHistory = document.getElementById("playerLoginHistory");
+      const historySignature = JSON.stringify(history);
       const warnings = securityData.security_warnings || [];
       securityStatus.innerHTML = `
         <div class="account-security-facts">
@@ -536,10 +575,20 @@ async function loadPlayerDashboard() {
         <details class="security-history" id="playerLoginHistory"><summary>Sign-in history (${history.length})</summary>
           <div class="overview-table-wrap"><table class="overview-recent-table">
             <thead><tr><th>Time</th><th>Browser / OS</th><th>IP address</th><th>Result</th></tr></thead>
-            <tbody>${history.map(entry => `<tr><td>${playerText(playerDate(entry.timestamp, true))}</td><td>${playerText(entry.browser || "Unknown")} / ${playerText(entry.os || "Unknown")}</td><td>${playerText(entry.ip_address || "Unknown")}</td><td>${entry.success === false ? "Failed" : "Successful"}</td></tr>`).join("") || '<tr><td colspan="4">No sign-ins recorded.</td></tr>'}</tbody>
+            <tbody></tbody>
           </table></div>
         </details>`;
-      document.getElementById("playerLoginHistory").open = loginHistoryOpen;
+      const loginHistory = document.getElementById("playerLoginHistory");
+      if (existingLoginHistory?.dataset.signature === historySignature) {
+        loginHistory.replaceWith(existingLoginHistory);
+      } else {
+        loginHistory.open = existingLoginHistory?.open || false;
+        loginHistory.dataset.signature = historySignature;
+        const rows = loginHistory.querySelector("tbody");
+        window.createRecordPager(rows, "Sign-in history pages")(history, entries => {
+          rows.innerHTML = entries.map(entry => `<tr><td>${playerText(playerDate(entry.timestamp, true))}</td><td>${playerText(entry.browser || "Unknown")} / ${playerText(entry.os || "Unknown")}</td><td>${playerText(entry.ip_address || "Unknown")}</td><td>${entry.success === false ? "Failed" : "Successful"}</td></tr>`).join("") || '<tr><td colspan="4">No sign-ins recorded.</td></tr>';
+        });
+      }
     }
     if (securityStatus && !securityData) securityStatus.textContent = "Account security unavailable.";
 
@@ -721,6 +770,7 @@ async function loadPlayerDashboard() {
       const element = document.getElementById(id);
       if (element && ["Loading", "Pending", "—"].includes(element.textContent.trim())) element.textContent = "Unavailable";
     });
+    renderMatchPage([], () => {});
     const matchList = document.getElementById("matchesList");
     if (matchList) matchList.innerHTML = '<div class="match-empty"><strong>Match history unavailable</strong><span>Reconnect to the API and database to load saved matches.</span></div>';
     const overviewMatches = document.getElementById("overviewMatchList");
@@ -851,6 +901,7 @@ if (generateRecoveryCodesForm && generateRecoveryCodesBtn) {
 }
 
 document.getElementById("refreshSessionsBtn")?.addEventListener("click", loadPlayerDashboard);
+document.getElementById("refreshFairplayBtn")?.addEventListener("click", loadPlayerDashboard);
 document.getElementById("activeSessionsRows")?.addEventListener("click", async event => {
   const button = event.target.closest("[data-revoke-device]");
   if (!button || !await window.showAppConfirm("Sign out this device?")) return;
@@ -983,15 +1034,38 @@ if (banAppealForm) {
 // MATCH DETAIL DRILL-DOWN (Item 14)
 // =========================================================================
 
+function formatMatchDurationMinSec(seconds) {
+  if (seconds == null || !Number.isFinite(Number(seconds))) return "—";
+  const total = Math.max(0, Math.round(Number(seconds)));
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+}
+
+function formatTimelineEventTime(value) {
+  if (value == null || value === "") return "";
+  if (typeof value === "number" || /^\d+(\.\d+)?$/.test(String(value))) {
+    return `${Number(value).toFixed(1)}s`;
+  }
+  const d = new Date(value);
+  if (Number.isFinite(d.getTime())) {
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+  return String(value);
+}
+
 let matchDetailVersion = 0;
 async function openMatchDetail(sessionId) {
   const modal = document.getElementById("matchDetailModal");
   const title = document.getElementById("modalMatchTitle");
+  const idBadge = document.getElementById("modalMatchIdBadge");
   const content = document.getElementById("matchDetailContent");
   if (!modal || !content || !sessionId) return;
   const version = ++matchDetailVersion;
 
-  if (title) title.textContent = `Match Detail: ${sessionId || "Drill-Down"}`;
+  const displayId = /^\d+$/.test(String(sessionId)) ? `#${sessionId}` : String(sessionId);
+  if (title) title.textContent = "Match Details";
+  if (idBadge) idBadge.textContent = displayId;
   content.innerHTML = '<p role="status">Loading match details…</p>';
   if (typeof modal.showModal === "function") {
     if (!modal.open) modal.showModal();
@@ -1002,46 +1076,70 @@ async function openMatchDetail(sessionId) {
   try {
     const data = await api(`/player/matches/${encodeURIComponent(sessionId)}`);
     if (version !== matchDetailVersion || !modal.open) return;
-    const feats = data.features || {};
-    const timeline = data.timeline || [];
+    if (idBadge && data.match_id) idBadge.textContent = data.match_id;
+    const timeline = Array.isArray(data.timeline) ? data.timeline : [];
     const combatCount = (value) => value == null ? "—" : Number(value).toLocaleString();
 
-    const shotsFired = data.shots_fired != null ? Number(data.shots_fired) : 0;
-    const shotsHit = data.shots_hit != null ? Number(data.shots_hit) : 0;
-    const headshots = data.headshots != null ? Number(data.headshots) : (feats.headshot_ratio != null && shotsHit ? Math.round(Number(feats.headshot_ratio) * shotsHit) : 0);
-    const headshotRatio = data.headshot_ratio != null ? Number(data.headshot_ratio) : (shotsHit > 0 ? (headshots / shotsHit) : 0);
-    const bodyHits = data.body_hits != null ? Number(data.body_hits) : Math.max(0, shotsHit - headshots);
-    const missedShots = data.missed_shots != null ? Number(data.missed_shots) : Math.max(0, shotsFired - shotsHit);
-    const headshotPercentStr = shotsHit > 0 ? (headshotRatio * 100).toFixed(1) + '%' : '0.0%';
+    const shotsFired = data.shots_fired != null ? Number(data.shots_fired) : null;
+    const shotsHit = data.shots_hit != null ? Number(data.shots_hit) : null;
+    const headshots = data.headshots != null ? Number(data.headshots) : null;
+    const headshotPct = data.headshot_percentage != null
+      ? Number(data.headshot_percentage).toFixed(1) + "%"
+      : (headshots != null && shotsHit != null && shotsHit > 0
+        ? ((headshots / shotsHit) * 100).toFixed(1) + "%"
+        : "—");
+    const nonHeadshotHits = data.non_headshot_hits != null
+      ? Number(data.non_headshot_hits)
+      : (shotsHit != null && headshots != null ? Math.max(0, shotsHit - headshots) : null);
+    const missedShots = data.missed_shots != null
+      ? Number(data.missed_shots)
+      : (shotsFired != null && shotsHit != null ? Math.max(0, shotsFired - shotsHit) : null);
+    const nonHeadshotLabel = data.body_hits_verified ? "Verified Body Hits" : "Non-Headshot Hits";
+
+    const renderTimelineLabel = (ev) => {
+      if (ev.label) {
+        if (ev.type === "kill" && ev.enemy_id) return `🎯 ${escapeHtml(ev.label)} — ${escapeHtml(ev.enemy_id)}`;
+        if (ev.type === "death" && ev.killer_id) return `💀 ${escapeHtml(ev.label)} by ${escapeHtml(ev.killer_id)}`;
+        if (ev.type === "respawn") return `🔄 ${escapeHtml(ev.label)}`;
+        if (ev.type === "match_started") return `▶️ ${escapeHtml(ev.label)}`;
+        if (ev.type === "match_completed") return `🏁 ${escapeHtml(ev.label)}`;
+        if (ev.type === "enforcement") return `🛡️ ${escapeHtml(ev.label)}`;
+        return escapeHtml(ev.label);
+      }
+      return ev.type === "kill"
+        ? `🎯 Opponent eliminated (${escapeHtml(ev.body_part || "recorded")})`
+        : `💀 Player defeated`;
+    };
 
     content.innerHTML = `
+      <h4 class="match-detail-section-title">Combat Summary</h4>
       <div class="match-features-grid">
-        <div class="feat-stat-box"><strong>${combatCount(data.kills)} / ${combatCount(data.deaths)}</strong><small>Kills / Deaths</small></div>
-        <div class="feat-stat-box"><strong>${data.kdr == null ? '—' : Number(data.kdr).toFixed(2)}</strong><small>K/D Ratio</small></div>
-        <div class="feat-stat-box"><strong>${combatCount(shotsFired)}</strong><small>Total Shots Fired</small></div>
-        <div class="feat-stat-box"><strong>${combatCount(shotsHit)}</strong><small>Successful Hits</small></div>
-        <div class="feat-stat-box"><strong>${data.accuracy != null ? Number(data.accuracy).toFixed(1) + '%' : '—'}</strong><small>Accuracy Rate</small></div>
-        <div class="feat-stat-box"><strong>${data.duration_seconds != null ? data.duration_seconds + 's' : '—'}</strong><small>Duration</small></div>
+        <div class="feat-stat-box"><strong>${combatCount(data.kills)}</strong><small>Kills</small></div>
+        <div class="feat-stat-box"><strong>${combatCount(data.deaths)}</strong><small>Deaths</small></div>
+        <div class="feat-stat-box"><strong>${data.kdr == null ? "—" : Number(data.kdr).toFixed(2)}</strong><small>K/D Ratio</small></div>
+        <div class="feat-stat-box"><strong>${formatMatchDurationMinSec(data.duration_seconds)}</strong><small>Duration</small></div>
       </div>
 
-      <h4 style="margin: 14px 0 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--player-muted, #94a3b8);">Combat Ballistics & Headshot Details</h4>
+      <h4 class="match-detail-section-title">Shooting Performance</h4>
       <div class="match-features-grid">
         <div class="feat-stat-box"><strong>${combatCount(shotsFired)}</strong><small>Total Shots</small></div>
-        <div class="feat-stat-box"><strong>${combatCount(shotsHit)}</strong><small>Shots on Target</small></div>
-        <div class="feat-stat-box"><strong style="color: #38BDF8;">${combatCount(headshots)}</strong><small>Headshot Hits</small></div>
-        <div class="feat-stat-box"><strong style="color: #F59E0B;">${headshotPercentStr}</strong><small>Headshot % of Hits</small></div>
-        <div class="feat-stat-box"><strong>${combatCount(bodyHits)}</strong><small>Body / Torso Hits</small></div>
+        <div class="feat-stat-box"><strong>${combatCount(shotsHit)}</strong><small>Successful Hits</small></div>
         <div class="feat-stat-box"><strong>${combatCount(missedShots)}</strong><small>Missed Shots</small></div>
+        <div class="feat-stat-box"><strong>${data.accuracy != null ? Number(data.accuracy).toFixed(1) + "%" : "—"}</strong><small>Accuracy</small></div>
+        <div class="feat-stat-box"><strong style="color:#6D28D9;">${combatCount(headshots)}</strong><small>Headshot Hits</small></div>
+        <div class="feat-stat-box"><strong style="color:#B45309;">${headshotPct}</strong><small>Headshot %</small></div>
+        <div class="feat-stat-box"><strong>${combatCount(nonHeadshotHits)}</strong><small>${nonHeadshotLabel}</small></div>
       </div>
 
-      <h4 style="margin: 14px 0 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--player-muted, #94a3b8);">Match Combat Timeline</h4>
+      <h4 class="match-detail-section-title">Combat Timeline</h4>
+      ${data.timeline_incomplete ? '<div class="match-timeline-notice">Historical combat timeline is incomplete — some match events were not recorded.</div>' : ""}
       <div class="match-timeline" tabindex="0" aria-label="Match combat timeline">
         ${timeline.length ? timeline.map(ev => `
-          <div style="display:flex; justify-content:space-between; font-size: 12px; padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,0.05);">
-            <span>${ev.type === 'kill' ? '🎯 Eliminated ' + escapeHtml(ev.enemy_id) + ' (' + escapeHtml(ev.body_part) + ')' : '💀 Defeated by ' + escapeHtml(ev.killer_id)}</span>
-            <small style="color:var(--player-muted, #94a3b8);">${ev.time ? Number(ev.time).toFixed(1) + 's' : ''}</small>
+          <div class="match-timeline-row">
+            <span>${renderTimelineLabel(ev)}</span>
+            <small>${escapeHtml(formatTimelineEventTime(ev.time))}</small>
           </div>
-        `).join('') : '<div style="font-size:12px; color:var(--player-muted, #94a3b8); text-align:center; padding: 8px;">No kill/death combat events recorded.</div>'}
+        `).join("") : '<div style="font-size:12px; color:#6B7280; text-align:center; padding: 10px;">No combat timeline events were recorded for this match.</div>'}
       </div>
     `;
   } catch (err) {
@@ -1053,14 +1151,17 @@ async function openMatchDetail(sessionId) {
 const closeMatchDetailBtn = document.getElementById("closeMatchDetailBtn");
 const matchDetailModal = document.getElementById("matchDetailModal");
 if (closeMatchDetailBtn && matchDetailModal) {
-  closeMatchDetailBtn.addEventListener("click", () => {
+  const closeModal = () => {
     if (typeof matchDetailModal.close === "function") matchDetailModal.close();
     else matchDetailModal.removeAttribute("open");
-  });
+  };
+  closeMatchDetailBtn.addEventListener("click", closeModal);
   matchDetailModal.addEventListener("click", (e) => {
-    if (e.target === matchDetailModal) {
-      if (typeof matchDetailModal.close === "function") matchDetailModal.close();
-      else matchDetailModal.removeAttribute("open");
+    if (e.target === matchDetailModal) closeModal();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && (matchDetailModal.open || matchDetailModal.hasAttribute("open"))) {
+      closeModal();
     }
   });
 }

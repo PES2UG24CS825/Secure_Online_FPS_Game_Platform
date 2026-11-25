@@ -75,14 +75,20 @@ async function compressSupportImage(file) {
   throw new Error("This image is too large after compression. Choose a smaller image.");
 }
 
+const playerSupportList = document.getElementById("supportTicketList");
+const renderPlayerSupportPage = playerSupportList && window.createRecordPager(playerSupportList, "Support message pages", 5);
+
 async function loadSupportTickets() {
   const list = document.getElementById("supportTicketList");
   if (!list) return;
   try {
     const data = await api("/player/support/tickets");
     const tickets = data.tickets || [];
-    list.innerHTML = tickets.map((ticket) => `<article class="support-ticket"><div class="support-ticket-head"><strong>${featureEscape(ticket.category)} · ${featureEscape(new Date(ticket.created_at).toLocaleString())}</strong><span class="badge ${ticket.status === "resolved" ? "good" : ticket.status === "answered" ? "warn" : "gray"}">${featureEscape(ticket.status)}</span></div><p>${featureEscape(ticket.message)}</p>${ticket.attachment_name ? `<small>Attachment: ${featureEscape(ticket.attachment_name)}</small>` : ""}${ticket.admin_reply ? `<div class="admin-reply"><strong>Admin reply</strong><p>${featureEscape(ticket.admin_reply)}</p></div>` : ""}</article>`).join("") || '<div class="empty">No support messages yet.</div>';
+    renderPlayerSupportPage(tickets, rows => {
+      list.innerHTML = rows.map((ticket) => `<article class="support-ticket"><div class="support-ticket-head"><strong>${featureEscape(ticket.category)} · ${featureEscape(new Date(ticket.created_at).toLocaleString())}</strong><span class="badge ${ticket.status === "resolved" ? "good" : ticket.status === "answered" ? "warn" : "gray"}">${featureEscape(ticket.status)}</span></div><p>${featureEscape(ticket.message)}</p>${ticket.attachment_name ? `<small>Attachment: ${featureEscape(ticket.attachment_name)}</small>` : ""}${ticket.admin_reply ? `<div class="admin-reply"><strong>Admin reply</strong><p>${featureEscape(ticket.admin_reply)}</p></div>` : ""}</article>`).join("") || '<div class="empty">No support messages yet.</div>';
+    });
   } catch (error) {
+    renderPlayerSupportPage([], () => {});
     list.textContent = error.message || "Support messages could not be loaded.";
   }
 }
@@ -96,8 +102,57 @@ const rewardStatus = document.getElementById("rewardStatus");
 const rewardView = document.getElementById("rewardView");
 const rewardFilter = document.getElementById("rewardFilter");
 const dailyRewardButton = document.getElementById("claimDailyReward");
+let dailyClaimPending = false;
 const rewardPrevious = document.getElementById("rewardPrevious");
 const rewardNext = document.getElementById("rewardNext");
+
+function isDailyClaimed() {
+  if (!rewardsData) return false;
+  if (rewardsData.daily_claimed_today === true) return true;
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const todayLocal = new Date().toLocaleDateString("en-CA");
+  try {
+    if (localStorage.getItem("securefps_daily_claimed_" + todayUtc) === "true" ||
+        localStorage.getItem("securefps_daily_claimed_" + todayLocal) === "true") {
+      return true;
+    }
+  } catch (_) {}
+  const lastLogin = rewardsData.last_daily_login ? String(rewardsData.last_daily_login).slice(0, 10) : "";
+  if (lastLogin && (lastLogin === todayUtc || lastLogin === todayLocal)) {
+    return true;
+  }
+  if (Array.isArray(rewardsData.transactions)) {
+    const hasClaimToday = rewardsData.transactions.some(row =>
+      row.type === "daily_login" && (
+        String(row.created_at || "").slice(0, 10) === todayUtc ||
+        String(row.created_at || "").slice(0, 10) === todayLocal
+      )
+    );
+    if (hasClaimToday) return true;
+  }
+  if (Array.isArray(rewardsData.activity)) {
+    const hasClaimToday = rewardsData.activity.some(row =>
+      row.type === "daily_login" && (
+        String(row.daily_date || row.created_at || "").slice(0, 10) === todayUtc ||
+        String(row.daily_date || row.created_at || "").slice(0, 10) === todayLocal
+      )
+    );
+    if (hasClaimToday) return true;
+  }
+  return false;
+}
+
+function renderDailyClaim() {
+  const claimed = isDailyClaimed();
+  dailyRewardButton.disabled = dailyClaimPending || !rewardsData || claimed;
+  dailyRewardButton.textContent = claimed ? "Claimed today" : dailyClaimPending ? "Claiming…" : "Claim daily reward";
+  const msgEl = document.getElementById("dailyRewardMessage");
+  if (msgEl) {
+    msgEl.textContent = claimed
+      ? "Next reward after midnight UTC"
+      : "25 coins and 25 XP per UTC day";
+  }
+}
 
 async function loadRewards() {
   if (!rewardStore) return;
@@ -107,14 +162,15 @@ async function loadRewards() {
     const data = await api("/player/rewards");
     if (version !== rewardLoadVersion) return;
     rewardsData = data;
+    if (isDailyClaimed()) {
+      rewardsData.daily_claimed_today = true;
+    }
     const { coins, xp, level, daily_streak: streak } = rewardsData;
     document.getElementById("rewardCoins").textContent = Number(coins).toLocaleString();
     document.getElementById("rewardXp").textContent = Number(xp).toLocaleString() + " XP";
     document.getElementById("rewardLevel").textContent = "Level " + level;
     document.getElementById("rewardStreak").textContent = streak + (streak === 1 ? " day" : " days");
-    const claimed = rewardsData.last_daily_login === new Date().toISOString().slice(0, 10);
-    dailyRewardButton.disabled = claimed;
-    document.getElementById("dailyRewardMessage").textContent = claimed ? "Today's reward claimed" : "25 coins and 25 XP per UTC day";
+    renderDailyClaim();
     const badge = document.getElementById("equippedRewardBadge");
     const equippedBadge = data.store.find(item => item.id === data.equipped_item && item.category !== "avatar" && item.category !== "banner");
     if (badge) {
@@ -190,7 +246,7 @@ function renderRewards() {
     const action = equipped ? "Equipped" : hasItem ? "Equip" : !item.available ?
       (item.artwork_ready ? "Unavailable" : "Artwork pending") : affordable ? "Buy" : "Insufficient coins";
     return `<article class="reward-item${equipped ? " equipped-card" : ""}" data-reward-category="${featureEscape(item.category || "badge")}">
-      ${canPreview ? `<img class="reward-catalog-art" src="${featureEscape(item.preview)}" alt="" loading="lazy">` : ""}
+      ${canPreview ? `<img class="reward-catalog-art" src="${featureEscape(item.preview)}" alt="" width="200" height="128" loading="lazy">` : ""}
       <div class="reward-item-body"><h3>${featureEscape(item.name)}</h3>
         <small>${featureEscape(item.category === "banner" ? "Background" : item.category || "Badge")} · ${Number(item.price)} coins${hasItem ? " · Owned" : ""}</small>
         <div class="reward-item-footer">
@@ -217,14 +273,41 @@ rewardNext?.addEventListener("click", () => {
 });
 document.getElementById("reloadRewards")?.addEventListener("click", loadRewards);
 dailyRewardButton?.addEventListener("click", async () => {
-  dailyRewardButton.disabled = true;
+  if (dailyRewardButton.disabled || dailyClaimPending) return;
+  dailyClaimPending = true;
+  renderDailyClaim();
   try {
     const result = await api("/player/rewards/claim-daily", { method: "POST" });
+    const todayIso = new Date().toISOString().slice(0, 10);
+    try { localStorage.setItem("securefps_daily_claimed_" + todayIso, "true"); } catch (_) {}
+    if (rewardsData) {
+      rewardsData.daily_claimed_today = true;
+      rewardsData.last_daily_login = todayIso;
+      if (typeof result.coins === "number") rewardsData.coins = result.coins;
+      if (typeof result.xp === "number") rewardsData.xp = result.xp;
+      if (typeof result.daily_streak === "number") rewardsData.daily_streak = result.daily_streak;
+    }
+    renderDailyClaim();
     await loadRewards();
-    rewardStatus.textContent = result.claimed ? "Daily reward credited." : result.message;
+    if (rewardsData) rewardsData.daily_claimed_today = true;
+    renderDailyClaim();
+    rewardStatus.textContent = result.claimed ? "Daily reward credited." : (result.message || "Daily reward claimed.");
   } catch (error) {
+    const todayIso = new Date().toISOString().slice(0, 10);
+    if (error?.message && error.message.toLowerCase().includes("already claimed")) {
+      try { localStorage.setItem("securefps_daily_claimed_" + todayIso, "true"); } catch (_) {}
+      if (rewardsData) {
+        rewardsData.daily_claimed_today = true;
+        rewardsData.last_daily_login = todayIso;
+      }
+      renderDailyClaim();
+    } else {
+      await loadRewards();
+    }
     rewardStatus.textContent = error.message;
-    dailyRewardButton.disabled = false;
+  } finally {
+    dailyClaimPending = false;
+    renderDailyClaim();
   }
 });
 

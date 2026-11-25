@@ -132,3 +132,20 @@ dialog.app-alert-dialog::backdrop{background:rgba(27,23,48,.42);backdrop-filter:
 .login-squad-stickers img:nth-child(even){transform:translateY(-3px) rotate(3deg)}
 @media(max-width:850px){.login-page .auth-shell{width:100%;grid-template-columns:minmax(0,1fr);gap:18px;padding:0}.login-logo-header{margin-bottom:14px}.login-page .auth-battlefield-art{height:clamp(180px,36vw,240px);margin-bottom:18px}.login-page .auth-brand h1{font-size:38px}.login-page .auth-brand>p:not(.eyebrow){font-size:14px}.login-page .security-points{margin-top:12px}}
 @media(max-width:600px){.login-page .auth-shell{padding:0}.login-page .auth-battlefield-art{height:180px}.login-page .auth-brand h1{font-size:32px}.login-page .security-points{grid-template-columns:1fr;gap:5px}.login-squad{margin-top:10px;padding:7px 9px}.login-squad-stickers img{width:38px;height:42px}}
+.record-page-controls:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 10px;
+  margin-block: 8px;
+  color: var(--role-secondary, #475569);
+  font-size: 12px;
+}
+.record-page-controls .ghost-btn {
+  min-height: 34px;
+  height: auto;
+  width: auto;
+  margin: 0;
+  padding: 5px 9px;
+}

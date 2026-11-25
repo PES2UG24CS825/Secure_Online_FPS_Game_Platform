@@ -68,6 +68,11 @@ def test_rewards_concurrency_equipment_permissions_and_retry():
     assert browser.post("/api/player/rewards/purchase", json={"item_id": item_ids[1], "price": 100}).status_code == 200
     for item in item_ids:
         assert browser.post("/api/player/rewards/equip", json={"item_id": item}).status_code == 200
+    profile = client_for(player).get("/api/player/profile").get_json()
+    assert profile["avatar"]["key"] == item_ids[0]
+    assert profile["profile_customization"]["banner"] == item_ids[1]
+    assert profile["profile_customization"]["banner_url"] == "/public/cosmetics/background-100.jpg"
+    assert browser.put("/api/player/profile/customization", json={"avatar": item_ids[0], "banner": item_ids[1]}).status_code == 200
     refreshed = client_for(player).get("/api/player/rewards").get_json()
     assert refreshed["equipped_slots"] == dict(zip(("avatar", "banner"), item_ids))
     assert refreshed["coins"] == 50
@@ -81,6 +86,19 @@ def test_rewards_concurrency_equipment_permissions_and_retry():
         assert client_for(account).get("/api/admin/rewards/shop").status_code == 200
         assert client_for(account).put(uri, json=change).status_code == 403
     root = client_for(super_admin)
+    for admin_browser in (client_for(normal), root):
+        grouped = admin_browser.get("/api/admin/rewards/shop?view=players")
+        assert grouped.status_code == 200
+        player_id = str(player[0])
+        groups = grouped.get_json()["player_groups"]
+        matching = [row for row in groups if row["id"] == player_id]
+        assert len(matching) == 1
+        history = admin_browser.get("/api/admin/rewards/shop", query_string={
+            "view": "history", "player_id": player_id,
+        })
+        assert history.status_code == 200
+        assert history.get_json()["total"] == matching[0]["transactions"]
+        assert all(row["player"] == player_id for row in history.get_json()["transactions"])
     assert root.put(uri, json=change).status_code == 200
     assert browser.post("/api/player/rewards/equip", json={"item_id": item_ids[0]}).status_code == 200
     adjust_uri = "/api/admin/rewards/adjustments"

@@ -15,6 +15,8 @@ class TelemetryClient {
     this.sessionId = null;
     this.gameToken = null;
     this.isSessionActive = false;
+    this.sessionStartPerfTime = null;
+    this.alertedViolationTypes = new Set();
     this.sessionStorageKey = 'securefps_telemetry_session_id';
     this.lastMovementSampleTime = 0;
     this.lastAimSampleTime = 0;
@@ -41,8 +43,7 @@ class TelemetryClient {
         weapon: e.detail?.weapon || 'P-24 Carbine',
         shot_id: e.detail?.shot_id || null,
         aim_error_deg: e.detail?.aim_error_deg != null ? Number(e.detail.aim_error_deg) : null,
-        target_id: e.detail?.target_id || null,
-        timestamp: performance.now() / 1000
+        target_id: e.detail?.target_id || null
       });
     });
 
@@ -58,8 +59,7 @@ class TelemetryClient {
         impossible_hit: !!e.detail?.impossible_hit,
         line_of_sight: e.detail?.line_of_sight !== false,
         player_position: e.detail?.player_position || null,
-        target_position: e.detail?.target_position || null,
-        timestamp: performance.now() / 1000
+        target_position: e.detail?.target_position || null
       });
     });
 
@@ -68,8 +68,7 @@ class TelemetryClient {
         target_id: e.detail?.target_id || 'bot_target',
         body_part: e.detail?.body_part || 'body',
         distance: e.detail?.distance != null ? Number(e.detail.distance) : 10.0,
-        damage: e.detail?.damage != null ? Number(e.detail.damage) : 34,
-        timestamp: performance.now() / 1000
+        damage: e.detail?.damage != null ? Number(e.detail.damage) : 34
       });
     });
 
@@ -77,14 +76,16 @@ class TelemetryClient {
       this.sendEvent('target_acquired', {
         enemy_id: e.detail?.enemy_id || 'bot_target',
         distance: e.detail?.distance != null ? Number(e.detail.distance) : 10.0,
-        visible_through_wall: !!e.detail?.visible_through_wall,
-        timestamp: performance.now() / 1000
+        visible_through_wall: !!e.detail?.visible_through_wall
       });
     });
 
     window.addEventListener('fps:kill', (e) => {
       this.sendEvent('enemy_killed', {
-        enemy: e.detail?.victim || 'bot_target'
+        enemy: e.detail?.victim || 'bot_target',
+        headshot: !!e.detail?.headshot,
+        weapon: e.detail?.weapon || null,
+        body_part: e.detail?.headshot ? 'head' : (e.detail?.body_part || 'body')
       });
     });
 
@@ -144,13 +145,15 @@ class TelemetryClient {
         this.sessionId = data.session_id;
         this.gameToken = data.game_token;
         this.isSessionActive = true;
+        this.sessionStartPerfTime = performance.now() / 1000;
+        this.alertedViolationTypes = new Set();
         this.eventSequence = 0;
         sessionStorage.setItem(this.sessionStorageKey, this.sessionId);
         sessionStorage.setItem(`${this.sessionStorageKey}:sequence`, '0');
         console.log(`[SecureFPS Telemetry] Authenticated session started: ${this.sessionId}`);
 
         // Emit game_started event
-        this.sendEvent('game_started', {});
+        this.sendEvent('game_started', { timestamp: 0 });
         return true;
       }
     } catch (err) {
@@ -278,7 +281,9 @@ class TelemetryClient {
     sessionStorage.setItem(`${this.sessionStorageKey}:sequence`, String(this.eventSequence));
     telemetryData.seq = this.eventSequence;
     if (telemetryData.timestamp === undefined) {
-      telemetryData.timestamp = parseFloat((performance.now() / 1000).toFixed(4));
+      const nowSec = performance.now() / 1000;
+      const baseSec = this.sessionStartPerfTime != null ? this.sessionStartPerfTime : nowSec;
+      telemetryData.timestamp = parseFloat(Math.max(0, nowSec - baseSec).toFixed(4));
     }
 
     // Critical match lifecycle events flush and send immediately
@@ -316,7 +321,8 @@ class TelemetryClient {
       timestamp: telemetryData.timestamp
     });
 
-    if (this.eventQueue.length >= 20 || telemetryData.impossible_hit || telemetryData.through_obstacle || window.SecureFPSGame?.isCheaterDemoActive) {
+    const isCriticalCombatEvent = eventType === 'enemy_killed' || eventType === 'player_death' || eventType === 'respawn' || telemetryData.impossible_hit || telemetryData.through_obstacle;
+    if (this.eventQueue.length >= 20 || isCriticalCombatEvent) {
       this.flushQueue();
     }
   }
@@ -344,29 +350,58 @@ class TelemetryClient {
       if (response.ok) {
         const data = await response.json();
         this.handleDetectionResponse(data);
+      } else if (response.status === 429 || response.status >= 500) {
+        const critical = batch.filter(ev => ['enemy_killed', 'player_death', 'respawn', 'enemy_hit'].includes(ev.event_type));
+        if (critical.length > 0) this.eventQueue.unshift(...critical);
       }
-    } catch (err) {}
+    } catch (err) {
+      const critical = batch.filter(ev => ['enemy_killed', 'player_death', 'respawn', 'enemy_hit'].includes(ev.event_type));
+      if (critical.length > 0) this.eventQueue.unshift(...critical);
+    }
   }
 
   handleDetectionResponse(data) {
     if (!data) return;
 
-    // Check ML Real-time Anti-Cheat Alerts
+    if (data.banned || data.account_status === 'banned' || data.enforcement_state === 'banned') {
+      this.isSessionActive = false;
+      window.dispatchEvent(new CustomEvent('fps:cheat_enforce'));
+      if (document.exitPointerLock) {
+        try { document.exitPointerLock(); } catch (_) {}
+      }
+      window.location.replace('/login.html?banned=1');
+      return;
+    }
+
+    // Check Server-Rule Violations & ML Real-time Anti-Cheat Alerts
+    const violationMessages = {
+      headshot_anomaly: 'Abnormal headshot activity detected.',
+      abnormal_speed: 'Abnormal movement speed detected.',
+      movement_anomaly: 'Abnormal movement speed detected.',
+      impossible_hit: 'Invalid through-wall hit detected.',
+      abnormal_fire_rate: 'Abnormal firing rate detected.',
+    };
+
+    if (Array.isArray(data.detected_violations) && data.detected_violations.length > 0) {
+      for (const v of data.detected_violations) {
+        const vType = String(v?.type || 'suspicious_activity');
+        if (!this.alertedViolationTypes.has(vType)) {
+          this.alertedViolationTypes.add(vType);
+          const msg = violationMessages[vType] || 'Suspicious gameplay activity detected.';
+          window.updateSecurityAlertBanner?.('server', msg);
+        }
+      }
+    }
+
     const detection = data.realtime_detection || (data.analysis && data.analysis.result);
     if (detection) {
       window.dispatchEvent(new CustomEvent('fps:ml_risk_update', { detail: detection }));
-      const riskScore = detection.risk_score;
       const alertTriggered = detection.alert_triggered;
       const isRestricted = data.enforcement_state === 'restricted' || detection.enforcement_state === 'restricted';
 
-      if (alertTriggered || isRestricted) {
-        const banner = document.getElementById('cheat-alert-banner');
-        if (banner) {
-          banner.style.display = 'block';
-          banner.textContent = isRestricted
-            ? `SESSION RESTRICTED: Anti-Cheat flagged suspicious gameplay (Risk: ${riskScore || 85}/100)`
-            : `SUSPICIOUS GAMEPLAY DETECTED: Risk Score ${riskScore || 50}/100. Session is under review.`;
-        }
+      if ((alertTriggered || isRestricted) && !this.alertedViolationTypes.has('ml_realtime_alert')) {
+        this.alertedViolationTypes.add('ml_realtime_alert');
+        window.updateSecurityAlertBanner?.('server', 'Suspicious gameplay activity detected.');
 
         if (isRestricted) {
           // Freeze game time on enforcement

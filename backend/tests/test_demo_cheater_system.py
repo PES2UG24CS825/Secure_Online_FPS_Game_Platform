@@ -285,7 +285,7 @@ class TestDemoCheaterSystem(unittest.TestCase):
         self.assertEqual(evt.get("severity"), "critical")
         self.assertTrue(evt.get("is_demo"))
         self.assertEqual(evt.get("environment"), "DEMONSTRATION")
-        self.assertEqual(evt.get("source"), "Server-verified demo event")
+        self.assertEqual(evt.get("source"), "Client-reported demo telemetry")
 
     def test_10_abnormal_speed_detection(self):
         """Phase 3B & 5: Server detects movement speed exceeding legitimate sprint limits."""

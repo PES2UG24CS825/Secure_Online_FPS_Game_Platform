@@ -1494,7 +1494,11 @@ class TacticalOperator {
     };
 
     if (this.headBone) {
-      this.headMesh.position.set(0, 0.08, 0);
+      this.root.updateMatrixWorld(true);
+      const headScale = this.headBone.getWorldScale(new THREE.Vector3()).x || 1.0;
+      this.headBoneScale = headScale;
+      this.headMesh.scale.setScalar(1.0 / headScale);
+      this.headMesh.position.set(0, 0.08 / headScale, 0);
       this.headBone.add(this.headMesh);
     } else if (this.headGroup) {
       this.headMesh.position.set(0, 0.02, 0);
@@ -1517,7 +1521,11 @@ class TacticalOperator {
     };
 
     if (this.spineBone) {
-      this.bodyMesh.position.set(0, -0.42, 0);
+      this.root.updateMatrixWorld(true);
+      const spineScale = this.spineBone.getWorldScale(new THREE.Vector3()).x || 1.0;
+      this.spineBoneScale = spineScale;
+      this.bodyMesh.scale.setScalar(1.0 / spineScale);
+      this.bodyMesh.position.set(0, -0.42 / spineScale, 0);
       this.spineBone.add(this.bodyMesh);
     } else if (this.pelvisGroup) {
       this.bodyMesh.position.set(0, -0.15, 0);
@@ -1684,8 +1692,8 @@ class TacticalOperator {
     if (this.mixer) {
       this.mixer.update(effectiveDelta);
       // Skeletal hitboxes must be updated after bone transforms and before raycasting.
-      if (this.headMesh) this.headMesh.position.set(0, 0.06, 0);
-      if (this.bodyMesh) this.bodyMesh.position.set(0, -0.35, 0);
+      if (this.headMesh) this.headMesh.position.set(0, 0.06 / (this.headBoneScale || 1.0), 0);
+      if (this.bodyMesh) this.bodyMesh.position.set(0, -0.35 / (this.spineBoneScale || 1.0), 0);
       if (this.isDead) {
         if (this.modelRoot) {
           this.modelRoot.rotation.x = THREE.MathUtils.lerp(this.modelRoot.rotation.x, -Math.PI / 2, effectiveDelta * 8.0);
@@ -1870,13 +1878,13 @@ class TacticalOperator {
     if (this.headMesh) {
       this.headMesh.visible = true;
       if (!this.headBone && !this.headGroup) this.headMesh.position.set(0, 1.68, 0);
-      else if (this.headBone) this.headMesh.position.set(0, 0.06, 0);
+      else if (this.headBone) this.headMesh.position.set(0, 0.06 / (this.headBoneScale || 1.0), 0);
       else this.headMesh.position.set(0, 0, 0);
     }
     if (this.bodyMesh) {
       this.bodyMesh.visible = true;
       if (!this.spineBone && !this.pelvisGroup) this.bodyMesh.position.set(0, 0.82, 0);
-      else if (this.spineBone) this.bodyMesh.position.set(0, -0.35, 0);
+      else if (this.spineBone) this.bodyMesh.position.set(0, -0.35 / (this.spineBoneScale || 1.0), 0);
       else if (this.pelvisGroup) this.bodyMesh.position.set(0, -0.12, 0);
     }
 

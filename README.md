@@ -94,12 +94,23 @@ The Super Admin roster shows stored roles, MFA status, active sessions, and the 
 Create or verify `backend/.env`:
 ```env
 FLASK_SECRET_KEY=replace-with-a-random-secret-at-least-32-characters-long
-MONGO_URI=mongodb://127.0.0.1:27017/secure_fps
+GAME_SERVER_SECRET=replace-with-a-separate-random-secret-at-least-32-characters-long
+MONGO_URI=mongodb://127.0.0.1:27017/
+MONGO_DB=secure_fps
 APP_ENV=development
 ```
 
+See `backend/.env.example` for administrator bootstrap, session, and demo settings. Use the same `GAME_SERVER_SECRET` in Flask and the multiplayer process.
+
 ### 3. Start SecureFPS
-Open PowerShell in the project root. Activate the virtual environment and start the local Flask app, multiplayer server, and proxy:
+On a fresh checkout, install the dependencies from PowerShell in the project root.
+```powershell
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+npm.cmd --prefix multiplayer-server ci
+```
+
+Activate the virtual environment and start the local Flask app, multiplayer server, and proxy.
 ```powershell
 .\.venv\Scripts\Activate.ps1
 .\scripts\start_host.ps1
@@ -115,7 +126,17 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 ```
 This execution policy change ends when that PowerShell process closes. You can also run `.\.venv\Scripts\Activate.ps1` directly from the activation prompt shown in the terminal example.
 
-### 4. Stop SecureFPS
+### 4. Remote Multiplayer Across Networks (Cloudflare Tunnel)
+To allow remote players on different laptops or networks to join without connecting to `localhost`, expose the unified reverse proxy (`http://localhost:8080`) using Cloudflare Tunnel:
+```powershell
+cloudflared tunnel --url http://localhost:8080
+```
+Cloudflare outputs a temporary public HTTPS URL (e.g., `https://<random-subdomain>.trycloudflare.com`).
+- **Host:** Open the generated HTTPS URL, log in, open **CyberStrike 3D → Multiplayer Lobby → Create New Lobby**, and share the 6-character room code.
+- **Remote Joiners:** Open the same public HTTPS URL in their browser, log in with their own account, enter the 6-character room code, and join. All REST API requests, cookies, and Socket.IO WebSocket traffic route automatically through port `8080`.
+- **Note:** Temporary `trycloudflare.com` URLs expire when the `cloudflared` process is stopped.
+
+### 5. Stop SecureFPS
 In the same project directory, run:
 ```powershell
 .\scripts\stop_all.ps1
@@ -150,7 +171,7 @@ The demonstration mode allows evaluators to observe live server-side detection, 
 - **Independent Rule-Based Detections:** Geometric and statistical anomalies are flagged via separate, server-authoritative netcode rules:
   - **Unusual Headshot Pattern:** Detected when 3 or more consecutive hits achieve a 100% headshot ratio (threshold: $\ge 80\%$, normal human variance $\le 40\%$).
   - **Excessive Movement Speed:** Detected when kinematic telemetry exceeds the physical sprint ceiling ($> 11.5\text{ m/s}$, observed $\ge 25\text{ m/s}$).
-  - **Shot Through Obstacle:** Detected when raycast hit telemetry registers an impossible hit through solid geometry (`line_of_sight: false`, `through_obstacle: true`).
+  - **Shot Through Obstacle:** Demo alerts report the client's raycast claim (`line_of_sight: false`, `through_obstacle: true`). Multiplayer hit arbitration performs its own server-side occlusion check.
   - **Rapid Fire Violation:** Detected when shot intervals drop below the mechanical weapon limit ($< 0.055\text{ s}$).
 
 ### 5. Administrator Dashboards & Telemetry Persistence
@@ -162,6 +183,42 @@ The demonstration mode allows evaluators to observe live server-side detection, 
 ```bash
 python -m unittest backend/tests/test_demo_cheater_system.py
 ```
+
+---
+
+## 📊 Gameplay Statistics and Anti-Cheat Calculations
+
+All combat and career metrics are computed server-side from verified telemetry and match records, rounded only for UI display:
+
+- **Accuracy (%):** `(Successful Hits / Total Shots Fired) × 100`  
+  *Example:* `51 / 230 × 100 = 22.2%`
+- **Missed Shots:** `Total Shots Fired − Successful Hits`  
+  *Example:* `230 − 51 = 179`
+- **Headshot Percentage (%):** `(Headshot Hits / Successful Hits) × 100`  
+  *Example:* `41 / 51 × 100 = 80.4%`
+- **Non-Headshot Hits:** `Successful Hits − Headshot Hits`  
+  *Example:* `51 − 41 = 10`
+- **K/D Ratio:** `Kills / max(1, Deaths)` (when deaths = 0, denominator defaults to 1 to avoid division by zero)  
+  *Example:* `10 kills / 3 deaths = 3.33`
+- **Career Accuracy (%):** `(Sum of Successful Hits Across Matches / Sum of Total Shots Across Matches) × 100`
+- **Career K/D:** `Total Career Kills / max(1, Total Career Deaths)`
+- **Win Rate (%):** `(Matches Won / Eligible Completed Matches) × 100` (excludes training mode)
+- **Fire Rate:** `Total Shots Fired / Active Measurement Duration (seconds)`
+- **Movement Speed:** `Distance Travelled (metres) / Elapsed Time (seconds)` (excluding respawns and server-authorized corrections)
+- **Aim Smoothness:** Normalized angular velocity consistency (`[0.0, 1.0]`) derived from 10 Hz `aim_sample` pitch/yaw deltas.
+
+### ML Ensemble & Server-Rule Risk Assessment
+
+1. **Active 5-Feature Contract:** `accuracy`, `fire_rate`, `movement_speed`, `aim_smoothness`, `kdr` (normalized via the saved `StandardScaler` in the v2 model bundle).
+2. **ML Ensemble Formula (60% Random Forest + 40% Isolation Forest):**
+   $$\text{ML Risk Score} = (0.60 \times P_{\text{RF}} + 0.40 \times S_{\text{IF}}) \times 100$$
+   where $P_{\text{RF}} \in [0, 1]$ is the Random Forest cheating probability and $S_{\text{IF}} \in [0, 1]$ is the normalized Isolation Forest anomaly score.
+3. **Why a Low ML Score Can Coexist with a High Final Security Risk:**
+   If a player achieves low overall accuracy (e.g., `12.5%` from firing 152 shots with 19 hits), the 5-feature ML ensemble may output a normal score (e.g., `19.67/100`), while **independently verified server rules** detect physical impossibilities (`impossible_hit` through solid geometry, `19/19 = 100%` headshot anomaly, or `19.7 rps` rapid-fire violation). In that case, `model_risk_score` remains `19.67`, while verified server-rule evidence elevates the **Final Security Risk Score** (`82.5` for 1 rule violation, `88.0` for 2, `92.5` for 3+) and flags the match as **Confirmed violation** without fabricating ML probabilities.
+4. **Separate Alerts & Immediate Enforcement:**
+   - **Normal Admin & Super Admin:** Receive real-time SSE alerts with player name, account label (`Genuine` vs `Demo`), match ID, risk score, detection source (`Detection model` vs `Server rule`), and enforcement actions.
+   - **Affected Player:** Receives simple non-technical notices (e.g., *"Suspicious gameplay detected. Your match is under review."*) without exposing internal thresholds.
+   - **Ban Enforcement:** Banning an account updates MongoDB, revokes active sessions, emits `player:banned` to disconnect the WebSocket and remove the character from multiplayer rooms, and logs the action to `admin_audit_log`.
 
 ---
 

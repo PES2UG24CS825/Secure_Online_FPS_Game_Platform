@@ -965,8 +965,9 @@ class WeaponManager {
     raycaster.setFromCamera(new THREE.Vector2(spreadX, spreadY), this.camera);
 
     // Test target hitboxes separately, then compare them with scene scenery.
+    const effectiveBotManager = botManager || this.botManager || window.SecureFPSGame?.botManager;
     const hitboxMeshes = [];
-    if (botManager?.getHitboxMeshes) hitboxMeshes.push(...botManager.getHitboxMeshes());
+    if (effectiveBotManager?.getHitboxMeshes) hitboxMeshes.push(...effectiveBotManager.getHitboxMeshes());
     if (window.SecureFPSGame?.multiplayer?.getHitboxMeshes) {
       hitboxMeshes.push(...window.SecureFPSGame.multiplayer.getHitboxMeshes());
     }
@@ -1027,7 +1028,6 @@ class WeaponManager {
       if (w.magAmmo <= 1) w.magAmmo = w.magSize || 30;
     }
 
-    const effectiveBotManager = botManager || this.botManager || window.SecureFPSGame?.botManager;
     let bestBot = null;
     const canWallPenetrate = Boolean(isCheaterDemo && this.demoImpossibleHit);
 

@@ -3,14 +3,19 @@
  * Handles privileged administrator management, role permissions, ML tuning & rollback,
  * risk engine simulation, emergency lockdown, system control metrics, and backups.
  */
-import { escapeHtml, formatTimeAgo, incidentLabel } from './admin_core.js';
+import { escapeHtml, formatTimeAgo, incidentLabel } from './admin_core.js?v=20261125_demo_visibility';
 
 export function initSuperAdminModules() {
   setupSuperEventListeners();
+  document.getElementById("adminViolationAccountType")?.addEventListener("change", loadThreatMonitoring);
   initApprovalsSection();
 }
 
 function setupSuperEventListeners() {
+  document.getElementById('openModelRollbackBtn')?.addEventListener('click', () => {
+    document.getElementById('modelCatalogHeading')?.focus();
+  });
+
   // 1. Provision Normal Admin Modal
   const openCreateBtn = document.getElementById('openCreateAdminModalBtn');
   const createModal = document.getElementById('createAdminModal');
@@ -146,7 +151,7 @@ function setupSuperEventListeners() {
       if (scoreEl) scoreEl.textContent = `${data.simulated_risk_score} / 100`;
       if (verdictEl) {
         verdictEl.textContent = `${data.risk_category} Risk (${data.verdict})`;
-        verdictEl.style.color = data.simulated_risk_score >= 65 ? '#DC2626' : (data.simulated_risk_score >= 35 ? '#D97706' : '#059669');
+        verdictEl.style.color = data.simulated_risk_score >= 65 ? '#991B1B' : (data.simulated_risk_score >= 35 ? '#854D0E' : '#166534');
       }
     } catch (err) {
       window.showAppAlert(`Simulation error: ${err.message}`, { tone: "error" });
@@ -364,7 +369,7 @@ export async function loadMlModelsCatalog() {
       credentials: 'include',
       headers: { 'X-Requested-With': 'XMLHttpRequest' }
     });
-    if (!resp.ok) return;
+    if (!resp.ok) throw new Error('Could not load detection models.');
 
     const data = await resp.json();
     const active = data.active_model || {};
@@ -392,30 +397,38 @@ export async function loadMlModelsCatalog() {
       <tr>
         <td><strong>${escapeHtml(m.version)}</strong><br><small class="muted">${escapeHtml(m.name)}</small></td>
         <td><span class="badge badge-cyan">${escapeHtml(m.algorithm)}</span></td>
-        <td><strong style="color:#059669;">${percent(m.accuracy)}</strong></td>
+        <td><strong style="color:#047857;">${percent(m.accuracy)}</strong></td>
         <td>${percent(m.precision)} / ${percent(m.recall)}</td>
         <td>${percent(m.false_positive_rate)}</td>
         <td><span class="badge ${m.is_active ? 'badge-success' : 'badge-warning'}">${m.is_active ? 'Active' : 'Archived'}</span></td>
         <td>
           ${!m.is_active ? `
             <button class="play-btn rollback-btn" data-version="${escapeHtml(m.version)}" style="min-width:auto; height:28px; padding:0 10px; font-size:11px; background:#DC2626;">Rollback to ${escapeHtml(m.version)}</button>
-          ` : '<span style="color:#059669; font-weight:700; font-size:11px;">✓ Live</span>'}
+          ` : '<span style="color:#047857; font-weight:700; font-size:11px;">✓ Live</span>'}
         </td>
       </tr>
-    `).join('');
+    `).join('') || '<tr><td colspan="7" class="empty">No approved detection models are available.</td></tr>';
 
     tbody.querySelectorAll('.rollback-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const ver = btn.dataset.version;
-        if (!await window.showAppConfirm(`Are you sure you want to rollback active ML inference to model '${ver}'?`)) return;
-        const resp = await fetch('/api/admin/super/ml-models/rollback', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': 'securefps-csrf' },
-          body: JSON.stringify({ version: ver, reason: `Manual rollback by Super Admin to ${ver}` })
-        });
-        const d = await resp.json();
-        window.showAppAlert(d.message || 'Rollback complete.');
-        loadMlModelsCatalog();
+        if (!await window.showAppConfirm(`Restore detection model '${ver}'?`)) return;
+        btn.disabled = true;
+        try {
+          const resp = await fetch('/api/admin/super/ml-models/rollback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': 'securefps-csrf' },
+            body: JSON.stringify({ version: ver, reason: `Manual rollback by Super Admin to ${ver}` })
+          });
+          const data = await resp.json();
+          if (!resp.ok) throw new Error(data.message || 'Could not restore the model.');
+          window.showAppAlert(data.message || 'Detection model restored.');
+          await loadMlModelsCatalog();
+        } catch (error) {
+          window.showAppAlert(error.message || 'Could not restore the model.', { tone: 'error' });
+        } finally {
+          btn.disabled = false;
+        }
       });
     });
   } catch (err) {
@@ -593,9 +606,27 @@ export async function loadPlatformConfig() {
 // NORMAL ADMIN DATA LOADERS: THREATS & ANALYTICS
 // =========================================================================
 
+const repeatedViolatorsBody = document.getElementById('threatRepeatViolatorsTableBody');
+const renderRepeatedViolationsPage = repeatedViolatorsBody &&
+  window.createRecordPager(repeatedViolatorsBody, 'Player violation pages');
+
+function bindThreatInspection(root) {
+  root.querySelectorAll('.inspect-threat-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const id = e.currentTarget.dataset.id;
+      const name = e.currentTarget.dataset.name;
+      const email = e.currentTarget.dataset.email || '';
+      const view = e.currentTarget.dataset.view === 'violations' ? 'violations' : 'player';
+      window.dispatchEvent(new CustomEvent('securefps:open-player-inspection', {
+        detail: { id, name, email, view }
+      }));
+    });
+  });
+}
+
 export async function loadThreatMonitoring() {
   try {
-    const resp = await fetch('/api/admin/threats', {
+    const resp = await fetch('/api/admin/threats?' + new URLSearchParams({ account_type: document.getElementById('adminViolationAccountType')?.value || 'all' }), {
       credentials: 'include',
       headers: { 'X-Requested-With': 'XMLHttpRequest' }
     });
@@ -634,34 +665,22 @@ export async function loadThreatMonitoring() {
     }
 
     // Repeat Violators Table
-    const tbodyRep = document.getElementById('threatRepeatViolatorsTableBody');
-    if (tbodyRep) {
-      if (repeat.length === 0) {
-        tbodyRep.innerHTML = '<tr><td colspan="4" class="empty">No repeat violation records.</td></tr>';
+    renderRepeatedViolationsPage?.(repeat, rows => {
+      if (rows.length === 0) {
+        repeatedViolatorsBody.innerHTML = '<tr><td colspan="4" class="empty">No players with recorded detections.</td></tr>';
       } else {
-        tbodyRep.innerHTML = repeat.map(v => `
+        repeatedViolatorsBody.innerHTML = rows.map(v => `
           <tr>
-            <td><strong>${escapeHtml(v.name)}</strong><br><small class="muted">${escapeHtml(v.email)}</small></td>
-            <td><span class="badge badge-danger">${v.violations} Infractions</span></td>
+            <td><strong>${escapeHtml(v.name)}${v.is_demo ? ' · Demo' : ''}</strong><br><small class="muted">${escapeHtml(v.email)}</small></td>
+            <td><span class="badge badge-danger">${escapeHtml(v.violations)}</span></td>
             <td><strong>${v.risk_score}</strong></td>
-            <td><button class="ghost-btn inspect-threat-btn" data-view="violations" data-id="${v.id}" data-name="${escapeHtml(v.name)}" data-email="${escapeHtml(v.email || '')}" style="min-width:auto; height:28px; padding:0 10px; font-size:11px;">View</button></td>
+            <td><button class="ghost-btn inspect-threat-btn" data-view="violations" data-id="${escapeHtml(v.id)}" data-name="${escapeHtml(v.name)}" data-email="${escapeHtml(v.email || '')}" style="min-width:auto; height:28px; padding:0 10px; font-size:11px;">View violations</button></td>
           </tr>
         `).join('');
       }
-    }
-
-    // Attach click listeners to inspect/view buttons
-    document.querySelectorAll('.inspect-threat-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const id = e.currentTarget.dataset.id;
-        const name = e.currentTarget.dataset.name;
-        const email = e.currentTarget.dataset.email || '';
-        const view = e.currentTarget.dataset.view === 'violations' ? 'violations' : 'player';
-        window.dispatchEvent(new CustomEvent('securefps:open-player-inspection', {
-          detail: { id, name, email, view }
-        }));
-      });
+      bindThreatInspection(repeatedViolatorsBody);
     });
+    if (tbodyHigh) bindThreatInspection(tbodyHigh);
 
     // Suspicious Logins Table
     const tbodyLog = document.getElementById('threatSuspiciousLoginsTableBody');
@@ -708,7 +727,7 @@ export async function loadReportsAnalytics() {
     if (actEl) actEl.textContent = dist.active ?? 0;
     if (sancEl) sancEl.textContent = (dist.suspended || 0) + (dist.banned || 0);
     if (matchesEl) matchesEl.textContent = det.analyzed_sessions ?? det.total_matches ?? 0;
-    const precVal = fp.model_precision_estimate == null ? "97.6%" : `${fp.model_precision_estimate}%`;
+    const precVal = fp.model_precision_estimate == null ? "Unavailable" : `${fp.model_precision_estimate}%`;
     if (precEl) precEl.textContent = precVal;
     const precLabel = document.getElementById('analyticsModelPrecisionLabel');
     if (precLabel) precLabel.textContent = precVal;

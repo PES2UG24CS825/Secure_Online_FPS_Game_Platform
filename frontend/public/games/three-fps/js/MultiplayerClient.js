@@ -111,12 +111,12 @@ class RemotePlayer {
       targetYaw = s.yaw; targetPitch = s.pitch;
       targetCrouch = s.isCrouching;
     } else if (renderTime >= buf[buf.length - 1].time) {
-      // Ahead of latest snapshot -> Extrapolate up to 150ms max
+      // Ahead of latest snapshot -> Bounded extrapolation (max 1.5x interval, 120ms) to prevent sliding
       const latest = buf[buf.length - 1];
       const prev = buf[Math.max(0, buf.length - 2)];
-      const dt = Math.max(0.001, latest.time - prev.time);
-      const extrapolateTime = Math.min(150, renderTime - latest.time);
-      const factor = extrapolateTime / dt;
+      const dt = Math.max(16, latest.time - prev.time);
+      const extrapolateTime = Math.min(120, renderTime - latest.time);
+      const factor = Math.min(1.5, extrapolateTime / dt);
 
       targetX = latest.x + (latest.x - prev.x) * factor;
       targetY = latest.y + (latest.y - prev.y) * factor;
@@ -153,7 +153,8 @@ class RemotePlayer {
     // Calculate instantaneous horizontal movement speed for procedural gait animation
     const dx = targetX - this.position.x;
     const dz = targetZ - this.position.z;
-    const speed = Math.hypot(dx, dz) / Math.max(0.001, delta || 0.016);
+    const rawSpeed = Math.hypot(dx, dz) / Math.max(0.001, delta || 0.016);
+    const speed = rawSpeed < 0.25 ? 0 : rawSpeed;
 
     // Frame-rate independent exponential smoothing: (1 - exp(-k * dt))
     const smoothFactor = 1.0 - Math.exp(-22.0 * (delta || 0.016));
@@ -506,6 +507,7 @@ class MultiplayerClient {
       });
 
       this.startPingHeartbeat();
+      window.dispatchEvent(new CustomEvent('fps:demo_reset'));
       window.dispatchEvent(new CustomEvent('fps:game_start', { detail: data }));
     });
 
@@ -638,6 +640,47 @@ class MultiplayerClient {
         const attackerPos = data.attackerPos ? new THREE.Vector3(data.attackerPos.x, data.attackerPos.y, data.attackerPos.z) : null;
         window.SecureFPSGame.gameMode.damagePlayer(data.damage, data.attackerName, window.SecureFPSGame.controller, attackerPos, data.currentHealth);
       }
+    });
+
+    sock.on('player:banned', (data) => {
+      console.warn('[Security Enforcement] Account banned:', data);
+      this.disconnect();
+      if (document.exitPointerLock) {
+        try { document.exitPointerLock(); } catch (_) {}
+      }
+      
+      let overlay = document.getElementById('accountBannedOverlay');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'accountBannedOverlay';
+        overlay.style.position = 'fixed';
+        overlay.style.inset = '0';
+        overlay.style.zIndex = '999999';
+        overlay.style.background = 'rgba(15, 7, 26, 0.96)';
+        overlay.style.display = 'flex';
+        overlay.style.flexDirection = 'column';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.color = '#fff';
+        overlay.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+        overlay.style.padding = '24px';
+        overlay.style.textAlign = 'center';
+        document.body.appendChild(overlay);
+      }
+      const reasonText = data?.reason || 'Severe violation of Fair Play and anti-cheat policies.';
+      const timeText = data?.bannedAt ? new Date(data.bannedAt).toLocaleString() : new Date().toLocaleString();
+      overlay.innerHTML = `
+        <div style="background: rgba(38, 14, 65, 0.95); border: 2px solid #ef4444; border-radius: 12px; padding: 32px; max-width: 520px; box-shadow: 0 20px 40px rgba(0,0,0,0.8);">
+          <div style="font-size: 40px; margin-bottom: 12px;">🛡️ 🚫</div>
+          <h1 style="color: #ef4444; font-size: 24px; font-weight: 800; margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 1px;">ACCOUNT BANNED</h1>
+          <p style="font-size: 15px; color: #e2e8f0; line-height: 1.5; margin: 0 0 16px 0;">Your game session has been terminated due to a platform security enforcement action.</p>
+          <div style="background: rgba(0,0,0,0.4); border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; text-align: left; font-size: 13px;">
+            <div style="color: #94a3b8; margin-bottom: 4px;"><strong>Reason:</strong> <span style="color: #f87171;">${reasonText}</span></div>
+            <div style="color: #94a3b8;"><strong>Timestamp:</strong> <span style="color: #cbd5e1;">${timeText}</span></div>
+          </div>
+          <a href="/login.html" style="display: inline-block; background: #6366f1; color: white; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">Return to Portal</a>
+        </div>
+      `;
     });
 
     sock.on('player:hit_confirmed', (data) => {
@@ -825,6 +868,7 @@ class MultiplayerClient {
     this.isReady = false;
     sessionStorage.removeItem('securefps_reconnect');
     this.clearRemotePlayers();
+    window.dispatchEvent(new CustomEvent('fps:demo_reset'));
     window.dispatchEvent(new CustomEvent('fps:lobby_left'));
   }
 
@@ -834,6 +878,7 @@ class MultiplayerClient {
   disconnect() {
     this.stopPingHeartbeat();
     this.clearRemotePlayers();
+    window.dispatchEvent(new CustomEvent('fps:demo_reset'));
 
     if (this.socket) {
       const registeredEvents = [
@@ -942,9 +987,12 @@ class MultiplayerClient {
     const dirY = direction ? Number(direction.y.toFixed(4)) : 0;
     const dirZ = direction ? Number(direction.z.toFixed(4)) : -1;
 
+    const interpDelay = (typeof this.adaptiveInterpDelay === 'number') ? this.adaptiveInterpDelay : 100;
+    const estServerTime = performance.now() + (this.serverTimeOffset || 0) - interpDelay;
+
     this.socket.emit('player:fire', {
       seq: this.fireSeq,
-      clientTime: performance.now(),
+      clientTime: estServerTime,
       origin: {
         x: Number(origin.x.toFixed(2)),
         y: Number(origin.y.toFixed(2)),
@@ -956,6 +1004,16 @@ class MultiplayerClient {
         z: dirZ
       },
       weaponKey: weaponKey
+    });
+  }
+
+  emitDemoToggles(toggles) {
+    if (!this.isConnected || !this.socket || !this.currentRoomCode) return;
+    this.socket.emit('demo:set_toggles', {
+      speed: Boolean(toggles?.speed),
+      headshot: Boolean(toggles?.headshot),
+      wallhack: Boolean(toggles?.wallhack),
+      rapidfire: Boolean(toggles?.rapidfire)
     });
   }
 
