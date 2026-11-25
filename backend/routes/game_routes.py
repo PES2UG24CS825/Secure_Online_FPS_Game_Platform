@@ -78,13 +78,13 @@ def publish_live_update(user_id, session_id=None, event_type="game_update", forc
     now = time.monotonic()
     user_channel = str(user_id)
     with _live_subscribers_lock:
-        queues = []
+        queues = set()
         if force or now - _live_emit_times.get("admin", 0.0) >= 1.0:
             _live_emit_times["admin"] = now
-            queues.extend(_live_subscribers.get("admin", set()))
-        if force or now - _live_emit_times.get(user_channel, 0.0) >= 1.0:
+            queues.update(_live_subscribers.get("admin", set()))
+        if user_channel != "admin" and (force or now - _live_emit_times.get(user_channel, 0.0) >= 1.0):
             _live_emit_times[user_channel] = now
-            queues.extend(_live_subscribers.get(user_channel, set()))
+            queues.update(_live_subscribers.get(user_channel, set()))
 
         _sse_event_id_counter += 1
         event_id = _sse_event_id_counter
@@ -262,6 +262,13 @@ def process_security_violations(game_session, account, event_type, telemetry):
     session_id = str(game_session.get("session_id", ""))
     user_id = game_session.get("user_id")
     is_demo = game_session.get("demo_mode") is True or game_session.get("is_demo") is True
+    is_demo_account = bool(
+        is_demo
+        or account.get("username") == "cheater_demo"
+        or account.get("account_type") == "demo_test"
+        or account.get("is_demo") is True
+        or account.get("demo") is True
+    )
 
     now_mono = time.monotonic()
     now_dt = utc_now()
@@ -500,11 +507,14 @@ def process_security_violations(game_session, account, event_type, telemetry):
             force=True,
             payload={
                 "is_demo": is_demo,
+                "is_demo_account": is_demo_account,
+                "account_type": "Demo" if is_demo_account else "Genuine",
                 "demo_session_id": session_id if is_demo else None,
                 "alert_type": v["type"],
                 "severity": v["severity"],
                 "player_id": str(user_id) if user_id else None,
                 "player_name": account.get("username") or account.get("name") or "cheater_demo",
+                "player_display_name": account.get("name") or account.get("username") or "cheater_demo",
                 "violation": v["violation"],
                 "observed_value": v["observed_value"],
                 "allowed_value": v["allowed_value"],
@@ -2149,6 +2159,40 @@ def analyze_game_session(
             safe_print(
                 "[SecureFPS] SECURITY ALERT CREATED:",
                 severity
+            )
+
+            account_doc = users.find_one(
+                {"_id": user_id},
+                {"username": 1, "name": 1, "account_type": 1, "is_demo": 1, "demo": 1},
+            ) if user_id else {}
+            account_doc = account_doc or {}
+            is_demo_account = bool(
+                is_demo
+                or account_doc.get("username") == "cheater_demo"
+                or account_doc.get("account_type") == "demo_test"
+                or account_doc.get("is_demo") is True
+                or account_doc.get("demo") is True
+            )
+            publish_live_update(
+                user_id="admin",
+                session_id=session_id,
+                event_type="security_alert",
+                force=True,
+                payload={
+                    "is_demo": is_demo,
+                    "is_demo_account": is_demo_account,
+                    "account_type": "Demo" if is_demo_account else "Genuine",
+                    "alert_type": "gameplay_anomaly",
+                    "severity": severity,
+                    "player_id": str(user_id) if user_id else None,
+                    "player_name": account_doc.get("username") or account_doc.get("name") or "Unknown Player",
+                    "player_display_name": account_doc.get("name") or account_doc.get("username") or "Unknown Player",
+                    "risk_score": result.get("risk_score"),
+                    "violation": alert_reason or f"High-risk gameplay anomaly ({severity})",
+                    "source": "Server-side ML risk analysis",
+                    "environment": "DEMONSTRATION" if is_demo else "PRODUCTION",
+                    "timestamp": security_event["last_evaluated_at"].isoformat(),
+                },
             )
 
         except Exception as exc:

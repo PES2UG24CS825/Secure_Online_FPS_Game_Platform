@@ -113,7 +113,9 @@ export function renderCheaterDemoData(data) {
 }
 
 export function handleLiveDemoAlert(payload) {
-  if (payload?.is_demo === true) loadCheaterDemoState();
+  if (payload?.is_demo === true || payload?.is_demo_account === true || payload?.player_name === 'cheater_demo') {
+    loadCheaterDemoState();
+  }
 }
 
 function renderAlertCardHtml(alert) {
