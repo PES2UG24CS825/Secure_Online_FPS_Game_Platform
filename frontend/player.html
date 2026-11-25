@@ -7,9 +7,9 @@
   <title>SecureFPS | Player Console</title>
   <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg?v=2">
 
-  <link rel="stylesheet" href="css/styles.css?v=20261124_align12">
-  <link rel="stylesheet" href="css/ui-polish.css?v=20261124_align12">
-  <link rel="stylesheet" href="css/player.css?v=20261124_align12">
+  <link rel="stylesheet" href="css/styles.css?v=20261125_compact_data">
+  <link rel="stylesheet" href="css/ui-polish.css?v=20261125_compact_data">
+  <link rel="stylesheet" href="css/player.css?v=20261125_compact_data">
 </head>
 
 <body class="dashboard-page player-page">
@@ -86,7 +86,7 @@
 
         <div>
           <strong id="sideName">Player</strong>
-          <small id="sideEmail">player@example.com</small>
+          <small id="sideEmail">—</small>
         </div>
       </div>
 
@@ -140,8 +140,15 @@
 
     <section id="overview" class="player-view player-view-active">
 
-      <header class="section-title overview-heading">
-        <h1>Overview</h1>
+      <header class="cinematic-header overview-cinematic">
+        <div class="cinematic-art">
+          <img src="public/headers/cinematic-overview-art.webp" alt="" class="cinematic-img">
+        </div>
+        <div class="cinematic-content">
+          <p class="cinematic-eyebrow">PLAYER CONSOLE</p>
+          <h1>Overview</h1>
+          <p class="cinematic-sub">Welcome back, <strong id="overviewPlayerName">Player</strong>. View your match stats and fair play standing.</p>
+        </div>
       </header>
 
       <section class="overview-glance" aria-label="Platform at a glance">
@@ -161,14 +168,14 @@
 
       <section class="stats-grid overview-quick-stats">
         <article class="stat-card"><span>Completed matches</span><strong id="matchesCount">—</strong><small id="matchesSummary">FPS Microgame results</small></article>
-        <article class="stat-card has-hover-tooltip" tabindex="0">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
+        <article class="stat-card has-hover-tooltip" tabindex="0" aria-describedby="sessionTooltip">
+          <div class="session-stat-heading">
             <span>Account status</span>
             <span class="hover-info-badge">ℹ️ Session</span>
           </div>
           <strong id="accountStatus">Loading</strong>
-          <small>Current account state (hover for IP)</small>
-          <div class="hover-stat-popover">
+          <small>Current account state</small>
+          <div class="hover-stat-popover" id="sessionTooltip" role="tooltip">
             <span class="popover-title">Last Authentication</span>
             <strong id="lastLoginIp" class="ip-stat">—</strong>
             <small>Most recent sign-in address</small>
@@ -251,13 +258,14 @@
 
     <section id="games" class="player-view">
 
-      <div class="section-title">
-        <div>
-          <p class="eyebrow">GAME HUB</p>
+      <div class="cinematic-header games-cinematic">
+        <div class="cinematic-art">
+          <img src="public/headers/cinematic-games-art.webp" alt="" class="cinematic-img">
+        </div>
+        <div class="cinematic-content">
+          <p class="cinematic-eyebrow">GAME HUB</p>
           <h2>FPS Training Arenas</h2>
-          <p class="page-description">
-            Select an arena: launch CyberStrike 3D or the original FPS Microgame to record matches and real-time telemetry.
-          </p>
+          <p class="cinematic-sub">Launch CyberStrike 3D or FPS Microgame to record your matches.</p>
         </div>
       </div>
 
@@ -341,10 +349,10 @@
       <header class="matches-header">
         <div class="matches-heading">
           <h2>Completed matches</h2>
-          <p>Results and security reviews for finished sessions.</p>
+          <p>See your results and review status.</p>
         </div>
         <details class="matches-activity">
-          <summary>Processing &amp; performance</summary>
+          <summary>Match processing</summary>
           <div id="matchProcessingStatus" aria-live="polite">Loading recent match activity…</div>
         </details>
       </header>
@@ -540,7 +548,15 @@
     </section>
 
     <section id="rewards" class="player-view">
-      <div class="section-title"><div><h2>Rewards</h2><p class="page-description">Earn coins and XP from daily rewards and completed matches.</p></div></div>
+      <div class="cinematic-header rewards-cinematic">
+        <div class="cinematic-art">
+          <img src="public/headers/cinematic-rewards-art.webp" alt="" class="cinematic-img">
+        </div>
+        <div class="cinematic-content">
+          <h2>Rewards &amp; Shop</h2>
+          <p class="cinematic-sub">Earn coins and XP from daily rewards and completed matches.</p>
+        </div>
+      </div>
       <div class="reward-summary">
         <article class="reward-balance"><span>Coins</span><strong id="rewardCoins">—</strong></article>
         <article class="reward-balance"><span>Experience</span><strong id="rewardXp">—</strong><small id="rewardLevel"></small></article>
@@ -572,7 +588,16 @@
     </section>
 
     <section id="support" class="player-view">
-      <div class="section-title"><div><p class="eyebrow">PLAYER SUPPORT</p><h2>How can we help?</h2><p class="page-description">Browse quick answers or send a message to the SecureFPS admin team.</p></div></div>
+      <div class="cinematic-header support-cinematic">
+        <div class="cinematic-art">
+          <img src="public/headers/cinematic-support-art.webp" alt="" class="cinematic-img">
+        </div>
+        <div class="cinematic-content">
+          <p class="cinematic-eyebrow">PLAYER SUPPORT</p>
+          <h2>How can we help?</h2>
+          <p class="cinematic-sub">Find quick answers or message the SecureFPS admin team.</p>
+        </div>
+      </div>
       <div class="support-layout">
         <section class="profile-card support-assistant"><h3>SecureFPS helper</h3><p class="appearance-hint">Choose a common question or ask about account access, matches, security, or rewards.</p><div class="support-faq-list" id="supportFaqList"></div><div class="support-answer" id="supportAnswer" role="status" aria-live="polite">Select a question to see a suggested solution.</div><form id="supportQuestionForm" class="support-form"><label>Ask a question<input id="supportQuestion" maxlength="240" required placeholder="For example: Where are my match rewards?"></label><button class="play-btn" type="submit">Ask the helper</button></form><div class="support-mascot" aria-hidden="true"><span>Need a hand?</span><img id="supportMascotSticker" data-avatar-sticker hidden alt=""></div></section>
         <section class="profile-card support-contact"><h3>Contact support</h3><form id="supportTicketForm" class="support-form"><label>Topic<select id="supportCategory" required><option value="account">Account or sign-in</option><option value="match">Match or results</option><option value="security">Security review</option><option value="rewards">Rewards or store</option><option value="other">Other</option></select></label><label>Message<textarea id="supportMessage" rows="5" maxlength="3000" required placeholder="Describe what happened and what you need help with."></textarea></label><label>Screenshot or proof (optional)<input id="supportAttachment" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPG, or WebP up to 3 MB.</small></label><button class="play-btn" id="sendSupportTicket" type="submit">Send to admin</button><span id="supportFormStatus" class="appearance-status" role="status"></span></form></section>
@@ -655,28 +680,94 @@
          FAIR PLAY TAB (Requirement 2)
     ============================================================ -->
     <section id="notifications" class="player-view" hidden>
-      <div class="section-title"><h2>Notification history</h2></div>
-      <div class="notification-history-grid">
-        <section class="profile-card" aria-label="Notification history">
-          <div class="notification-actions">
-            <label>Category <select id="notificationCategory"><option value="">All categories</option><option value="security">Security</option><option value="account">Account updates</option><option value="matches">Matches</option><option value="rewards">Rewards</option><option value="announcements">Announcements</option></select></label>
-            <label><input id="notificationsUnread" type="checkbox"> Unread only</label>
-            <button class="ghost-btn" type="button" data-notification-all>Mark all as read</button>
-          </div>
-          <p id="notificationError" role="status"></p>
-          <div id="notificationHistory" aria-live="polite"></div>
-          <div class="notification-actions"><button class="ghost-btn" id="notificationsPrevious" type="button" disabled>Previous</button><span id="notificationPage" role="status"></span><button class="ghost-btn" id="notificationsNext" type="button" disabled>Next</button></div>
-        </section>
-        <section class="profile-card">
-          <h3>Notification preferences</h3>
-          <p class="muted">Security and account notices stay enabled.</p>
-          <form id="notificationPreferences"><div id="notificationPreferenceFields"></div><button class="play-btn" type="submit" disabled>Save preferences</button></form>
-          <p id="notificationPreferenceStatus" role="status"></p>
-        </section>
-      </div>
-    </section>
+      <!-- Modern Notification Center Header -->
+      <header class="notif-modern-header">
+        <div class="notif-header-title-wrap">
+          <span class="notif-bell-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+          </span>
+          <h2>Notifications</h2>
+          <span id="notifHeadingBadge" class="notif-unread-count-pill" hidden>0 unread</span>
+        </div>
+        <div class="notif-header-actions">
+          <span id="notifConnStatus" class="notif-conn-status live" title="Real-time WebSocket / SSE sync status">
+            <span class="status-dot"></span> Live
+          </span>
+          <button type="button" id="notifSettingsBtn" class="notif-icon-btn" title="Notification settings" aria-label="Notification settings" aria-haspopup="dialog" aria-controls="notifSettingsModal">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
+        </div>
+      </header>
 
-    <section id="fairplay" class="player-view" hidden>
+      <!-- Clean Horizontal Toolbar -->
+      <div class="notif-toolbar">
+        <nav class="notif-filter-tabs" aria-label="Notification category filter">
+          <button type="button" class="notif-tab active" data-notif-filter="all">All</button>
+          <button type="button" class="notif-tab" data-notif-filter="unread">Unread</button>
+          <button type="button" class="notif-tab" data-notif-filter="security">Security</button>
+          <button type="button" class="notif-tab" data-notif-filter="matches">Matches</button>
+          <button type="button" class="notif-tab" data-notif-filter="rewards">Rewards</button>
+          <button type="button" class="notif-tab" data-notif-filter="account">Account</button>
+          <button type="button" class="notif-tab" data-notif-filter="announcements">Announcements</button>
+        </nav>
+        <div class="notif-toolbar-actions">
+          <button type="button" id="notifMarkAllBtn" class="notif-btn notif-btn-toolbar" data-notification-all>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            Mark all read
+          </button>
+        </div>
+      </div>
+
+      <p id="notificationError" class="notif-error-banner" role="status" hidden></p>
+
+      <!-- Grouped Real-time Notification Feed -->
+      <div id="notificationHistory" class="notif-feed-container" aria-live="polite"></div>
+
+      <!-- Pagination (displayed ONLY when multiple pages exist) -->
+      <div id="notifPagination" class="notif-pagination-bar" hidden>
+        <button class="notif-page-btn" id="notificationsPrevious" type="button" disabled>← Previous</button>
+        <span id="notificationPage" class="notif-page-indicator" role="status">Page 1 of 1</span>
+        <button class="notif-page-btn" id="notificationsNext" type="button" disabled>Next →</button>
+      </div>
+
+      <!-- Hidden Select/Checkbox proxies for backwards compatibility -->
+      <select id="notificationCategory" hidden>
+        <option value="">all</option>
+        <option value="security">security</option>
+        <option value="account">account</option>
+        <option value="matches">matches</option>
+        <option value="rewards">rewards</option>
+        <option value="announcements">announcements</option>
+      </select>
+      <input id="notificationsUnread" type="checkbox" hidden>
+
+      <!-- Modern Notification Preferences Dialog Modal -->
+      <dialog id="notifSettingsModal" class="notif-modal">
+        <div class="notif-modal-content">
+          <div class="notif-modal-header">
+            <div class="notif-modal-title">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              <h3>Notification Preferences</h3>
+            </div>
+            <button type="button" id="closeNotifSettingsModal" class="notif-modal-close" aria-label="Close dialog">✕</button>
+          </div>
+          <p class="notif-modal-desc">Security alerts and critical notices stay permanently enabled for your safety.</p>
+          <form id="notificationPreferences" class="notif-modal-form">
+            <div id="notificationPreferenceFields" class="notif-prefs-grid"></div>
+            <div class="notif-modal-footer">
+              <span id="notificationPreferenceStatus" class="notif-prefs-status" role="status"></span>
+              <button class="play-btn notif-save-prefs-btn" type="submit">Save preferences</button>
+            </div>
+          </form>
+        </div>
+      </dialog>
+    </section><section id="fairplay" class="player-view" hidden>
       <div class="section-title">
         <div>
           <p class="eyebrow">INTEGRITY &amp; FAIR PLAY</p>
@@ -695,22 +786,17 @@
           <div class="fairplay-ring-container">
             <svg class="honour-progress-ring" viewBox="0 0 160 160" width="160" height="160">
               <circle class="ring-bg" cx="80" cy="80" r="70" stroke-width="12" fill="none" />
-              <circle id="honourRingProgress" class="ring-fg" cx="80" cy="80" r="70" stroke-width="12" fill="none" stroke-dasharray="440" stroke-dashoffset="44" />
+              <circle id="honourRingProgress" class="ring-fg" cx="80" cy="80" r="70" stroke-width="12" fill="none" stroke-dasharray="440" stroke-dashoffset="440" />
             </svg>
             <div class="ring-center-content">
-              <span class="ring-score" id="fairplayHonourScore">90</span>
+              <span class="ring-score" id="fairplayHonourScore">—</span>
               <small class="ring-total">/ 100</small>
             </div>
           </div>
           <div class="fairplay-ring-details">
-            <div class="fairplay-tier-badge" id="fairplayTierBadge">Exemplary Standing</div>
+            <div class="fairplay-tier-badge" id="fairplayTierBadge">Loading</div>
             <h3>Honour Rating</h3>
-            <p id="fairplayTierDescription" class="fairplay-tier-desc">Full platform privileges, maximum priority matching, bonus XP multiplier.</p>
-            <div class="fairplay-meta-pills">
-              <span class="meta-pill">🛡️ Server Verified</span>
-              <span class="meta-pill">⚡ Priority Queue</span>
-              <span class="meta-pill">⭐ +15% Match XP</span>
-            </div>
+            <p id="fairplayTierDescription" class="fairplay-tier-desc"></p>
           </div>
         </article>
 
@@ -809,7 +895,7 @@
           </div>
         </div>
         <div id="appealStatusContent" style="padding: 10px 0;">
-          <p style="color: var(--player-muted, #64748b); font-size: 13px;">No active restrictions or pending appeals on your account. Your record is in good standing.</p>
+          <p>Loading appeal status…</p>
         </div>
       </section>
     </section>
@@ -900,9 +986,12 @@
 
   <!-- Match Detail Drill-Down Modal (Item 14) -->
   <dialog id="matchDetailModal" class="match-detail-modal" aria-labelledby="modalMatchTitle">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom: 1px solid var(--player-border, #334155); padding-bottom: 8px;">
-      <h3 id="modalMatchTitle" style="margin:0; font-size: 1.15rem;">Match Detail Drill-Down</h3>
-      <button id="closeMatchDetailBtn" type="button" class="ghost-btn" style="background:transparent; border:none; color:inherit; font-size:1.2rem; cursor:pointer;" aria-label="Close match detail">✕</button>
+    <div class="match-detail-header">
+      <div class="match-detail-title-group">
+        <h3 id="modalMatchTitle">Match Details</h3>
+        <span id="modalMatchIdBadge" class="match-detail-id-badge">—</span>
+      </div>
+      <button id="closeMatchDetailBtn" type="button" class="match-detail-close-btn" aria-label="Close match details">✕</button>
     </div>
     <div id="matchDetailContent">Loading match details…</div>
   </dialog>
@@ -911,10 +1000,11 @@
   <!-- Existing application logic -->
   <script src="js/config.js?v=20261114_0415"></script>
   <script src="js/api.js?v=20261114_0415"></script>
-  <script src="js/player-features.js?v=profile_avatars_2"></script>
+  <script src="js/record-pager.js?v=20261125"></script>
+  <script src="js/player-features.js?v=20261125_compact_data"></script>
   <script src="js/profile-avatars.js?v=1"></script>
-  <script src="js/player-notifications.js?v=2"></script>
-  <script src="js/player.js?v=profile_final"></script>
+  <script src="js/player-notifications.js?v=20261125_compact_data"></script>
+  <script src="js/player.js?v=20261125_compact_data"></script>
 
 
   <!-- ============================================================
@@ -1088,5 +1178,7 @@
     })();
   </script>
 
+  <!-- Real-time Notification Toast Alert System -->
+  <div id="notificationToastContainer" class="notif-toast-container" aria-live="polite"></div>
 </body>
 </html>

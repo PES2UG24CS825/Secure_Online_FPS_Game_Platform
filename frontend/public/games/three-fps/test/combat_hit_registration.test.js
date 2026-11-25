@@ -78,13 +78,15 @@ describe('Combat & Hit Registration Verification', () => {
     assert.match(playerHtml, /id="matchesCount"/);
     assert.match(playerHtml, /id="accountStatus"/);
     assert.match(playerHtml, /id="mfaStatus"/);
-    assert.doesNotMatch(playerHtml, /careerTotalKills|careerTotalDeaths|careerKd|careerAccuracy/);
+    for (const id of ['careerTotalKills', 'careerTotalDeaths', 'careerKd', 'careerAccuracy']) {
+      assert.ok(playerHtml.includes(`id="${id}"`));
+    }
     assert.match(playerJs, /match-features-strip/);
     assert.doesNotMatch(playerJs, /ML Models:\s*<\/strong>\s*RF:/);
     assert.doesNotMatch(playerJs, /Analysis needs gameplay data:/);
 
     // Image 3 requirement: strip shows only Fair Play, XP, and Coins (no Weapon or Hits tags)
-    assert.match(playerJs, /Fair Play Verified/);
+    assert.match(playerJs, /No suspicious activity detected/);
     assert.match(playerJs, /rewardText/);
     assert.doesNotMatch(playerJs, /xpEarned\s*=|coinsEarned\s*=/);
     assert.match(playerJs, /reward_credit/);
@@ -102,8 +104,7 @@ describe('Combat & Hit Registration Verification', () => {
     assert.match(routesPy, /skin_ghost_specops/);
     assert.match(routesPy, /banner_cyber_metropolis/);
     assert.match(routesPy, /banner_orbital_bastion/);
-    assert.match(routesPy, /profile_customization\.avatar/);
-    assert.match(routesPy, /profile_customization\.banner/);
+    assert.match(routesPy, /reward_appearance\(item_id, item\)/);
     assert.match(routesPy, /"hidden":\s*True/);
 
     // Purple featured center styling for CyberStrike and sidebar navigation
@@ -149,7 +150,7 @@ describe('Combat & Hit Registration Verification', () => {
     assert.match(playerJs, /getElementById\("profileBanner"\)/);
     assert.doesNotMatch(playerJs, /overviewBanner/);
     assert.doesNotMatch(playerJs, /body\.dataset\.playerBanner|--player-scene-image/);
-    assert.match(sharedCss, /SecureFPS_Sakura_Anime_Background\.png/);
+    assert.match(sharedCss, /SecureFPS_Sakura_Background\.png/);
   });
 
   it('multiplayer weapons use balanced ammo, realistic viewmodel materials, and health-only armour HUD', () => {

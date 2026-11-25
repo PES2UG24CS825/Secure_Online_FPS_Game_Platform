@@ -12,7 +12,7 @@ import pyotp
 from app import app, ensure_default_admin
 from database.db import (
     users, sessions_db, ban_appeals, player_notifications, admin_audit_log,
-    game_sessions, login_history
+    game_sessions, login_history, reward_transactions
 )
 from services.auth import hash_password
 
@@ -92,6 +92,34 @@ class AdminPlayerDashboardSecurityTests(unittest.TestCase):
             verify_resp = client.post("/api/auth/verify-mfa", json={"code": code}, headers=SECURE_HEADERS)
             self.assertEqual(verify_resp.status_code, 200, f"MFA failed for {email}: {verify_resp.get_data(as_text=True)}")
         return client
+
+    def test_live_dashboard_excludes_orphans_and_keeps_real_accounts(self):
+        admin = self._login_as(self.admin_email, self.admin_password)
+        suffix = uuid.uuid4().hex
+        live_id = users.insert_one({
+            "username": "live_" + suffix, "email": suffix + "@audit.invalid",
+            "role": "player", "account_status": "active",
+        }).inserted_id
+        missing_id = ObjectId()
+        self.addCleanup(users.delete_one, {"_id": live_id})
+        scopes = [
+            (ban_appeals, "/api/admin/appeals", "appeals", "user_id", {"status": "pending"}),
+            (reward_transactions, "/api/admin/rewards/shop", "transactions", "user_id", {"description": suffix}),
+            (admin_audit_log, "/api/admin/audit-log", "audit_logs", "target_user_id", {"action": suffix}),
+        ]
+        for collection, endpoint, key, owner, fields in scopes:
+            with self.subTest(endpoint=endpoint):
+                for user_id in (live_id, missing_id):
+                    row = collection.insert_one({
+                        owner: str(user_id), **fields,
+                        "created_at": datetime.now(timezone.utc), "timestamp": datetime.now(timezone.utc),
+                    }).inserted_id
+                    self.addCleanup(collection.delete_one, {"_id": row})
+                result = admin.get(endpoint)
+                self.assertEqual(result.status_code, 200)
+                output = json.dumps(result.get_json()[key])
+                self.assertIn("live_" + suffix, output)
+                self.assertNotIn(str(missing_id), output)
 
     def test_demo_admin_is_read_only(self):
         """Item 1: demo_admin can read but cannot perform destructive actions."""
@@ -219,12 +247,12 @@ class AdminPlayerDashboardSecurityTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 201)
 
-        # Admin lists appeals
+        # Test account appeals stay out of the live queue while retaining the audit record.
         resp = admin_client.get("/api/admin/appeals?status=pending")
         self.assertEqual(resp.status_code, 200)
         appeals = resp.get_json()["appeals"]
-        self.assertTrue(any(a["user_id"] == str(self.player_oid) for a in appeals))
-        appeal_id = [a["id"] for a in appeals if a["user_id"] == str(self.player_oid)][0]
+        self.assertFalse(any(a["user_id"] == str(self.player_oid) for a in appeals))
+        appeal_id = str(ban_appeals.find_one({"user_id": self.player_oid, "status": "pending"})["_id"])
 
         # Admin approves appeal
         resp = admin_client.post(

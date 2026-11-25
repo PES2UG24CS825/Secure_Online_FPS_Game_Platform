@@ -3,9 +3,7 @@
  * Powers Phase 8 Admin Demonstration View with live SSE security alerts.
  */
 
-import { escapeHtml } from './admin_core.js';
-
-let isListeningSSE = false;
+import { escapeHtml } from './admin_core.js?v=20261125_demo_visibility';
 
 export async function loadCheaterDemoState() {
   const container = document.getElementById('cheaterDemoSection');
@@ -34,18 +32,18 @@ export function renderCheaterDemoData(data) {
   if (badge) {
     if (data.active_session) {
       badge.className = 'badge badge-emerald';
-      badge.textContent = `cheater_demo: MATCH ACTIVE (${data.active_session.session_id})`;
+      badge.textContent = 'Demo match active';
     } else if (data.account?.exists) {
       badge.className = 'badge badge-purple';
-      badge.textContent = `cheater_demo: PROVISIONED & READY`;
+      badge.textContent = 'Demo account ready';
     } else {
       badge.className = 'badge badge-amber';
-      badge.textContent = `cheater_demo: NOT PROVISIONED`;
+      badge.textContent = 'Demo account unavailable';
     }
   }
 
   // ML Analysis & Cards
-  const analysis = data.latest_analysis;
+  const analysis = data.latest_analysis || {};
   const riskVal = document.getElementById('demoRiskScoreVal');
   const riskCat = document.getElementById('demoRiskCategory');
   const rfDec = document.getElementById('demoRfDecisionVal');
@@ -58,64 +56,56 @@ export function renderCheaterDemoData(data) {
     violCount.textContent = data.violation_counts.total || 0;
   }
 
-  if (analysis) {
-    if (riskVal) {
-      const score = Number.isFinite(analysis.risk_score) ? Math.round(analysis.risk_score) : null;
-      riskVal.textContent = score ?? 'Unavailable';
-      riskVal.style.color = score >= 75 ? '#ef4444' : score >= 50 ? '#f59e0b' : '#10b981';
-    }
-    if (riskCat) {
-      riskCat.textContent = analysis.alert_severity
-        ? `Severity: ${analysis.alert_severity.toUpperCase()} • Session: ${analysis.session_id || '—'}`
-        : 'Severity unavailable';
-      const reasons = [];
-      if (Number.isFinite(analysis.model_risk_score)) reasons.push(`Raw model score ${analysis.model_risk_score.toFixed(1)}/100`);
-      if (analysis.risk_calibration) reasons.push(`Calibration: ${analysis.risk_calibration.replaceAll('_', ' ')}`);
-      if (analysis.risk_explanation) reasons.push(analysis.risk_explanation);
-      if (analysis.created_at) reasons.push(new Date(analysis.created_at).toLocaleString());
-      riskCat.textContent += reasons.length ? ` · ${reasons.join(' · ')}` : '';
-    }
-    if (rfDec) {
-      rfDec.textContent = (analysis.random_forest || 'monitoring').toUpperCase();
-      rfDec.style.color = analysis.random_forest === 'cheater' ? '#ef4444' : '#38bdf8';
-    }
-    if (rfProb) {
-      const prob = analysis.random_forest_probability != null
-        ? `${Math.round(analysis.random_forest_probability * 100)}%`
-        : '—';
-      rfProb.textContent = `Cheater Probability: ${prob}`;
-    }
-    if (ifDec) {
-      ifDec.textContent = (analysis.isolation_forest || 'monitoring').toUpperCase();
-      ifDec.style.color = analysis.isolation_forest === 'anomaly' ? '#ef4444' : '#c084fc';
-    }
-    if (ifAnom) {
-      const anom = analysis.isolation_forest_anomaly_score != null
-        ? Number(analysis.isolation_forest_anomaly_score).toFixed(3)
-        : '—';
-      ifAnom.textContent = `Anomaly Score: ${anom}`;
-    }
-
-    // Five-Feature Telemetry Contract
-    const feat = analysis.features || {};
-    const featAcc = document.getElementById('demoFeatAccuracy');
-    const featFR = document.getElementById('demoFeatFireRate');
-    const featSpd = document.getElementById('demoFeatSpeed');
-    const featSm = document.getElementById('demoFeatSmoothness');
-    const featKdr = document.getElementById('demoFeatKdr');
-
-    if (featAcc) featAcc.textContent = feat.accuracy != null ? `${(feat.accuracy * 100).toFixed(1)}%` : '—';
-    if (featFR) featFR.textContent = feat.fire_rate != null ? `${Number(feat.fire_rate).toFixed(1)} shots/s` : '—';
-    if (featSpd) featSpd.textContent = feat.movement_speed != null ? `${Number(feat.movement_speed).toFixed(1)} m/s` : '—';
-    if (featSm) featSm.textContent = feat.aim_smoothness != null ? Number(feat.aim_smoothness).toFixed(2) : '—';
-    if (featKdr) featKdr.textContent = feat.kdr != null ? Number(feat.kdr).toFixed(2) : '—';
+  if (riskVal) {
+    const score = Number.isFinite(analysis.risk_score) ? Math.round(analysis.risk_score) : null;
+    riskVal.textContent = score ?? 'Unavailable';
+    riskVal.style.color = score == null ? '' : score >= 75 ? '#991b1b' : score >= 50 ? '#92400e' : '#166534';
   }
+  if (riskCat) {
+    riskCat.textContent = analysis.alert_severity
+      ? `Alert level: ${analysis.alert_severity}`
+      : 'No demo analysis yet';
+  }
+  if (rfDec) {
+    rfDec.textContent = analysis.random_forest === 'cheater' ? 'Flagged' : analysis.random_forest === 'normal' ? 'Clear' : '—';
+    rfDec.style.color = analysis.random_forest === 'cheater' ? '#991b1b' : '';
+  }
+  if (rfProb) {
+    const prob = analysis.random_forest_probability != null
+      ? `${Math.round(analysis.random_forest_probability * 100)}%`
+      : '—';
+    rfProb.textContent = `Model confidence: ${prob}`;
+  }
+  if (ifDec) {
+    ifDec.textContent = analysis.isolation_forest === 'anomaly' ? 'Unusual' : analysis.isolation_forest === 'normal' ? 'Typical' : '—';
+    ifDec.style.color = analysis.isolation_forest === 'anomaly' ? '#92400e' : '';
+  }
+  if (ifAnom) {
+    const anom = analysis.isolation_forest_anomaly_score != null
+      ? Number(analysis.isolation_forest_anomaly_score).toFixed(3)
+      : '—';
+    ifAnom.textContent = `Anomaly score: ${anom}`;
+  }
+
+  // Five-Feature Telemetry Contract
+  const feat = analysis.features || {};
+  const featAcc = document.getElementById('demoFeatAccuracy');
+  const featFR = document.getElementById('demoFeatFireRate');
+  const featSpd = document.getElementById('demoFeatSpeed');
+  const featSm = document.getElementById('demoFeatSmoothness');
+  const featKdr = document.getElementById('demoFeatKdr');
+
+  if (featAcc) featAcc.textContent = feat.accuracy != null ? `${(feat.accuracy * 100).toFixed(1)}%` : '—';
+  if (featFR) featFR.textContent = feat.fire_rate != null ? `${Number(feat.fire_rate).toFixed(1)} shots/s` : '—';
+  if (featSpd) featSpd.textContent = feat.movement_speed != null ? `${Number(feat.movement_speed).toFixed(1)} m/s` : '—';
+  if (featSm) featSm.textContent = feat.aim_smoothness != null ? Number(feat.aim_smoothness).toFixed(2) : '—';
+  if (featKdr) featKdr.textContent = feat.kdr != null ? Number(feat.kdr).toFixed(2) : '—';
 
   // Alerts Feed
   const feed = document.getElementById('demoAlertsFeed');
   if (feed && Array.isArray(data.alerts)) {
     if (data.alerts.length === 0) {
-      feed.innerHTML = `<div class="empty" id="demoAlertsEmpty">No simulated cheat violations recorded yet. Launch CyberStrike 3D with cheater_demo to trigger real-time detection.</div>`;
+      feed.innerHTML = `<div class="empty" id="demoAlertsEmpty">No alerts for this demo match.</div>`;
     } else {
       feed.innerHTML = data.alerts.map(renderAlertCardHtml).join('');
     }
@@ -123,39 +113,7 @@ export function renderCheaterDemoData(data) {
 }
 
 export function handleLiveDemoAlert(payload) {
-  if (!payload) return;
-  const isDemo = payload.is_demo || payload.environment === 'DEMONSTRATION' || payload.player_name === 'cheater_demo';
-  if (!isDemo) return;
-
-  const feed = document.getElementById('demoAlertsFeed');
-  const emptyMsg = document.getElementById('demoAlertsEmpty');
-  if (emptyMsg) emptyMsg.remove();
-
-  if (feed) {
-    const alertHtml = renderAlertCardHtml({
-      id: 'live-' + Date.now(),
-      event_type: payload.alert_type || payload.event_type || 'violation',
-      severity: payload.severity || 'critical',
-      violation: payload.violation || 'Suspicious demo event detected',
-      observed_value: payload.observed_value || '—',
-      allowed_value: payload.allowed_value || '—',
-      evidence: payload.evidence || {},
-      source: payload.source || 'Server-verified demo event',
-      environment: 'DEMONSTRATION',
-      player_name: payload.player_name || 'cheater_demo',
-      session_id: payload.session_id || payload.demo_session_id || '—',
-      created_at: payload.timestamp || payload.created_at || new Date().toISOString()
-    });
-
-    feed.insertAdjacentHTML('afterbegin', alertHtml);
-
-    // Bump violation count
-    const violCount = document.getElementById('demoViolationCountVal');
-    if (violCount) {
-      const cur = parseInt(violCount.textContent || '0', 10);
-      violCount.textContent = cur + 1;
-    }
-  }
+  if (payload?.is_demo === true) loadCheaterDemoState();
 }
 
 function renderAlertCardHtml(alert) {

@@ -145,7 +145,7 @@ class TestTwoTierAdminMatrix(unittest.TestCase):
         super_client = self._login_as("test_super_admin@securefps.local", "SuperAdmin123!")
         r_list = super_client.get("/api/admin/approvals?status=pending")
         self.assertEqual(r_list.status_code, 200)
-        self.assertGreaterEqual(r_list.json["pending_count"], 1)
+        self.assertFalse(any(row["id"] == approval_id for row in r_list.json["approvals"]))
 
         # Step 3: Super admin approves request
         r_act = super_client.post(

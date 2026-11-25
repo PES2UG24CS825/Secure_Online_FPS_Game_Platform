@@ -6,9 +6,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>SecureFPS | Admin Control Center</title>
   <link rel="icon" type="image/svg+xml" href="public/securefps-mark.svg?v=2">
-  <link rel="stylesheet" href="css/styles.css?v=20261124_align11">
-  <link rel="stylesheet" href="css/ui-polish.css?v=20261124_align11">
-  <link rel="stylesheet" href="css/admin.css?v=20261124_align11">
+  <link rel="stylesheet" href="css/styles.css?v=20261125_compact_data">
+  <link rel="stylesheet" href="css/ui-polish.css?v=20261125_compact_data">
+  <link rel="stylesheet" href="css/admin.css?v=20261125_player_rewards">
 </head>
 <body class="dashboard-page admin-page">
   <aside class="admin-sidebar">
@@ -61,7 +61,6 @@
         <span class="status-pill" id="adminLiveStatus">Connecting</span>
         <span id="lastUpdatedIndicator" class="muted"></span>
         <button id="manualRefreshBtn" class="ghost-btn" type="button" title="Manual refresh">↻ Refresh</button>
-        <button id="playerViewBtn" class="play-btn admin-player-view" type="button">Player view</button>
         <button id="logoutBtn" class="ghost-btn admin-logout" type="button">Sign out</button>
       </div>
     </header>
@@ -69,22 +68,41 @@
     <!-- SECTION 1: OVERVIEW -->
     <section class="admin-section" data-admin-view="rewards" role="tabpanel" aria-label="Rewards operations">
       <div class="admin-section-heading"><h2>Rewards operations</h2><p>Review the cosmetic catalog, transactions, and credits that need attention.</p></div>
-      <p id="adminRewardsStatus" role="status"></p>
-      <form id="adminRewardSearch">
-        <label>Transaction description <input name="q" type="search" maxlength="120"></label>
-        <button class="ghost-btn" type="submit">Search</button>
-      </form>
-      <details open><summary>Transactions</summary><div class="admin-table-wrap"><table>
-        <thead><tr><th>Player ID</th><th>Transaction</th><th>Coins</th><th>XP</th><th>Time</th></tr></thead>
-        <tbody id="adminRewardTransactions"></tbody>
-      </table></div></details>
+      <div class="reward-admin-summary" aria-label="Rewards totals for the selected account type">
+        <article><span>Total coins distributed</span><strong id="adminRewardCoinsDistributed">—</strong></article>
+        <article><span>Total coins spent</span><strong id="adminRewardCoinsSpent">—</strong></article>
+        <article><span>Total XP awarded</span><strong id="adminRewardXpAwarded">—</strong></article>
+        <article><span>Unique reward recipients</span><strong id="adminRewardRecipients">—</strong></article>
+      </div>
+      <section class="panel reward-admin-feed" aria-labelledby="adminRewardFeedTitle">
+        <header class="reward-admin-feed-heading">
+          <h3 id="adminRewardFeedTitle">Rewards history by player</h3>
+          <span id="adminRewardPageInfo" role="status"></span>
+        </header>
+        <form id="adminRewardSearch" class="admin-reward-filters">
+          <label>Search players <input name="q" type="search" maxlength="120" placeholder="Username or name"></label>
+          <label>Account type
+            <select name="account_type">
+              <option value="all">All Accounts</option><option value="player">Genuine Players</option><option value="demo">Demo Accounts</option>
+            </select>
+          </label>
+          <button class="ghost-btn" type="submit">Apply</button>
+        </form>
+        <p id="adminRewardsStatus" role="status"></p>
+        <div id="adminRewardTransactions"></div>
+        <nav id="adminRewardPagination" aria-label="Player pages">
+          <button id="adminRewardPrev" type="button" class="ghost-btn" disabled>Previous</button>
+          <span id="adminRewardPageNumber"></span>
+          <button id="adminRewardNext" type="button" class="ghost-btn" disabled>Next</button>
+        </nav>
+      </section>
       <details><summary>Pending and failed credits</summary><div id="adminRewardCredits"></div></details>
       <details><summary>Catalog</summary>
         <div class="admin-table-wrap"><table><thead><tr><th>Item</th><th>Slot</th><th>Price</th><th>Status</th><th></th></tr></thead><tbody id="adminRewardCatalog"></tbody></table></div>
         <form id="adminRewardItemForm" hidden>
           <h3>Create or edit item</h3>
           <label>Item ID <input name="item_id" pattern="[a-z0-9_-]+" maxlength="64" required></label>
-          <label>Name <input name="name" maxlength="80" required></label>
+          <label>Name <input name="name" autocomplete="off" maxlength="80" required></label>
           <label>Coin price <input name="price" type="number" min="1" max="100000" required></label>
           <label>Slot for new items <select name="category"><option value="avatar">Avatar</option><option value="banner">Background</option></select></label>
           <label>Artwork filename for new items <input name="filename" placeholder="operator.png"></label>
@@ -148,7 +166,8 @@
         <div class="admin-filter-row">
           <label for="playerSearch">Search players</label>
           <input id="playerSearch" type="search" placeholder="Search by name or email" aria-label="Search players by name or email">
-          <label for="playerStatusFilter">Status</label>
+          <label>Account group <select id="adminPlayerAccountType" class="admin-modal-input"><option value="all">All Accounts</option><option value="player">Genuine Players</option><option value="demo">Demo Accounts</option></select></label>
+        <label for="playerStatusFilter">Status</label>
           <select id="playerStatusFilter" class="admin-modal-input" style="width:auto;">
             <option value="">All Statuses</option>
             <option value="active">Active Only</option>
@@ -209,22 +228,24 @@
           <button id="exportAuditLogBtn" class="ghost-btn" type="button">Export Audit CSV</button>
         </div>
         <form id="auditFilters" class="admin-filter-row">
-          <label>Search <input type="search" name="q" maxlength="160" placeholder="Action, reason or target ID"></label>
-          <label>Administrator <input type="search" name="admin" maxlength="160" placeholder="Email"></label>
+          <label>Search <input type="search" name="q" maxlength="160" placeholder="Action, reason or username"></label>
+          <label>Performed By <input type="search" name="admin" maxlength="160" placeholder="Admin email" autocomplete="off"></label>
+          <label>Account group <select name="account_type"><option value="all">All Accounts</option><option value="player">Genuine Players</option><option value="demo">Demo Accounts</option></select></label>
           <label>Action <select name="action"><option value="">All actions</option></select></label>
-          <label>Severity <select name="severity"><option value="">All severities</option><option>low</option><option>medium</option><option>high</option><option>critical</option></select></label>
-          <label>From (UTC) <input type="date" name="from"></label>
-          <label>To (UTC) <input type="date" name="to"></label>
+          <label>Result <select name="result"><option value="">All results</option><option value="success">Success</option><option value="failed">Failed</option></select></label>
+          <label>From <input type="date" name="from"></label>
+          <label>To <input type="date" name="to"></label>
+          <label>Rows <select id="auditLimitSelect" name="limit"><option value="10">10</option><option value="25" selected>25</option><option value="50">50</option></select></label>
           <button type="submit" class="play-btn">Apply filters</button>
         </form>
         <div class="admin-table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Timestamp</th>
-                <th>Admin</th>
+                <th>Date &amp; Time</th>
+                <th>Performed By</th>
                 <th>Action</th>
-                <th>Target ID</th>
+                <th>Affected Account</th>
                 <th>Reason</th>
                 <th>Result</th>
                 <th>Details</th>
@@ -246,11 +267,12 @@
           <div>
             <p class="eyebrow">ACCOUNT ACCESS AUDIT</p>
             <h2>Player sign-in activity</h2>
-            <p class="muted" style="margin:2px 0 0; font-size:12px;">Move cursor over any player card to immediately reveal their complete verified sign-in &amp; device history.</p>
+            <p class="muted" style="margin:2px 0 0; font-size:12px;">Select a player to see their sign-ins.</p>
           </div>
-          <div style="display:flex; align-items:center; gap:10px;">
-            <select id="loginAuditRoleFilter" class="admin-modal-input" style="width:auto; padding:6px 12px; font-size:12px;">
-              <option value="player">Genuine Players Only</option>
+          <div class="admin-inline-actions">
+            <label>Account group <select id="adminLoginAccountType" class="admin-modal-input"><option value="all">All Accounts</option><option value="player">Genuine Players</option><option value="demo">Demo Accounts</option></select></label>
+        <select id="loginAuditRoleFilter" aria-label="Account type" class="admin-modal-input" style="width:auto; padding:6px 12px; font-size:12px;">
+              <option value="player">Players</option>
               <option value="all">All Accounts (Players &amp; Admins)</option>
               <option value="admin">Administrators Only</option>
             </select>
@@ -267,16 +289,16 @@
         <div class="player-audit-detail-panel" style="margin-top:16px;">
           <div class="player-audit-detail-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:12px 16px; background:#F5F3FF; border:1px solid #DDD6FE; border-radius:10px 10px 0 0;">
             <div style="display:flex; align-items:center; gap:10px;">
-              <div id="auditActiveAvatar" class="avatar" style="width:34px; height:34px; font-size:13px; background:#7C3AED; color:#fff; display:flex; align-items:center; justify-content:center; border-radius:50%; font-weight:700;">S</div>
+              <div id="auditActiveAvatar" class="avatar" style="width:34px; height:34px; font-size:13px; background:#7C3AED; color:#fff; display:flex; align-items:center; justify-content:center; border-radius:50%; font-weight:700;">—</div>
               <div>
-                <strong id="auditActiveName" style="color:#1E1B4B; font-size:13px;">sudh</strong>
-                <small id="auditActiveEmail" style="color:#6B7280; font-size:11px; margin-left:6px;">sudh@gmail.com</small>
+                <strong id="auditActiveName" style="color:#1E1B4B; font-size:13px;">—</strong>
+                <small id="auditActiveEmail" style="color:#6B7280; font-size:11px; margin-left:6px;"></small>
               </div>
             </div>
             <div id="auditActiveBadges" style="display:flex; align-items:center; gap:8px;">
-              <span id="auditActiveHonour" class="badge" style="background:#DCFCE7; color:#15803D; font-weight:700;">Honour: 90 / 100</span>
-              <span id="auditActiveSecurity" class="badge" style="background:#EDE9FE; color:#5B21B6; font-weight:700;">MFA: Active</span>
-              <span id="auditActiveRisk" class="badge" style="background:#F3F4F6; color:#374151;">Risk: 16.61 (Low)</span>
+              <span id="auditActiveHonour" class="badge" style="background:#DCFCE7; color:#15803D; font-weight:700;">Honour: —</span>
+              <span id="auditActiveSecurity" class="badge" style="background:#EDE9FE; color:#5B21B6; font-weight:700;">MFA: —</span>
+              <span id="auditActiveRisk" class="badge" style="background:#F3F4F6; color:#374151;">Risk: —</span>
               <button type="button" id="auditInspectPlayerBtn" class="play-btn" style="min-width:auto; height:28px; padding:0 12px; font-size:11px;">Inspect Account</button>
             </div>
           </div>
@@ -309,6 +331,7 @@
           <div><p class="eyebrow">MACHINE LEARNING</p><h2>Anti-Cheat Model &amp; Decisions Review</h2></div>
           <a id="exportDatasetBtn" href="/api/admin/dataset/export" class="ghost-btn" download="dataset_v2.csv">Export dataset</a>
         </div>
+        <label>Account group <select id="adminDetectionAccountType" class="admin-modal-input"><option value="all">All Accounts</option><option value="player">Genuine Players</option><option value="demo">Demo Accounts</option></select></label>
         <div id="antiCheatDecisionsPanel"><div class="empty">Loading anti-cheat decisions…</div></div>
       </section>
 
@@ -316,12 +339,12 @@
       <section class="panel admin-table-panel" id="cheaterDemoSection" hidden>
         <div class="section-title">
           <div>
-            <p class="eyebrow" style="color: #ef4444; font-weight: 700; letter-spacing: 0.05em;">ANTI-CHEAT LAB • ISOLATED DEMO ENVIRONMENT</p>
+            <p class="eyebrow">TEST MODE</p>
             <h2>Cheat Detection Demo</h2>
           </div>
           <div style="display: flex; gap: 8px; align-items: center;">
             <span id="demoAccountBadge" class="badge badge-purple" style="font-size: 11px;">Demo status unavailable</span>
-            <button id="resetDemoAlertsBtn" class="ghost-btn" type="button" style="padding: 6px 12px; font-size: 12px; color: #f87171;">Clear Alert History</button>
+            <button id="resetDemoAlertsBtn" class="ghost-btn" type="button" style="padding: 6px 12px; font-size: 12px; color: #991b1b;">Clear demo alerts</button>
             <button id="refreshDemoFeedBtn" class="ghost-btn" type="button" style="padding: 6px 12px; font-size: 12px;">Refresh</button>
           </div>
         </div>
@@ -329,30 +352,30 @@
         <!-- Real-Time Metrics & Model Analysis Cards -->
         <div class="demo-stats-grid">
           <div class="stat-card">
-            <div>Combined ML Risk Score</div>
+            <div>Demo risk score</div>
             <div id="demoRiskScoreVal">—</div>
-            <small id="demoRiskCategory">Awaiting telemetry session</small>
+            <small id="demoRiskCategory">Waiting for a demo match</small>
           </div>
           <div class="stat-card">
-            <div>Random Forest Model</div>
+            <div>Random Forest</div>
             <div id="demoRfDecisionVal">—</div>
             <small id="demoRfProbVal">Cheater Probability: —</small>
           </div>
           <div class="stat-card">
-            <div>Isolation Forest Model</div>
+            <div>Isolation Forest</div>
             <div id="demoIfDecisionVal">—</div>
             <small id="demoIfAnomalyVal">Anomaly Score: —</small>
           </div>
           <div class="stat-card">
-            <div>Server Hard-Rule Violations</div>
+            <div>Demo alerts</div>
             <div id="demoViolationCountVal">—</div>
-            <small id="demoViolationSummary">Impossible hits &amp; speed anomalies</small>
+            <small id="demoViolationSummary">Latest demo match</small>
           </div>
         </div>
 
         <!-- 5-Feature Telemetry Breakdown -->
         <div class="demo-telemetry-summary">
-          <div>Tracked telemetry summary</div>
+          <div>Match stats</div>
           <div>
             <div>Accuracy: <strong id="demoFeatAccuracy">—</strong></div>
             <div>Fire Rate: <strong id="demoFeatFireRate">—</strong></div>
@@ -367,7 +390,7 @@
           <span>Demo security events</span>
         </div>
         <div id="demoAlertsFeed" style="display: flex; flex-direction: column; gap: 8px; max-height: 380px; overflow-y: auto; padding-right: 4px;">
-          <div class="empty" id="demoAlertsEmpty">No simulated cheat violations recorded yet. Launch CyberStrike 3D with cheater_demo to trigger real-time detection.</div>
+          <div class="empty" id="demoAlertsEmpty">No demo alerts yet.</div>
         </div>
       </section>
 
@@ -423,24 +446,30 @@
       <section class="panel admin-table-panel">
         <div class="section-title"><div><p class="eyebrow">SUPPORT QUEUE</p><h2>Player messages</h2></div></div>
         <div id="supportTicketInbox" class="admin-support-inbox"><div class="empty">Loading player messages…</div></div>
+        <nav class="record-page-controls" id="supportTicketPages" aria-label="Support ticket pages" hidden>
+          <button type="button" id="supportTicketsPrevious" class="ghost-btn">Previous</button>
+          <span id="supportTicketsPageStatus" role="status"></span>
+          <button type="button" id="supportTicketsNext" class="ghost-btn">Next</button>
+        </nav>
       </section>
     </section>
 
     <!-- SECTION 6: THREAT MONITORING (Normal Admin & Super Admin) -->
     <section class="admin-section" id="admin-threats" data-admin-view="threats" role="tabpanel">
-      <div class="violations-layout">
+      <label>Account group <select id="adminViolationAccountType" class="admin-modal-input"><option value="all">All Accounts</option><option value="player">Genuine Players</option><option value="demo">Demo Accounts</option></select></label>
+        <div class="violations-layout">
         <!-- Repeat Violators Table -->
         <section class="panel admin-table-panel">
           <div class="section-title">
-            <div><p class="eyebrow">VIOLATION HISTORY</p><h2>Players with Repeated Violations</h2></div>
+            <div><p class="eyebrow">VIOLATION HISTORY</p><h2>Players with Recorded Detections</h2></div>
           </div>
           <div class="admin-table-wrap threat-table-wrap">
             <table class="threat-table">
               <thead>
-                <tr><th style="width:40%;">Player</th><th style="width:24%;">Violations</th><th style="width:18%;">Risk</th><th style="width:18%;">Inspect</th></tr>
+                <tr><th>Player</th><th>Count</th><th>Risk</th><th>Details</th></tr>
               </thead>
               <tbody id="threatRepeatViolatorsTableBody">
-                <tr><td colspan="4" class="empty">Loading repeat violators…</td></tr>
+                <tr><td colspan="4" class="empty">Loading players with multiple violations…</td></tr>
               </tbody>
             </table>
           </div>
@@ -480,7 +509,7 @@
           <small>Scored by ML Engine</small>
         </article>
         <article class="stat-card">
-          <span>Model Precision</span>
+          <span>Appeals Rejected</span>
           <strong id="analyticsPrecisionEstimate" style="color: #059669;">Unavailable</strong>
           <small>Low false-positive rate</small>
         </article>
@@ -500,7 +529,7 @@
             </div>
 
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
-              <span style="font-size: 13px; font-weight: 600; color: #B45309;">🟠 Suspended Accounts</span>
+              <span style="font-size: 13px; font-weight: 600; color: #92400E;">🟠 Suspended Accounts</span>
               <strong id="distSuspendedVal" style="font-size: 14px;">0</strong>
             </div>
             <div style="background: #E2E8F0; border-radius: 999px; height: 8px; overflow: hidden;">
@@ -529,11 +558,11 @@
               </div>
               <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px; text-align: center;">
                 <small style="color: #64748B; font-weight: 600; text-transform: uppercase; font-size: 10px;">Overturned (FP)</small>
-                <strong id="analyticsOverturnedAppeals" style="display: block; font-size: 20px; color: #059669; margin-top: 4px;">0</strong>
+                <strong id="analyticsOverturnedAppeals" style="display: block; font-size: 20px; color: #047857; margin-top: 4px;">0</strong>
               </div>
             </div>
             <div style="margin-top: 16px; font-size: 12px; color: #6D28D9; font-weight: 600; background: #FAF5FF; padding: 10px 14px; border-radius: 8px; border: 1px solid #DDD6FE;">
-              🛡️ Model Precision: <span id="analyticsModelPrecisionLabel">Unavailable</span>
+              Appeals rejected: <span id="analyticsModelPrecisionLabel">Unavailable</span>
             </div>
           </div>
         </section>
@@ -559,7 +588,7 @@
 
       <section class="panel admin-table-panel">
         <div class="admin-filter-row" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-          <div style="display:flex; gap:8px;">
+          <div class="admin-inline-actions">
             <button class="ghost-btn approval-filter-btn active" data-filter="all" type="button">All Requests</button>
             <button class="ghost-btn approval-filter-btn" data-filter="pending" type="button">Pending (<span id="approvalPendingBadge">0</span>)</button>
             <button class="ghost-btn approval-filter-btn" data-filter="approved" type="button">Approved</button>
@@ -641,7 +670,7 @@
         <button id="saveNormalAdminPermissionsBtn" class="play-btn" type="button">Save Role Permissions</button>
       </div>
 
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
+      <div class="super-settings-grid">
         <!-- Level 1 Permissions Card -->
         <section class="panel admin-table-panel">
           <div class="section-title">
@@ -694,7 +723,7 @@
           </div>
           <p class="command-center-subtitle">Inspect active inference model, view precision/recall, configure thresholds, and execute rollbacks.</p>
         </div>
-        <button id="openModelRollbackBtn" class="play-btn" type="button" style="background: #DC2626;">Model Rollback</button>
+        <button id="openModelRollbackBtn" class="play-btn" type="button">View Rollback Options</button>
       </div>
 
       <!-- Active Model Hero -->
@@ -730,7 +759,7 @@
       <!-- Model Catalog & Version History -->
       <section class="panel admin-table-panel" style="margin-top: 20px;">
         <div class="section-title">
-          <div><p class="eyebrow">VERSION CATALOG</p><h2>Approved Detection Models</h2></div>
+          <div><p class="eyebrow">VERSION CATALOG</p><h2 id="modelCatalogHeading" tabindex="-1">Approved Detection Models</h2></div>
         </div>
         <div class="admin-table-wrap">
           <table>
@@ -758,7 +787,7 @@
         <button id="saveRiskConfigBtn" class="play-btn" type="button">Save Risk Configuration</button>
       </div>
 
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
+      <div class="super-settings-grid">
         <!-- Threshold Settings -->
         <section class="panel admin-table-panel">
           <div class="section-title"><div><p class="eyebrow">RISK BOUNDARIES</p><h2>Category Thresholds</h2></div></div>
@@ -768,15 +797,15 @@
               <input type="number" id="riskLowThreshold" class="admin-modal-input" value="35" min="10" max="50">
             </div>
             <div>
-              <label for="riskMedThreshold" style="font-weight: 600; font-size: 12px; color: #D97706;">🟡 Medium Risk Cutoff (Low to Med)</label>
+              <label for="riskMedThreshold" style="font-weight: 600; font-size: 12px; color: #854D0E;">🟡 Medium Risk Cutoff (Low to Med)</label>
               <input type="number" id="riskMedThreshold" class="admin-modal-input" value="65" min="40" max="75">
             </div>
             <div>
-              <label for="riskHighThreshold" style="font-weight: 600; font-size: 12px; color: #EA580C;">🟠 High Risk Cutoff (Med to High)</label>
+              <label for="riskHighThreshold" style="font-weight: 600; font-size: 12px; color: #9A3412;">🟠 High Risk Cutoff (Med to High)</label>
               <input type="number" id="riskHighThreshold" class="admin-modal-input" value="85" min="65" max="90">
             </div>
             <div>
-              <label for="riskCritThreshold" style="font-weight: 600; font-size: 12px; color: #DC2626;">🔴 Critical Risk Cutoff (High to Critical)</label>
+              <label for="riskCritThreshold" style="font-weight: 600; font-size: 12px; color: #991B1B;">🔴 Critical Risk Cutoff (High to Critical)</label>
               <input type="number" id="riskCritThreshold" class="admin-modal-input" value="95" min="85" max="100">
             </div>
           </div>
@@ -790,21 +819,21 @@
           </div>
           <p style="font-size: 12px; color: #475569; margin: 0 0 12px;">Feature weights apply only to this simulator. Live match scores come from the active model.</p>
           <div class="simulator-box">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="admin-simulator-fields">
               <div>
-                <label style="font-size: 11px; font-weight: 600;">Aim Jitter (Variance):</label>
+                <label for="simAimJitter" style="font-size: 11px; font-weight: 600;">Aim Jitter (Variance):</label>
                 <input type="number" step="0.01" id="simAimJitter" class="admin-modal-input" value="0.02" style="font-size: 12px;">
               </div>
               <div>
-                <label style="font-size: 11px; font-weight: 600;">Reaction Time (ms):</label>
+                <label for="simReactionMs" style="font-size: 11px; font-weight: 600;">Reaction Time (ms):</label>
                 <input type="number" id="simReactionMs" class="admin-modal-input" value="120" style="font-size: 12px;">
               </div>
               <div>
-                <label style="font-size: 11px; font-weight: 600;">Accuracy (0.0 - 1.0):</label>
+                <label for="simAccuracy" style="font-size: 11px; font-weight: 600;">Accuracy (0.0 - 1.0):</label>
                 <input type="number" step="0.05" id="simAccuracy" class="admin-modal-input" value="0.75" style="font-size: 12px;">
               </div>
               <div>
-                <label style="font-size: 11px; font-weight: 600;">Speed Multiplier:</label>
+                <label for="simSpeed" style="font-size: 11px; font-weight: 600;">Speed Multiplier:</label>
                 <input type="number" step="0.05" id="simSpeed" class="admin-modal-input" value="1.25" style="font-size: 12px;">
               </div>
             </div>
@@ -874,7 +903,7 @@
           </div>
           <p class="command-center-subtitle">Live backend resources, database health, API latency, and ML inference performance metrics.</p>
         </div>
-        <button id="refreshSystemMetricsBtn" class="ghost-btn" type="button" style="color: #FFF; border-color: rgba(255,255,255,0.3);">↻ Refresh Metrics</button>
+        <button id="refreshSystemMetricsBtn" class="ghost-btn" type="button">↻ Refresh Metrics</button>
       </div>
 
       <div class="stats-grid" style="margin-bottom: 20px;">
@@ -914,7 +943,7 @@
         <button id="savePlatformConfigBtn" class="play-btn" type="button">Save Platform Settings</button>
       </div>
 
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
+      <div class="super-settings-grid">
         <section class="panel admin-table-panel">
           <div class="section-title"><div><p class="eyebrow">SECURITY POLICIES</p><h2>Session &amp; Auth Limits</h2></div></div>
           <div style="display: flex; flex-direction: column; gap: 14px; padding: 10px 0;">
@@ -972,7 +1001,7 @@
         </div>
         <div class="modal-form-group">
           <label for="newAdminVerification">Current authenticator code</label>
-          <input id="newAdminVerification" inputmode="numeric" pattern="[0-9]{6}" class="admin-modal-input" autocomplete="off" required>
+          <input id="newAdminVerification" name="one-time-code" inputmode="numeric" pattern="[0-9]{6}" class="admin-modal-input" autocomplete="one-time-code" required>
         </div>
         <div id="createAdminFeedback" class="modal-err-msg" style="margin-top: 8px;" hidden></div>
         <div class="modal-actions" style="margin-top: 18px;">
@@ -1092,7 +1121,7 @@
               <h4 style="margin:0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; color:#1E293B; font-weight:700;">Account Security</h4>
             </div>
             <div style="display:flex; gap:6px;">
-              <span id="modalMfaStatusBadge" class="badge" style="background:#EDE9FE; color:#5B21B6; font-size:10px;">MFA: Active</span>
+              <span id="modalMfaStatusBadge" class="badge" style="background:#EDE9FE; color:#5B21B6; font-size:10px;">MFA: —</span>
               <span id="modalAccountStateBadge" class="badge" style="background:#DCFCE7; color:#15803D; font-size:10px;">Active</span>
             </div>
           </div>
@@ -1112,7 +1141,7 @@
           <h4 style="margin:0; font-size:14px; text-transform:uppercase; letter-spacing:0.05em; color:#4C1D95;">Completed Game Sessions</h4>
           <span id="modalMatchCountBadge" class="badge" style="background:#EDE9FE; color:#6D28D9; font-weight:700;">0 Sessions</span>
         </div>
-        <div class="admin-table-wrap" style="max-height:280px; overflow-y:auto;">
+        <div class="admin-table-wrap">
           <table class="modal-match-table">
             <thead>
               <tr>
@@ -1142,22 +1171,22 @@
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="font-size:16px;">⚠️</span>
-            <h4 style="margin:0; font-size:14px; text-transform:uppercase; letter-spacing:0.05em; color:#B91C1C; font-weight:700;">Anti-Cheat Infractions &amp; Security Violations</h4>
+            <h4 style="margin:0; font-size:14px; text-transform:uppercase; letter-spacing:0.05em; color:#B91C1C; font-weight:700;">Player Violations</h4>
           </div>
-          <span id="modalViolationsCountBadge" class="badge badge-danger" style="font-weight:700;">0 Infractions</span>
+          <span id="modalViolationsCountBadge" class="badge badge-danger" style="font-weight:700;">0 violations</span>
         </div>
-        <div class="admin-table-wrap" style="max-height:260px; overflow-y:auto; border:1px solid #FECACA; border-radius:10px;">
+        <div class="admin-table-wrap" style="border:1px solid #FECACA; border-radius:10px;">
           <table class="modal-match-table">
             <thead>
               <tr style="background:#FEF2F2;">
                 <th style="width:25%;">Violation Type</th>
                 <th style="width:15%;">Severity</th>
-                <th style="width:40%;">Details &amp; Telemetry Finding</th>
+                <th style="width:40%;">What the system found</th>
                 <th style="width:20%;">Recorded</th>
               </tr>
             </thead>
             <tbody id="modalViolationsTableBody">
-              <tr><td colspan="4" class="empty">No security infractions recorded for this operator.</td></tr>
+              <tr><td colspan="4" class="empty">No violations recorded for this player.</td></tr>
             </tbody>
           </table>
         </div>
@@ -1179,11 +1208,11 @@
           <input type="hidden" id="reqApprovalPlayerId" value="">
           <input type="hidden" id="reqApprovalAction" value="ban">
           <div style="margin-bottom:12px;">
-            <label style="font-size:12px; color:var(--muted); font-weight:600;">Target Player</label>
+            <span style="font-size:12px; color:var(--muted); font-weight:600;">Target Player</span>
             <div id="reqApprovalPlayerName" style="font-weight:700; color:var(--text); font-size:14px; margin-top:4px;">—</div>
           </div>
           <div style="margin-bottom:12px;">
-            <label style="font-size:12px; color:var(--muted); font-weight:600;">Requested Action</label>
+            <span style="font-size:12px; color:var(--muted); font-weight:600;">Requested Action</span>
             <div id="reqApprovalActionBadge" style="margin-top:4px; font-weight:800; font-size:13px; color:#EF4444;">Permanent Account Ban</div>
           </div>
           <div style="margin-bottom:12px;">
@@ -1222,8 +1251,8 @@
             <div id="procModalEvidenceRow" style="margin-top:4px; display:none;"><strong>Evidence:</strong> <span id="procModalEvidence">—</span></div>
           </div>
           <div style="margin-bottom:14px;">
-            <label style="font-size:12px; color:var(--muted); font-weight:600;">Executive Decision *</label>
-            <div style="display:flex; gap:16px; margin-top:8px;">
+            <span id="approvalDecisionLabel" style="font-size:12px; color:var(--muted); font-weight:600;">Decision</span>
+            <div role="group" aria-labelledby="approvalDecisionLabel" style="display:flex; gap:16px; margin-top:8px;">
               <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:#10B981; cursor:pointer;">
                 <input type="radio" name="procDecision" value="approve" checked> Approve &amp; Execute
               </label>
@@ -1251,6 +1280,7 @@
 
   <script src="js/config.js?v=20261114_0415"></script>
   <script src="js/api.js?v=20261114_0415"></script>
-  <script type="module" src="js/admin.js?v=20261124_datafix1"></script>
+  <script src="js/record-pager.js?v=20261125"></script>
+  <script type="module" src="js/admin.js?v=20261125_superonly"></script>
 </body>
 </html>

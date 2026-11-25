@@ -302,11 +302,11 @@ html:has(dialog:modal), body:has(dialog:modal) { overflow: hidden; }
   padding: clamp(.9rem, 2vw, 1.35rem);
   border: 1px solid var(--ui-border);
   border-radius: 1rem;
-  background: var(--ui-surface);
-  color: var(--ui-ink);
+  background: #5421a5;
+  color: #fff;
 }
 #matches .matches-heading h2 { margin: 0; font-size: clamp(1.2rem, 2vw, 1.6rem); line-height: 1.2; }
-#matches .matches-heading p { margin: .35rem 0 0; color: var(--ui-muted); font-size: .85rem; }
+#matches .matches-heading p { margin: .35rem 0 0; color: #f1e7ff; font-size: .85rem; }
 #matches .match-grid { padding: .85rem 0 0; }
 #matches .matches-activity[open] { grid-column: 1 / -1; }
 #matches .matches-activity summary {
@@ -383,8 +383,7 @@ html:has(dialog:modal), body:has(dialog:modal) { overflow: hidden; }
 
 /* One fixed artwork layer for all signed-in dashboard shells. */
 body.dashboard-page:is(.player-page,.admin-page) {
-  background: linear-gradient(rgb(246 237 255 / 22%), rgb(243 232 255 / 32%)),
-    url("../public/backgrounds/SecureFPS_Sakura_Anime_Background.png") center center / cover fixed #e9ddf7;
+  background: url("../public/backgrounds/SecureFPS_Sakura_Background.png") center center / cover no-repeat fixed #e9ddf7;
 }
 .dashboard-page:is(.player-page,.admin-page) :is(.sidebar,.admin-sidebar) {
   background: #F7F3FC !important;
@@ -501,7 +500,7 @@ body.dashboard-page :is(th, td) {
 body.dashboard-page :is(.sidebar, .admin-sidebar) {
   background:
     linear-gradient(rgb(247 243 252 / 58%), rgb(247 243 252 / 58%)),
-    url("../public/backgrounds/SecureFPS_Sakura_Anime_Background.png") center center / cover fixed !important;
+    url("../public/backgrounds/SecureFPS_Sakura_Background.png") center center / cover no-repeat fixed !important;
   border-right: 1px solid rgb(221 211 237 / 28%);
   backdrop-filter: blur(3px);
 }
@@ -510,14 +509,14 @@ body.admin-page[data-admin-role="normal"] .admin-sidebar {
   --role-accent: #6D28D9;
   background:
     linear-gradient(rgb(231 220 255 / 58%), rgb(231 220 255 / 58%)),
-    url("../public/backgrounds/SecureFPS_Sakura_Anime_Background.png") center center / cover fixed !important;
+    url("../public/backgrounds/SecureFPS_Sakura_Background.png") center center / cover no-repeat fixed !important;
 }
 
 body.admin-page[data-admin-role="super"] .admin-sidebar {
   --role-accent: #8B5CF6;
   background:
     linear-gradient(rgb(238 216 255 / 58%), rgb(238 216 255 / 58%)),
-    url("../public/backgrounds/SecureFPS_Sakura_Anime_Background.png") center center / cover fixed !important;
+    url("../public/backgrounds/SecureFPS_Sakura_Background.png") center center / cover no-repeat fixed !important;
 }
 
 body.admin-page[data-admin-role="normal"] .admin-nav-btn.active,
@@ -951,8 +950,8 @@ body.player-page #profile .profile-appearance .appearance-actions {
 }
 .activity-item {
   display: grid;
-  gap: 3px;
-  padding: 10px 12px;
+  gap: 2px;
+  padding: 7px 10px;
   border: 1px solid var(--role-border);
   border-left: 3px solid var(--role-accent);
   border-radius: 10px;
@@ -1220,7 +1219,6 @@ body.admin-page #playerMatchesModal[data-view="violations"] .modal-violations-se
 }
 
 body.admin-page #playerMatchesModal[data-view="violations"] .modal-violations-section .admin-table-wrap {
-  max-height: 55vh;
   border-color: var(--subtle-border);
   border-radius: 10px;
   background: var(--lavender-surface);
@@ -1650,7 +1648,7 @@ body.dashboard-page :is(.sidebar,.admin-sidebar) {
   background:
     linear-gradient(color-mix(in srgb,var(--role-sidebar) 84%,transparent),
                     color-mix(in srgb,var(--role-sidebar) 84%,transparent)),
-    url("../public/backgrounds/SecureFPS_Sakura_Anime_Background.png") center / cover fixed !important;
+    url("../public/backgrounds/SecureFPS_Sakura_Background.png") center / cover no-repeat fixed !important;
   border-right:1px solid var(--role-border) !important; backdrop-filter:blur(6px);
 }
 body.dashboard-page :is(.sidebar nav a,.admin-nav-btn) { color:var(--role-text); opacity:1; }
@@ -1684,17 +1682,33 @@ body.player-page .overview-glance :is(strong,small,button) { color:#fff; }
 .admin-page .admin-tier-badge.level-2 { background:#FCE7A8; color:#714500; border:1px solid #C69A36; }
 .admin-page .admin-sidebar .brand { justify-content:space-between; }
 body.sidebar-collapsed.admin-page .admin-sidebar .brand { justify-content:center; padding-inline:0; }
-body.sidebar-collapsed.admin-page .admin-sidebar .sidebar-logo-lockup { display:none; }
+body.sidebar-collapsed.admin-page .admin-sidebar .sidebar-logo-lockup { display:block; }
 body.sidebar-collapsed.admin-page .admin-sidebar .admin-nav-btn { justify-content:center; gap:0; padding-inline:0; font-size:0; }
-body.sidebar-collapsed.admin-page .admin-sidebar .admin-nav-btn .admin-nav-icon { flex-basis:24px; }
-body.sidebar-collapsed.admin-page .admin-sidebar .admin-nav-category { display:none; }
+body.sidebar-collapsed.admin-page .admin-sidebar .admin-nav-divider { display:none; }
+.admin-page .super-settings-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));
+  gap:20px;
+}
+@media(min-width:901px) {
+  body.sidebar-collapsed.dashboard-page :is(.sidebar,.admin-sidebar) .brand {
+    flex-direction:column;
+    gap:4px;
+  }
+}
 @media(max-width:900px) {
   body.sidebar-collapsed.admin-page .admin-sidebar { width:100% !important; max-width:none !important; }
   body.sidebar-collapsed.admin-page .admin-sidebar .sidebar-logo-lockup { display:block; }
-  body.sidebar-collapsed.admin-page .admin-sidebar .brand { justify-content:space-between; }
-  body.sidebar-collapsed.admin-page .admin-sidebar .admin-nav-btn { justify-content:flex-start; font-size:13px; padding-inline:10px; }
-  body.sidebar-collapsed.admin-page .admin-sidebar .admin-nav-category { display:block; }
   body.sidebar-collapsed.player-page .sidebar { width:100%; }
   body.sidebar-collapsed.player-page .sidebar .sidebar-logo-lockup { display:block; }
-  body.sidebar-collapsed.player-page .sidebar .brand { justify-content:space-between; padding-inline:1rem; }
+  body.sidebar-collapsed.dashboard-page :is(.sidebar,.admin-sidebar) .brand {
+    justify-content:space-between;
+    padding-inline:1rem;
+  }
+  body.sidebar-collapsed.dashboard-page :is(.sidebar,.admin-sidebar) nav { display:none; }
+  .admin-page .admin-header-card > div:last-child { min-width:0; }
+  .admin-page .admin-header-card #adminEmail {
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
 }

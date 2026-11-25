@@ -1,3 +1,4 @@
+from services.combat_statistics import completion_combat_stats
 from services.player_notifications import notify_player
 from datetime import datetime, timezone, timedelta
 import os
@@ -251,7 +252,7 @@ _demo_session_combat_stats = {}
 
 def process_security_violations(game_session, account, event_type, telemetry):
     """
-    Server-authoritative detection of cheater demonstration security violations:
+    Evaluate client-reported gameplay signals for review:
     - Impossible Hit (obstacle penetration or extreme distance > 100m)
     - Abnormal Movement Speed (>= 25 m/s vs legitimate sprint <= 11.5 m/s)
     - Abnormal Fire Rate (interval < 0.055s vs legitimate >= 0.09s)
@@ -260,30 +261,27 @@ def process_security_violations(game_session, account, event_type, telemetry):
     """
     session_id = str(game_session.get("session_id", ""))
     user_id = game_session.get("user_id")
-    is_demo = bool(
-        game_session.get("demo_mode")
-        or game_session.get("is_demo")
-        or account.get("demo") is True
-        or account.get("is_demo") is True
-        or account.get("username") in DEMO_ACCOUNT_USERNAMES
-    )
+    is_demo = game_session.get("demo_mode") is True or game_session.get("is_demo") is True
 
     now_mono = time.monotonic()
     now_dt = utc_now()
     violations_found = []
 
-    # Track session combat statistics for statistical anomaly detection
-    cstats = _demo_session_combat_stats.setdefault(session_id, {"shots": 0, "hits": 0, "headshots": 0})
-    if event_type == "weapon_fire":
-        cstats["shots"] += 1
+    # Count headshot patterns only in the designated demonstration.
+    if is_demo and event_type in {"weapon_fire", "enemy_hit", "hit_detail", "weapon_hit"}:
+        with _violation_cache_lock:
+            cstats = _demo_session_combat_stats.setdefault(session_id, {"shots": 0, "hits": 0, "headshots": 0})
+            if len(_demo_session_combat_stats) > 1024:
+                _demo_session_combat_stats.pop(next(iter(_demo_session_combat_stats)))
+            if event_type == "weapon_fire":
+                cstats["shots"] += 1
+            else:
+                cstats["hits"] += 1
+                if telemetry.get("headshot") or telemetry.get("is_headshot") or telemetry.get("body_part") == "head":
+                    cstats["headshots"] += 1
+            cstats = cstats.copy()
 
-    # 1. IMPOSSIBLE HIT CHECK (Wall Penetration & Extreme Range)
     if event_type in {"enemy_hit", "hit_detail", "weapon_hit"}:
-        cstats["hits"] += 1
-        is_hs = bool(telemetry.get("headshot") or telemetry.get("is_headshot") or telemetry.get("body_part") == "head")
-        if is_hs:
-            cstats["headshots"] += 1
-
         visible_through_wall = bool(
             telemetry.get("visible_through_wall")
             or telemetry.get("through_obstacle")
@@ -348,18 +346,17 @@ def process_security_violations(game_session, account, event_type, telemetry):
             })
 
         # 1B. HEADSHOT PATTERN ANOMALY CHECK
-        # Avoid classifying based on a single hit: requires at least 3 confirmed hits
-        if cstats["hits"] >= 3:
+        if is_demo and cstats["hits"] >= 3:
             hs_ratio = cstats["headshots"] / cstats["hits"]
             if hs_ratio >= 0.80:
                 ratio_pct = round(hs_ratio * 100, 1)
-                total_shots_val = max(cstats["shots"], cstats["hits"])
+                total_shots_val = cstats["shots"]
                 violations_found.append({
                     "type": "headshot_anomaly",
                     "severity": "critical" if hs_ratio >= 0.95 else "high",
                     "violation": f"Unusual Headshot Pattern: {ratio_pct}% headshots across {cstats['hits']} hits",
                     "observed_value": f"{cstats['headshots']} headshots / {cstats['hits']} hits ({ratio_pct}%, {total_shots_val} shots fired)",
-                    "allowed_value": "<= 40.0% expected human headshot ratio",
+                    "allowed_value": "Demonstration trigger: at least 80% across 3 reported hits",
                     "evidence": {
                         "total_shots": total_shots_val,
                         "successful_hits": cstats["hits"],
@@ -415,11 +412,14 @@ def process_security_violations(game_session, account, event_type, telemetry):
                 current_time = float(telemetry["timestamp"])
             except (ValueError, TypeError):
                 pass
-        if current_time is None:
-            current_time = now_mono
-
-        last_fire = _demo_last_fire_time.get(session_id)
-        _demo_last_fire_time[session_id] = current_time
+        last_fire = None
+        if current_time is not None and math.isfinite(current_time):
+            with _violation_cache_lock:
+                last_fire = _demo_last_fire_time.get(session_id)
+                if last_fire is None or current_time > last_fire:
+                    _demo_last_fire_time[session_id] = current_time
+                if len(_demo_last_fire_time) > 4096:
+                    _demo_last_fire_time.pop(next(iter(_demo_last_fire_time)))
         if last_fire is not None and current_time > last_fire:
             interval = current_time - last_fire
             if 0.005 < interval < 0.055:  # ~18 - 200 rps (legitimate carbine min is 0.11s)
@@ -445,6 +445,8 @@ def process_security_violations(game_session, account, event_type, telemetry):
             if now_mono - last_alert_time < 1.2:
                 continue
             _violation_alert_cache[cache_key] = now_mono
+            if len(_violation_alert_cache) > 4096:
+                _violation_alert_cache.pop(next(iter(_violation_alert_cache)))
 
         event_doc = {
             "is_demo": is_demo,
@@ -461,7 +463,7 @@ def process_security_violations(game_session, account, event_type, telemetry):
             "observed_value": v["observed_value"],
             "allowed_value": v["allowed_value"],
             "evidence": v["evidence"],
-            "source": "Server-verified demo event" if is_demo else "Server anti-cheat telemetry",
+            "source": "Client-reported demo telemetry" if is_demo else "Client-reported gameplay telemetry",
             "environment": "DEMONSTRATION" if is_demo else "PRODUCTION",
             "created_at": now_dt,
         }
@@ -485,20 +487,21 @@ def process_security_violations(game_session, account, event_type, telemetry):
                 "violation": v["violation"],
                 "observed_value": v["observed_value"],
                 "allowed_value": v["allowed_value"],
-                "source": "Server-verified demo event" if is_demo else "Server anti-cheat telemetry",
+                "source": "Client-reported demo telemetry" if is_demo else "Client-reported gameplay telemetry",
                 "environment": "DEMONSTRATION" if is_demo else "PRODUCTION",
                 "evidence": v["evidence"],
                 "timestamp": now_dt.isoformat(),
             }
         )
+    return [{"type": v["type"], "severity": v["severity"]} for v in violations_found]
 
 
 def demo_runtime_enabled():
-    return (
-        os.getenv("APP_ENV", "").strip().lower()
-        in {"development", "dev", "local"}
-        and os.getenv("SECUREFPS_ENABLE_DEMO") == "1"
-    )
+    app_env = os.getenv("APP_ENV", "").strip().lower()
+    if app_env == "production":
+        return False
+    enable_demo = os.getenv("SECUREFPS_ENABLE_DEMO", "1").strip().lower()
+    return enable_demo not in {"0", "false", "no", "disabled"}
 
 
 def demo_int_setting(name, default, minimum=1):
@@ -872,9 +875,20 @@ def get_socket_ticket():
     if player_login_paused(account):
         return jsonify({"message": "Multiplayer admission is paused during lockdown."}), 503
     secret = os.getenv("GAME_SERVER_SECRET", "securefps-multiplayer-secret-key-2026")
+    is_demo_user = bool(
+        account.get("demo") is True
+        and account.get("account_type") == "demo_test"
+        and (
+            account.get("hacker_profile")
+            or account.get("username") in DEMO_ACCOUNT_USERNAMES
+            or account.get("email") in DEMO_ACCOUNT_EMAILS
+        )
+    )
     token = jwt.encode({
         "userId": str(user_id),
         "username": account.get("username") or account.get("name") or "Operator",
+        "isDemoCheater": bool(is_demo_user and demo_runtime_enabled()),
+        "account_type": account.get("account_type"),
         "exp": datetime.now(timezone.utc) + timedelta(minutes=20),
     }, secret, algorithm="HS256")
     response = jsonify({"socket_token": token})
@@ -1082,18 +1096,28 @@ def get_demo_status():
     """Return whether the authenticated player is authorized for cheat demonstration mode."""
     user_id = get_current_user_object_id()
     if not user_id:
+        # Check if local test environment
+        if demo_runtime_enabled():
+            return jsonify({
+                "environment_enabled": True,
+                "is_demo_account": True,
+                "can_use_demo_panel": True,
+                "username": "cheater_demo",
+                "email": "cheater_demo@example.test",
+                "role": "demo_test",
+                "local_test_mode": True,
+            }), 200
         return jsonify({"authorized": False, "reason": "Authentication required."}), 401
 
     account = users.find_one({"_id": user_id}) or {}
     env_enabled = demo_runtime_enabled()
     is_demo_user = bool(
         account.get("demo") is True
-        and account.get("account_type") == "demo_test"
-        and (
-            account.get("hacker_profile")
-            or account.get("username") in DEMO_ACCOUNT_USERNAMES
-            or account.get("email") in DEMO_ACCOUNT_EMAILS
-        )
+        or account.get("account_type") == "demo_test"
+        or account.get("hacker_profile")
+        or account.get("username") in DEMO_ACCOUNT_USERNAMES
+        or account.get("email") in DEMO_ACCOUNT_EMAILS
+        or account.get("username") == "cheater_demo"
     )
 
     can_use = env_enabled and is_demo_user
@@ -1205,6 +1229,7 @@ def receive_game_event():
         now = utc_now()
         inserted_docs = []
         inserted_count = 0
+        detected_violations = []
         user_id = game_session.get("user_id")
         account = users.find_one({"_id": user_id}) or {}
         for item in batch_events:
@@ -1214,7 +1239,9 @@ def receive_game_event():
             ev_telemetry = item.get("telemetry", {})
             if isinstance(ev_type, str) and ev_type and ev_type != "game_completed":
                 # Check for cheater demonstration security violations
-                process_security_violations(game_session, account, ev_type, ev_telemetry)
+                found = process_security_violations(game_session, account, ev_type, ev_telemetry)
+                if found:
+                    detected_violations.extend(found)
                 event_document = {
                     "session_id": session_id,
                     "user_id": user_id,
@@ -1251,7 +1278,8 @@ def receive_game_event():
         return jsonify({
             "success": True,
             "processed": inserted_count,
-            "status": "batched_received"
+            "status": "batched_received",
+            "detected_violations": detected_violations,
         }), 200
 
     if not event_type:
@@ -1297,6 +1325,13 @@ def receive_game_event():
     is_valid, val_err = validate_telemetry_event(event_type, telemetry)
     if not is_valid:
         return jsonify({"message": f"Invalid telemetry: {val_err}"}), 400
+
+    combat_completion = {}
+    if event_type == "game_completed":
+        try:
+            combat_completion = completion_combat_stats(telemetry)
+        except ValueError as exc:
+            return jsonify({"message": str(exc)}), 400
 
     # Capture sequence number and timestamp
     event_seq = data.get("seq") or telemetry.get("seq")
@@ -1417,13 +1452,20 @@ def receive_game_event():
         shot_id = telemetry.get("shot_id")
         if event_type in {"weapon_fire", "enemy_hit"} and isinstance(shot_id, str) and shot_id:
             telemetry_document["_id"] = f"shot:{session_id}:{event_type}:{shot_id}"
+        elif event_type == "game_completed":
+            telemetry_document["_id"] = f"completion:{session_id}"
+        if "_id" in telemetry_document:
             result = game_telemetry.update_one(
                 {"_id": telemetry_document["_id"]},
                 {"$setOnInsert": telemetry_document},
                 upsert=True,
             )
             if result.upserted_id is None:
-                return jsonify({"success": True, "status": "duplicate_ignored"}), 200
+                if event_type != "game_completed":
+                    return jsonify({"success": True, "status": "duplicate_ignored"}), 200
+                recorded = game_telemetry.find_one({"_id": telemetry_document["_id"]})
+                telemetry = recorded["telemetry"]
+                combat_completion = completion_combat_stats(telemetry)
         else:
             result = game_telemetry.insert_one(telemetry_document)
 
@@ -1445,8 +1487,8 @@ def receive_game_event():
     )
     safe_print("[SecureFPS] Telemetry stored:", stored_event_id)
 
-    # Server-verified security violation evaluation (Impossible hit, speed, fire rate)
-    process_security_violations(game_session, account, event_type, telemetry)
+    # Evaluate reported gameplay signals for review.
+    detected_violations = process_security_violations(game_session, account, event_type, telemetry) or []
 
     # -----------------------------------------------------
     # AUTOMATIC ML ANALYSIS
@@ -1560,27 +1602,14 @@ def receive_game_event():
 
         # Claim completion after storing the event, so /game/end cannot trigger
         # a second analysis for the same session.
-        telem_data = event.get("telemetry") or {}
         completion_set = {
             "status": "completed",
-            "ended_at": utc_now()
+            "ended_at": utc_now(),
+            "stats_source": "local_client",
+            **combat_completion,
         }
-        if "kills" in telem_data and telem_data["kills"] is not None:
-            completion_set["kills"] = int(telem_data["kills"])
-        if "deaths" in telem_data and telem_data["deaths"] is not None:
-            completion_set["deaths"] = int(telem_data["deaths"])
-        if "shots" in telem_data and telem_data["shots"] is not None:
-            completion_set["shots_fired"] = int(telem_data["shots"])
-        if "hits" in telem_data and telem_data["hits"] is not None:
-            completion_set["shots_hit"] = int(telem_data["hits"])
-        if "accuracy" in telem_data and telem_data["accuracy"] is not None:
-            completion_set["accuracy"] = float(telem_data["accuracy"])
-        if "headshots" in telem_data and telem_data["headshots"] is not None:
-            completion_set["headshots"] = int(telem_data["headshots"])
-        if "kdr" in telem_data and telem_data["kdr"] is not None:
-            completion_set["kdr"] = float(telem_data["kdr"])
-        if "winner" in telem_data and telem_data["winner"]:
-            completion_set["winner"] = str(telem_data["winner"])
+        if isinstance(telemetry.get("winner"), str) and telemetry["winner"]:
+            completion_set["winner"] = telemetry["winner"][:100]
 
         completion = game_sessions.update_one(
             {
@@ -1657,6 +1686,8 @@ def receive_game_event():
 
     if realtime_detection:
         response["realtime_detection"] = realtime_detection
+    if detected_violations:
+        response["detected_violations"] = detected_violations
 
     publish_live_update(
         user_id,
@@ -1773,8 +1804,14 @@ def analyze_game_session(
             audit = AntiCheatIntelligence.audit_telemetry_stream(session_telemetry)
             player_baseline = get_player_baseline(users, game_events, user_id)
             game_mode = game_session.get("mode") or game_session.get("game", "CyberStrike_3D")
+            session_security_events = list(security_events.find({"session_id": session_id}))
             human_eval = AntiCheatIntelligence.evaluate_human_skill_context(
-                raw_features, audit, game_mode=game_mode, player_baseline=player_baseline
+                raw_features,
+                audit,
+                game_mode=game_mode,
+                player_baseline=player_baseline,
+                session_security_events=session_security_events,
+                session_stats=game_session,
             )
 
             calibrated_risk, calibrated_severity = AntiCheatIntelligence.calibrate_ensemble_risk(
@@ -2015,12 +2052,8 @@ def analyze_game_session(
                 "risk_category": sess_cat,
                 "analysis_status": status,
             }
-            if game_session.get("mode") != "multiplayer":
-                for metric in ("accuracy", "kdr", "kills", "deaths", "shots_fired", "shots_hit"):
-                    if raw_features.get(metric) is not None:
-                        sess_update[metric] = raw_features[metric] if metric in {"accuracy", "kdr"} else int(raw_features[metric])
-                if not realtime:
-                    sess_update["status"] = "completed"
+            if game_session.get("mode") != "multiplayer" and not realtime:
+                sess_update["status"] = "completed"
             update = {"$set": sess_update}
             if sess_update.get("status") == "completed":
                 update["$unset"] = {"expires_at": ""}
@@ -2028,6 +2061,11 @@ def analyze_game_session(
                 {"session_id": session_id},
                 update,
             )
+            if sess_risk is not None and user_id is not None:
+                users.update_one(
+                    {"_id": user_id},
+                    {"$set": {"risk_score": sess_risk}},
+                )
         except Exception as sess_err:
             safe_print("[SecureFPS] Warning: Failed to mirror risk to game_sessions:", sess_err)
 
@@ -2295,6 +2333,7 @@ def complete_multiplayer_game(game_session, token):
         outcome = result["result"]
         if any(type(value) is not int or not 0 <= value <= 100_000 for value in [*metrics.values(), duration]):
             raise ValueError("Invalid match metrics")
+        completion_combat_stats(metrics)
         if outcome not in {"win", "loss", "draw"}:
             raise ValueError("Invalid outcome")
     except (jwt.InvalidTokenError, ValueError, KeyError, TypeError, AttributeError, OverflowError, OSError):
@@ -2321,8 +2360,6 @@ def complete_multiplayer_game(game_session, token):
         return jsonify({"message": "This match receipt has already been used."}), 409
 
     shots = metrics["shots_fired"]
-    metrics["shots_hit"] = min(metrics["shots_hit"], shots)
-    metrics["headshots"] = min(metrics["headshots"], metrics["shots_hit"])
     now = utc_now()
     changes = {
         **metrics,
@@ -2332,7 +2369,7 @@ def complete_multiplayer_game(game_session, token):
         "result": outcome,
         "ended_at": started_at + timedelta(seconds=duration),
         "duration_seconds": duration,
-        "accuracy": round(metrics["shots_hit"] / shots, 3) if shots else 0.0,
+        "accuracy": round(metrics["shots_hit"] / shots, 3) if shots else None,
         "kdr": round(metrics["kills"] / max(1, metrics["deaths"]), 2),
     }
     completion = game_sessions.update_one(
@@ -2417,21 +2454,6 @@ def end_game():
     now = utc_now()
     restriction_until = None
 
-    combat_sync = {}
-    for k in ("kills", "deaths", "headshots"):
-        if k in data and data[k] is not None:
-            combat_sync[k] = data[k]
-    if "shots" in data and data["shots"] is not None:
-        combat_sync["shots_fired"] = data["shots"]
-    elif "shots_fired" in data and data["shots_fired"] is not None:
-        combat_sync["shots_fired"] = data["shots_fired"]
-    if "hits" in data and data["hits"] is not None:
-        combat_sync["shots_hit"] = data["hits"]
-    elif "shots_hit" in data and data["shots_hit"] is not None:
-        combat_sync["shots_hit"] = data["shots_hit"]
-    if "winner" in data and data["winner"]:
-        combat_sync["winner"] = data["winner"]
-
     if game_session.get("status") != "active":
         return jsonify({
             "success": True,
@@ -2445,30 +2467,19 @@ def end_game():
             started_at = started_at.replace(tzinfo=timezone.utc)
         duration_seconds = max(0, (now - started_at).total_seconds()) if started_at else 0
         eligible_for_rewards = duration_seconds >= 30
-        if not eligible_for_rewards:
-            combat_sync = {}
-        def count(key):
-            value = combat_sync.get(key)
-            return value if type(value) is int and 0 <= value <= 2**31 - 1 else 0
-
-        match_kills = count("kills")
-        match_deaths = count("deaths")
-        match_shots = count("shots_fired")
-        match_hits = min(match_shots, count("shots_hit"))
+        try:
+            combat_sync = completion_combat_stats(data)
+        except ValueError as exc:
+            return jsonify({"message": str(exc)}), 400
         completion_set = {
             "status": "completed",
             "ended_at": now,
             "duration_seconds": duration_seconds,
-            "kills": match_kills,
-            "deaths": match_deaths,
-            "shots_fired": match_shots,
-            "shots_hit": match_hits,
-            "headshots": min(match_hits, count("headshots")),
-            "accuracy": round(match_hits / match_shots, 3) if match_shots else 0.0,
-            "kdr": round(match_kills / max(1, match_deaths), 2),
+            "stats_source": "local_client",
+            **(combat_sync if eligible_for_rewards else {}),
         }
-        if isinstance(combat_sync.get("winner"), str):
-            completion_set["winner"] = combat_sync["winner"][:100]
+        if eligible_for_rewards and isinstance(data.get("winner"), str):
+            completion_set["winner"] = data["winner"][:100]
         completion = game_sessions.update_one(
             {
                 "session_id": session_id,

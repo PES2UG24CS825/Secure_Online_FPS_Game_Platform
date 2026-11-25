@@ -1,18 +1,18 @@
-import { loadRewardOperations } from './admin/admin_rewards.js';
+import { loadRewardOperations } from './admin/admin_rewards.js?v=20261125_player_rewards';
 /**
  * SecureFPS Admin Dashboard Coordinator
  * Coordinates section modules, tab navigation, responsive polling, and manual refresh.
  */
-import { PollingManager, connectAdminLiveEvents, escapeHtml, formatTimeAgo } from './admin/admin_core.js';
-import { loadAdminOverview } from './admin/admin_overview.js?v=20261124_datafix1';
-import { initPlayersSection, loadPlayersTable } from './admin/admin_players.js?v=20261124_datafix1';
-import { initSecuritySection, loadBanAppeals, loadAntiCheatDecisions, loadAuditLogTable, loadRecentLoginsTable } from './admin/admin_security.js';
-import { initSupportSection, loadSupportTickets } from './admin/admin_support.js';
+import { PollingManager, connectAdminLiveEvents, escapeHtml, formatTimeAgo } from './admin/admin_core.js?v=20261125_demo_visibility';
+import { loadAdminOverview } from './admin/admin_overview.js?v=20261125_demo_visibility';
+import { initPlayersSection, loadPlayersTable } from './admin/admin_players.js?v=20261125_superonly';
+import { initSecuritySection, loadBanAppeals, loadAntiCheatDecisions, loadAuditLogTable, loadRecentLoginsTable } from './admin/admin_security.js?v=20261125_demo_visibility';
+import { initSupportSection, loadSupportTickets } from './admin/admin_support.js?v=20261125_demo_visibility';
 import {
   initSuperAdminModules, loadSuperAdmins, loadRolesPermissions, loadMlModelsCatalog,
   loadRiskConfig, loadSecurityCommand, loadSystemControlMetrics,
   loadPlatformConfig, loadThreatMonitoring, loadReportsAnalytics, loadApprovalsQueue
-} from './admin/admin_super.js?v=20261124_datafix1';
+} from './admin/admin_super.js?v=20261125_demo_visibility';
 
 let activeSection = 'overview';
 
@@ -29,14 +29,20 @@ async function initAdminApp() {
   initSecuritySection();
   initSupportSection();
   initSuperAdminModules();
+  const currentIdentity = window.currentAdmin ? `${window.currentAdmin.id}:${window.currentAdmin.is_super_admin}` : '';
+  const prevIdentity = sessionStorage.getItem('securefps_admin_identity');
+  if (currentIdentity && prevIdentity !== currentIdentity) {
+    sessionStorage.setItem('securefps_admin_identity', currentIdentity);
+    sessionStorage.removeItem('securefps_admin_section');
+  }
   const savedSection = sessionStorage.getItem('securefps_admin_section');
   const savedTab = [...document.querySelectorAll('.admin-nav-btn')].find(tab => tab.dataset.adminSection === savedSection);
   if (savedTab && !savedTab.closest('[hidden]')) savedTab.click();
 
   // Connect Primary Real-Time SSE Stream with Fallback Polling
   connectAdminLiveEvents();
-  PollingManager.subscribe(() => {
-    refreshCurrentSection();
+  PollingManager.subscribe((force) => {
+    refreshCurrentSection(force);
   });
   PollingManager.start();
 }
@@ -91,7 +97,7 @@ function updatePageTitle(section) {
       break;
     case 'threats':
       title.textContent = 'Violations';
-      if (sub) sub.textContent = 'Recorded repeat security violations and anti-cheat infractions.';
+      if (sub) sub.textContent = 'See which players were flagged more than once and what the system found.';
       break;
     case 'analytics':
       title.textContent = 'Reports & Platform Analytics';
@@ -176,13 +182,6 @@ function setupHeaderControls() {
         await fetch('/api/auth/logout', { method: 'POST', credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
       } catch (err) {}
       window.location.href = 'login.html';
-    });
-  }
-
-  const playerViewBtn = document.getElementById('playerViewBtn');
-  if (playerViewBtn) {
-    playerViewBtn.addEventListener('click', () => {
-      window.location.href = '/player.html';
     });
   }
 

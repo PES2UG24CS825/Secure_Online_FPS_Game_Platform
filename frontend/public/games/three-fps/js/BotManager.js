@@ -510,6 +510,7 @@ class Bot {
 
     if (!this.checkCollisionAt(nextX, this.position.z)) this.position.x = nextX;
     if (!this.checkCollisionAt(this.position.x, nextZ)) this.position.z = nextZ;
+    this.resolvePenetration();
 
     this.currentSpeed = speed;
   }
@@ -686,7 +687,7 @@ class Bot {
 
     for (let i = 0; i < this.arena.colliders.length; i++) {
       const col = this.arena.colliders[i];
-      if (col.type === 'box' && col.maxY > 0.1) {
+      if ((col.type === 'box' && col.maxY > 0.1) || col.type === 'ramp') {
         if (
           x + r > col.minX &&
           x - r < col.maxX &&
@@ -705,7 +706,7 @@ class Bot {
     const r = 0.65;
     for (let i = 0; i < this.arena.colliders.length; i++) {
       const col = this.arena.colliders[i];
-      if (col.type === 'box' && col.maxY > 0.1) {
+      if ((col.type === 'box' && col.maxY > 0.1) || col.type === 'ramp') {
         if (
           this.position.x + r > col.minX &&
           this.position.x - r < col.maxX &&

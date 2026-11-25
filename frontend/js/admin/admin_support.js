@@ -2,17 +2,33 @@
  * SecureFPS Admin Customer Support Module
  * Enhanced support tickets with pagination, status/priority filtering, and macro reply templates.
  */
-import { escapeHtml, formatTimeAgo } from './admin_core.js';
+import { escapeHtml, formatTimeAgo } from './admin_core.js?v=20261125_demo_visibility';
 
 let supportStatusFilter = '';
 let supportPriorityFilter = '';
 let replyTemplates = [];
+const supportPageSize = 10;
+let supportOffset = 0;
+let supportRequest = 0;
+let renderedTickets;
+const supportPages = document.getElementById('supportTicketPages');
+const supportPrevious = document.getElementById('supportTicketsPrevious');
+const supportNext = document.getElementById('supportTicketsNext');
+const supportCount = document.getElementById('supportTicketsPageStatus');
+
+for (const [button, step] of [[supportPrevious, -1], [supportNext, 1]]) {
+  button?.addEventListener('click', () => {
+    supportOffset += step * supportPageSize;
+    void loadSupportTickets();
+  });
+}
 
 export async function initSupportSection() {
   const statusFilterEl = document.getElementById('supportStatusFilter');
   if (statusFilterEl) {
     statusFilterEl.addEventListener('change', (e) => {
       supportStatusFilter = e.target.value;
+      supportOffset = 0;
       loadSupportTickets();
     });
   }
@@ -21,6 +37,7 @@ export async function initSupportSection() {
   if (priorityFilterEl) {
     priorityFilterEl.addEventListener('change', (e) => {
       supportPriorityFilter = e.target.value;
+      supportOffset = 0;
       loadSupportTickets();
     });
   }
@@ -32,10 +49,12 @@ export async function loadSupportTickets() {
   const container = document.getElementById('supportTicketInbox');
   if (!container) return;
 
-  container.innerHTML = '<div class="loading">Loading support tickets…</div>';
+  const request = ++supportRequest;
+  supportPrevious.disabled = true;
+  supportNext.disabled = true;
 
   try {
-    const params = new URLSearchParams({ limit: 50, offset: 0 });
+    const params = new URLSearchParams({ limit: supportPageSize, offset: supportOffset });
     if (supportStatusFilter) params.set('status', supportStatusFilter);
     if (supportPriorityFilter) params.set('priority', supportPriorityFilter);
 
@@ -45,13 +64,28 @@ export async function loadSupportTickets() {
     });
 
     if (!resp.ok) {
-      if (resp.status === 403) return;
+      if (resp.status === 403) throw new Error('Your role cannot view support tickets.');
       throw new Error(`Failed to load support tickets: ${resp.status}`);
     }
 
     const data = await resp.json();
+    if (request !== supportRequest) return;
     const tickets = data.tickets || [];
+    const total = data.total || 0;
+    if (supportOffset > 0 && supportOffset >= total) {
+      supportOffset = Math.max(0, Math.ceil(total / supportPageSize) - 1) * supportPageSize;
+      return loadSupportTickets();
+    }
+    supportPages.hidden = total <= supportPageSize;
+    supportPrevious.disabled = supportOffset === 0;
+    supportNext.disabled = supportOffset + tickets.length >= total;
+    supportCount.textContent = `${supportOffset + 1}–${supportOffset + tickets.length} of ${total}`;
     replyTemplates = data.reply_templates || [];
+    const signature = JSON.stringify([supportOffset, tickets, replyTemplates]);
+    if (signature === renderedTickets) return;
+    renderedTickets = signature;
+    const open = new Set([...container.querySelectorAll('details[open]')].map(detail => detail.closest('article').id));
+    const drafts = new Map([...container.querySelectorAll('textarea')].map(field => [field.id, field.value]));
 
     if (tickets.length === 0) {
       container.innerHTML = '<div class="empty">No support tickets matching current filters.</div>';
@@ -80,6 +114,8 @@ export async function loadSupportTickets() {
             <div class="ticket-time">${formatTimeAgo(t.created_at)}</div>
           </div>
 
+          <details class="ticket-details">
+            <summary>Open ticket</summary>
           <div class="ticket-body">
             <p class="ticket-message">${escapeHtml(t.message)}</p>
             ${t.attachment ? `
@@ -121,12 +157,18 @@ export async function loadSupportTickets() {
               <span>✓ Ticket resolved</span>
             </div>
           `}
+          </details>
         </article>
       `;
     }).join('');
 
+    for (const detail of container.querySelectorAll('details')) detail.open = open.has(detail.closest('article').id);
+    for (const field of container.querySelectorAll('textarea')) field.value = drafts.get(field.id) || '';
     attachSupportListeners(container);
   } catch (err) {
+    if (request !== supportRequest) return;
+    renderedTickets = undefined;
+    supportPages.hidden = true;
     console.error('[AdminSupport] Load tickets error:', err);
     container.innerHTML = `<div class="error-cell">Error: ${escapeHtml(err.message)}</div>`;
   }

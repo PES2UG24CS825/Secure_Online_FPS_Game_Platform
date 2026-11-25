@@ -285,7 +285,6 @@ class GameModeManager {
     }
 
     if (authoritativeHealth !== null) {
-      if (authoritativeHealth >= this.playerHealth && this.playerHealth > 0) return;
       this.playerHealth = Math.max(0, authoritativeHealth);
       this.playerArmour = 0;
     } else {

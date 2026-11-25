@@ -384,7 +384,14 @@ io.use((socket, next) => {
       socket.authenticatedPlayer = typeof decoded.userId === 'string';
       socket.username = decoded.username || decoded.name || 'Operator';
       socket.sessionId = decoded.sessionId || null;
-      console.log(`[Auth] Socket ${socket.id} authenticated as ${socket.username} (${socket.userId})`);
+      socket.isDemoCheater = Boolean(
+        decoded.isDemoCheater ||
+        decoded.account_type === 'demo_test' ||
+        decoded.is_demo_cheater ||
+        decoded.username === 'cheater_demo' ||
+        decoded.username === 'demo_cheater'
+      );
+      console.log(`[Auth] Socket ${socket.id} authenticated as ${socket.username} (${socket.userId})${socket.isDemoCheater ? ' [DEMO CHEATER]' : ''}`);
       return next();
     } catch (err) {
       console.warn(`[Auth] Socket ${socket.id} token rejected:`, err.message);
@@ -443,6 +450,50 @@ app.get('/status', (req, res) => {
     uptime: Math.floor(process.uptime()),
     timestamp: Date.now()
   });
+});
+
+// Internal authoritative enforcement endpoint: immediately ban/kick player from active matches
+app.post('/internal/kick', (req, res) => {
+  const secret = req.headers['x-game-server-secret'] || req.headers['authorization']?.replace(/^Bearer\s+/, '');
+  if (secret !== GAME_SERVER_SECRET) {
+    return res.status(403).json({ error: 'Unauthorized internal call' });
+  }
+  const { userId, reason } = req.body || {};
+  if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+  let kickedCount = 0;
+  const targetIdStr = String(userId);
+
+  for (const [socketId, s] of io.of('/').sockets) {
+    if (String(s.userId) === targetIdStr) {
+      kickedCount++;
+      s.emit('player:banned', {
+        reason: reason || 'Platform security enforcement action.',
+        bannedAt: new Date().toISOString()
+      });
+
+      rooms.forEach((room) => {
+        if (room.players.has(socketId)) {
+          const p = room.players.get(socketId);
+          room.players.delete(socketId);
+          io.to(room.code).emit('player:left', {
+            id: socketId,
+            name: p?.name || 'Operator',
+            reason: 'banned'
+          });
+          console.log(`[Enforcement] Removed banned player ${p?.name} (${socketId}) from room ${room.code}`);
+        }
+      });
+
+      if (activeUserSockets.get(s.userId) === socketId) {
+        activeUserSockets.delete(s.userId);
+      }
+      s.disconnect(true);
+    }
+  }
+
+  console.log(`[Enforcement] Processed kick for user ${targetIdStr}, disconnected ${kickedCount} socket(s)`);
+  res.json({ success: true, kickedCount });
 });
 
 app.get('/api/rooms', (req, res) => {
@@ -538,14 +589,16 @@ function serverTick() {
             const horizDist = Math.sqrt(dx * dx + dz * dz);
 
             // Authoritative Displacement Budget:
-            // Max allowed speed: sprint ~11m/s, walk ~7m/s, with tick delta margin + 0.5m lag burst
-            const maxAllowedSpeed = latestMove.isSprinting ? 12.0 : 8.0;
+            // Controlled demonstration check: only authorized demo cheater inside a designated demo room with toggle ON
+            const isDemoCheaterInDemo = Boolean(room.isDemoRoom && player.isDemoCheater);
+            const demoToggles = player.demoToggles || {};
+            const maxAllowedSpeed = (isDemoCheaterInDemo && demoToggles.speed) ? 48.0 : (latestMove.isSprinting ? 12.0 : 8.0);
             const maxAllowedDistance = (maxAllowedSpeed * moveDt) + 0.65;
             const maxVertDist = (14.0 * moveDt) + 1.2;
 
             const isSpeedValid = horizDist <= maxAllowedDistance && Math.abs(dy) <= maxVertDist;
-            const isBoundsValid = ArenaCollision.isWithinBounds(latestMove.x, latestMove.y, latestMove.z);
-            const collisionObstacle = ArenaCollision.checkPointCollision(latestMove.x, latestMove.y, latestMove.z);
+            const isBoundsValid = (isDemoCheaterInDemo && demoToggles.wallhack) || ArenaCollision.isWithinBounds(latestMove.x, latestMove.y, latestMove.z);
+            const collisionObstacle = (isDemoCheaterInDemo && demoToggles.wallhack) ? false : ArenaCollision.checkPointCollision(latestMove.x, latestMove.y, latestMove.z);
 
             if (isSpeedValid && isBoundsValid && !collisionObstacle) {
               player.x = latestMove.x;
@@ -849,6 +902,7 @@ io.on('connection', (socket) => {
 
   function leaveCurrentRoom() {
     if (!currentRoom || !playerState) return;
+    playerState.demoToggles = { speed: false, headshot: false, wallhack: false, rapidfire: false };
     const roomCode = currentRoom.code;
 
     if (currentRoom.respawnTimers && currentRoom.respawnTimers.has(socket.id)) {
@@ -915,9 +969,16 @@ io.on('connection', (socket) => {
         : generateRoomCode();
       const playerName = data.name;
 
+      const isDemo = Boolean(
+        socket.isDemoCheater ||
+        data.isDemoRoom ||
+        (data.preferredCode && data.preferredCode.toUpperCase().startsWith('DEMO'))
+      );
+
       const room = {
         code: roomCode,
         name: roomCode,
+        isDemoRoom: isDemo,
         hostId: socket.id,
         state: 'lobby',
         createdAt: Date.now(),
@@ -936,6 +997,8 @@ io.on('connection', (socket) => {
       playerState = {
         id: socket.id,
         userId: socket.userId,
+        isDemoCheater: Boolean(socket.isDemoCheater),
+        demoToggles: { speed: false, headshot: false, wallhack: false, rapidfire: false },
         name: playerName,
         operator: data.operator,
         reconnectToken: reconnectToken,
@@ -1021,6 +1084,8 @@ io.on('connection', (socket) => {
       playerState = {
         id: socket.id,
         userId: socket.userId,
+        isDemoCheater: Boolean(socket.isDemoCheater),
+        demoToggles: { speed: false, headshot: false, wallhack: false, rapidfire: false },
         name: data.name,
         operator: data.operator,
         reconnectToken: reconnectToken,
@@ -1203,6 +1268,7 @@ io.on('connection', (socket) => {
         p.inputQueue = [];
         p.history = [];
         p.spawnProtectedUntil = Date.now() + 2000;
+        p.demoToggles = { speed: false, headshot: false, wallhack: false, rapidfire: false };
       });
 
       io.to(currentRoom.code).emit('game:start', {
@@ -1260,6 +1326,26 @@ io.on('connection', (socket) => {
     }
   });
 
+  // --- DEMO TOGGLES (Validated strictly against authorized demo account + demo room) ---
+  socket.on('demo:set_toggles', (rawToggles) => {
+    try {
+      if (!playerState || !currentRoom) return;
+      if (!currentRoom.isDemoRoom || !playerState.isDemoCheater) {
+        playerState.demoToggles = { speed: false, headshot: false, wallhack: false, rapidfire: false };
+        socket.emit('demo:toggles_ack', { authorized: false, toggles: playerState.demoToggles });
+        return;
+      }
+      const input = (rawToggles && typeof rawToggles === 'object') ? rawToggles : {};
+      playerState.demoToggles = {
+        speed: Boolean(input.speed),
+        headshot: Boolean(input.headshot),
+        wallhack: Boolean(input.wallhack),
+        rapidfire: Boolean(input.rapidfire)
+      };
+      socket.emit('demo:toggles_ack', { authorized: true, toggles: playerState.demoToggles });
+    } catch (_) {}
+  });
+
   // --- IN-GAME WEAPON FIRE (Server Authoritative Hitscan & Lag Compensation) ---
   socket.on('player:fire', (rawData) => {
     try {
@@ -1273,10 +1359,15 @@ io.on('connection', (socket) => {
       const fireData = parseResult.data;
       const now = performance.now();
       const weaponKey = fireData.weaponKey || 'carbine';
+      const isDemoCheaterInDemo = Boolean(currentRoom.isDemoRoom && playerState.isDemoCheater);
+      const demoToggles = playerState.demoToggles || {};
 
-      // 1. Weapon Fire Rate Check
+      // 1. Weapon Fire Rate Check (rapidfire toggle only allowed for demo cheater in demo room)
       const minInterval = WeaponConfig.minFireIntervalMs(weaponKey);
-      if (now - playerState.lastShotTime < minInterval) {
+      const effectiveMinInterval = (isDemoCheaterInDemo && demoToggles.rapidfire)
+        ? Math.max(20, minInterval * 0.25)
+        : minInterval;
+      if (now - playerState.lastShotTime < effectiveMinInterval) {
         return; // Reject rapid-fire exploit
       }
       playerState.lastShotTime = now;
@@ -1327,9 +1418,18 @@ io.on('connection', (socket) => {
         weaponKey: weaponKey
       });
 
-      // 2. Rewind Lag Compensation (clamped <= 200ms in the past)
-      const clientTime = fireData.clientTime || now;
-      const rewindTime = Math.max(now - 200, Math.min(now, clientTime));
+      // 2. Rewind Lag Compensation (clamped <= 250ms in the past)
+      let rewindTime = now;
+      if (typeof fireData.clientTime === 'number') {
+        const timeDiff = now - fireData.clientTime;
+        if (timeDiff >= 0 && timeDiff <= 350) {
+          rewindTime = fireData.clientTime;
+        } else {
+          rewindTime = Math.max(now - 200, now - 80);
+        }
+      } else {
+        rewindTime = Math.max(now - 200, now - 80);
+      }
 
       let closestHit = null;
       let closestDistance = Infinity;
@@ -1359,18 +1459,17 @@ io.on('connection', (socket) => {
           }
         }
 
-        // Hitboxes matching RemotePlayer meshes
-        const headH = vPos.isCrouching ? 1.25 : 1.72;
-        const bodyH = vPos.isCrouching ? 0.85 : 1.15;
+        // Hitboxes matching RemotePlayer meshes and TacticalOperator
+        const isCrouching = Boolean(vPos.isCrouching);
         const headBox = {
-          minX: vPos.x - 0.22, maxX: vPos.x + 0.22,
-          minY: vPos.y + headH - 0.22, maxY: vPos.y + headH + 0.22,
-          minZ: vPos.z - 0.22, maxZ: vPos.z + 0.22
+          minX: vPos.x - 0.32, maxX: vPos.x + 0.32,
+          minY: vPos.y + (isCrouching ? 1.00 : 1.40), maxY: vPos.y + (isCrouching ? 1.50 : 2.00),
+          minZ: vPos.z - 0.32, maxZ: vPos.z + 0.32
         };
         const bodyBox = {
-          minX: vPos.x - 0.35, maxX: vPos.x + 0.35,
-          minY: vPos.y + bodyH - 0.45, maxY: vPos.y + bodyH + 0.45,
-          minZ: vPos.z - 0.3, maxZ: vPos.z + 0.3
+          minX: vPos.x - 0.45, maxX: vPos.x + 0.45,
+          minY: vPos.y + 0.05, maxY: vPos.y + (isCrouching ? 1.05 : 1.45),
+          minZ: vPos.z - 0.45, maxZ: vPos.z + 0.45
         };
 
         const headT = ArenaCollision.intersectRayBox(origin.x, origin.y, origin.z, dirX, dirY, dirZ, headBox, weaponInfo.range);
@@ -1381,7 +1480,7 @@ io.on('connection', (socket) => {
           closestHit = { victim, isHeadshot: true, distance: headT };
         } else if (bodyT !== null && bodyT < closestDistance) {
           closestDistance = bodyT;
-          closestHit = { victim, isHeadshot: false, distance: bodyT };
+          closestHit = { victim, isHeadshot: Boolean(isDemoCheaterInDemo && demoToggles.headshot), distance: bodyT };
         }
       });
 
@@ -1394,8 +1493,8 @@ io.on('connection', (socket) => {
         };
 
         const isOccluded = ArenaCollision.checkRaycastOcclusion(origin, hitPoint);
-        if (isOccluded) {
-          // Wallhack / shot blocked by obstacle
+        if (isOccluded && !(isDemoCheaterInDemo && demoToggles.wallhack)) {
+          // Wallhack / shot blocked by obstacle for genuine players
           return;
         }
 

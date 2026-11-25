@@ -195,8 +195,7 @@ def signup():
         "rewards": {
             "coins": 50,
             "xp": 100,
-            "daily_streak": 1,
-            "last_daily_login": now.strftime("%Y-%m-%d"),
+            "daily_streak": 0,
             "owned_items": ["standard_tactical_patch"],
             "equipped_item": "standard_tactical_patch"
         }

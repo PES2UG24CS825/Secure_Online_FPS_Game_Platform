@@ -202,7 +202,9 @@ class AntiCheatIntelligence:
         raw_features: Dict[str, Any],
         audit: Dict[str, Any],
         game_mode: str = "solo",
-        player_baseline: Optional[Dict[str, Any]] = None
+        player_baseline: Optional[Dict[str, Any]] = None,
+        session_security_events: Optional[List[Dict[str, Any]]] = None,
+        session_stats: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Differentiates skilled human performance from artificial cheat signatures.
@@ -215,6 +217,16 @@ class AntiCheatIntelligence:
         hits = audit["counts"]["hits"]
         kills = audit["counts"]["kills"]
 
+        if session_stats:
+            shots = max(shots, int(session_stats.get("shots_fired") or 0))
+            hits = max(hits, int(session_stats.get("shots_hit") or 0))
+            headshots = int(session_stats.get("headshots") or 0)
+        else:
+            headshots = 0
+
+        mode = str(game_mode or "").lower()
+        is_bot_mode = mode in ("solo", "play_with_bots", "training", "bots", "fps_microgame") or mode.startswith("bot")
+
         violations = audit["physical_violations"]
         has_speed_hack = len(violations["speed_violations"]) >= 5
         has_fire_rate_hack = len(violations["fire_rate_violations"]) >= 3
@@ -223,14 +235,30 @@ class AntiCheatIntelligence:
         # Physical impossibility check
         hard_cheat_evidence = []
         if has_speed_hack:
-            hard_cheat_evidence.append(f"Impossible movement speed detected ({len(violations['speed_violations'])} samples > {MAX_PERMISSIBLE_SPEED} m/s)")
+            hard_cheat_evidence.append(f"Unusually fast movement detected ({len(violations['speed_violations'])} samples > {MAX_PERMISSIBLE_SPEED} m/s)")
         if has_fire_rate_hack:
             hard_cheat_evidence.append(f"Weapon fire rate exceeded physical limits (> {MAX_CARBINE_FIRE_RATE} rounds/s)")
         if has_aim_snap_hack and not is_bot_mode:
-            hard_cheat_evidence.append(f"Repeated instant angle snapping detected ({len(violations['aim_snap_violations'])} instances)")
+            hard_cheat_evidence.append(f"Unusual sudden aiming detected ({len(violations['aim_snap_violations'])} instances)")
 
-        mode = str(game_mode or "").lower()
-        is_bot_mode = mode in ("solo", "play_with_bots", "training", "bots", "fps_microgame") or mode.startswith("bot")
+        # Incorporate verified server-rule / telemetry security_events for this session
+        cleared_statuses = {"false_positive", "cleared", "dismissed", "confirmed_clean"}
+        seen_rule_types = set()
+        for sev in (session_security_events or []):
+            r_status = str(sev.get("review_status") or sev.get("status") or "").lower()
+            if r_status in cleared_statuses:
+                continue
+            etype = str(sev.get("event_type") or sev.get("type") or "")
+            if etype in {"impossible_hit", "headshot_anomaly", "abnormal_fire_rate", "abnormal_speed", "hard_rule_violation"} and etype not in seen_rule_types:
+                seen_rule_types.add(etype)
+                desc = sev.get("violation") or etype
+                obs = sev.get("observed_value")
+                hard_cheat_evidence.append(f"{desc} ({obs})" if obs else str(desc))
+
+        # Statistical headshot impossibility check (only with sufficient sample size >= 10 hits)
+        if "headshot_anomaly" not in seen_rule_types and hits >= 10 and (headshots / max(1, hits)) >= 0.90:
+            hs_pct = round((headshots / hits) * 100.0, 1)
+            hard_cheat_evidence.append(f"Impossible headshot consistency: {headshots}/{hits} hits ({hs_pct}%)")
 
         # Skill assessment
         is_skilled_human = False
@@ -313,10 +341,15 @@ class AntiCheatIntelligence:
         - NEVER flags a player as a cheater based on Isolation Forest anomaly alone.
         - Respects server-validated physical violations.
         """
-        # 1. If physical violations exist (speedhack, triggerbot, instant snap), risk is high
+        # 1. If physical or server-rule violations exist (speedhack, impossible_hit, headshot_anomaly, etc.), risk is high
         if human_eval["hard_cheat_evidence"]:
             evidence_count = len(human_eval["hard_cheat_evidence"])
-            risk = 82.5 if evidence_count == 1 else 88.0
+            if evidence_count >= 3:
+                risk = 92.5
+            elif evidence_count == 2:
+                risk = 88.0
+            else:
+                risk = 82.5
             return risk, "high"
 
         # 2. If session has incomplete combat
