@@ -404,7 +404,7 @@ def process_security_violations(game_session, account, event_type, telemetry):
                 }
             })
 
-    # 3. ABNORMAL FIRE RATE CHECK
+    # 3. ABNORMAL FIRE RATE CHECK (isolated per session + user; >= 5 consecutive rapid-fire intervals for genuine players)
     if event_type == "weapon_fire":
         current_time = None
         if "timestamp" in telemetry and telemetry["timestamp"] is not None:
@@ -412,17 +412,37 @@ def process_security_violations(game_session, account, event_type, telemetry):
                 current_time = float(telemetry["timestamp"])
             except (ValueError, TypeError):
                 pass
+        weapon_name = str(telemetry.get("weapon") or "P-24 Carbine")
+        fire_key = f"{session_id}:{user_id}"
         last_fire = None
+        last_weapon = None
+        streak = 0
         if current_time is not None and math.isfinite(current_time):
             with _violation_cache_lock:
-                last_fire = _demo_last_fire_time.get(session_id)
+                prev_entry = _demo_last_fire_time.get(fire_key)
+                if isinstance(prev_entry, tuple):
+                    last_fire, last_weapon = prev_entry
+                else:
+                    last_fire, last_weapon = prev_entry, weapon_name
                 if last_fire is None or current_time > last_fire:
-                    _demo_last_fire_time[session_id] = current_time
+                    _demo_last_fire_time[fire_key] = (current_time, weapon_name)
                 if len(_demo_last_fire_time) > 4096:
                     _demo_last_fire_time.pop(next(iter(_demo_last_fire_time)))
-        if last_fire is not None and current_time > last_fire:
+                max_interval = 0.055 if is_demo else 0.045
+                if last_fire is not None and current_time > last_fire and last_weapon == weapon_name:
+                    interval = current_time - last_fire
+                    if 0.005 < interval < max_interval:
+                        streak = _demo_session_combat_stats.setdefault(f"fr_streak:{fire_key}", {"count": 0})["count"] + 1
+                        _demo_session_combat_stats[f"fr_streak:{fire_key}"]["count"] = streak
+                    else:
+                        _demo_session_combat_stats.setdefault(f"fr_streak:{fire_key}", {"count": 0})["count"] = 0
+                else:
+                    _demo_session_combat_stats.setdefault(f"fr_streak:{fire_key}", {"count": 0})["count"] = 0
+        if last_fire is not None and current_time > last_fire and last_weapon == weapon_name:
             interval = current_time - last_fire
-            if 0.005 < interval < 0.055:  # ~18 - 200 rps (legitimate carbine min is 0.11s)
+            required_streak = 1 if is_demo else 5
+            max_interval = 0.055 if is_demo else 0.045
+            if 0.005 < interval < max_interval and streak >= required_streak:  # Sustained rapid fire (>= 5 for genuine players)
                 rps = 1.0 / interval
                 violations_found.append({
                     "type": "abnormal_fire_rate",
@@ -433,6 +453,7 @@ def process_security_violations(game_session, account, event_type, telemetry):
                     "evidence": {
                         "interval_seconds": round(interval, 4),
                         "calculated_rps": round(rps, 1),
+                        "consecutive_rapid_shots": streak,
                         "weapon": telemetry.get("weapon", "P-24 Carbine"),
                         "timestamp": current_time,
                     }
@@ -1804,7 +1825,7 @@ def analyze_game_session(
             audit = AntiCheatIntelligence.audit_telemetry_stream(session_telemetry)
             player_baseline = get_player_baseline(users, game_events, user_id)
             game_mode = game_session.get("mode") or game_session.get("game", "CyberStrike_3D")
-            session_security_events = list(security_events.find({"session_id": session_id}))
+            session_security_events = list(security_events.find({"session_id": session_id, "user_id": user_id}))
             human_eval = AntiCheatIntelligence.evaluate_human_skill_context(
                 raw_features,
                 audit,
@@ -2038,6 +2059,7 @@ def analyze_game_session(
         game_events.update_one(
             {
                 "session_id": session_id,
+                "user_id": user_id,
                 "analysis_type": "game_session"
             },
             analysis_update,
@@ -2058,7 +2080,7 @@ def analyze_game_session(
             if sess_update.get("status") == "completed":
                 update["$unset"] = {"expires_at": ""}
             game_sessions.update_one(
-                {"session_id": session_id},
+                {"session_id": session_id, "user_id": user_id},
                 update,
             )
             if sess_risk is not None and user_id is not None:

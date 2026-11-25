@@ -243,17 +243,28 @@ class AntiCheatIntelligence:
 
         # Incorporate verified server-rule / telemetry security_events for this session
         cleared_statuses = {"false_positive", "cleared", "dismissed", "confirmed_clean"}
-        seen_rule_types = set()
+        rule_counts = {}
+        first_sev_by_type = {}
         for sev in (session_security_events or []):
             r_status = str(sev.get("review_status") or sev.get("status") or "").lower()
             if r_status in cleared_statuses:
                 continue
             etype = str(sev.get("event_type") or sev.get("type") or "")
-            if etype in {"impossible_hit", "headshot_anomaly", "abnormal_fire_rate", "abnormal_speed", "hard_rule_violation"} and etype not in seen_rule_types:
-                seen_rule_types.add(etype)
-                desc = sev.get("violation") or etype
-                obs = sev.get("observed_value")
-                hard_cheat_evidence.append(f"{desc} ({obs})" if obs else str(desc))
+            if etype in {"impossible_hit", "headshot_anomaly", "abnormal_fire_rate", "abnormal_speed", "hard_rule_violation"}:
+                rule_counts[etype] = rule_counts.get(etype, 0) + 1
+                first_sev_by_type.setdefault(etype, sev)
+
+        seen_rule_types = set()
+        for etype, sev in first_sev_by_type.items():
+            # For abnormal_fire_rate on non-demo accounts, require >= 5 events or explicit 5+ streak evidence
+            if etype == "abnormal_fire_rate" and not sev.get("is_demo") and rule_counts[etype] < 5:
+                ev_data = sev.get("evidence") or {}
+                if int(ev_data.get("consecutive_rapid_shots") or 0) < 5:
+                    continue
+            seen_rule_types.add(etype)
+            desc = sev.get("violation") or etype
+            obs = sev.get("observed_value")
+            hard_cheat_evidence.append(f"{desc} ({obs})" if obs else str(desc))
 
         # Statistical headshot impossibility check (only with sufficient sample size >= 10 hits)
         if "headshot_anomaly" not in seen_rule_types and hits >= 10 and (headshots / max(1, hits)) >= 0.90:
